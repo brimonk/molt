@@ -8,7 +8,12 @@ Matthew Causley, Andrew Christlieb, and others.
 Because this task is simply so huge, I've decided not only to divide my labor
 into multiple pieces, but to also divide the program's labor into multiple
 portions. Ideally, initial conditions are fed into the actual simulation
-program, and whatever 
+program, and the state at various time intervals are simply recorded for
+later use.
+
+This allows for the project to operate in multiple steps, and for various
+simulation viewers to exist for various purposes, while not modifying the
+core simulation code at all.
 
 ### Still To Do
 
