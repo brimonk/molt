@@ -1,0 +1,8 @@
+# ignore all object files
+*.o
+
+# ignore .gdb_history
+.gdb_history
+
+# don't put databases in git history either
+*.db
