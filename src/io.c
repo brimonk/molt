@@ -1,14 +1,34 @@
 /*
  * Brian Chrzanowski
- * Mon May 29, 2017 15:25
+ * Fri Jul 20, 2018 13:58
  *
- * A small SQLite3 wapper for error handling, general messaging, etc
+ * input and output routines are defined here.
+ *
+ * Effectively, everything is performed through SQLite. Look at the ~/sql
+ * directory to see the effective input and output routines. The database
+ * should be prepared by calling, "io_db_prep" before any other routines are
+ * called. This will execute all of the sql inside of the sql directory.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
+
 #include "sqlite3.h"
-#include "sqlite_wrapper.h"
+
+#include "particles.h"
+#include "io.h"
+
+/* this should be gathered dynamically from some rules somewhere */
+char *io_db_tbls[] = 
+{
+	"src/sql/run.sql",
+	"src/sql/particles.sql",
+	"src/sql/grids.sql",
+	"src/sql/vertexes.sql",
+	"src/sql/fields.sql",
+	NULL
+};
 
 #define SQLITE_ERRFMT "%s::%d %s\n"
 
@@ -46,6 +66,35 @@ struct err_tbl error_lookups[] = {
 	{SQLITE_DONE, "sqlite3_step has finished executing"}
 };
 
+
+int process_sql_tbls(sqlite3 *db, char **tbl_list)
+{
+	/* tbl_list is assumed to be NULL terminated */
+	int i, val;
+	char *file_buffer, errbuf[BUF_SIZE];
+
+	for (i = 0, val = 0; tbl_list[i]; i++) {
+		file_buffer = disk_to_mem(tbl_list[i]);
+
+		if (file_buffer) {
+			/* execute the SQL */
+			val = sqlite3_exec(db, file_buffer, NULL, NULL, (char **)&errbuf);
+
+			if (val != SQLITE_OK) {
+				SQLITE3_ERR(val);
+			} else {
+				free(file_buffer);
+			}
+
+		} else {
+			fprintf(stderr, "Error processing file: %s\n", tbl_list[i]);
+		}
+	}
+
+	return val;
+}
+
+
 void sqlite3_wrap_errors(int val, char *file, int line)
 {
 	int i;
@@ -56,6 +105,37 @@ void sqlite3_wrap_errors(int val, char *file, int line)
 		}
 	}
 
-	exit(1);
+	exit(1); /* exit, returning '1' (error) to the environment */
+}
+
+
+char *disk_to_mem(char *filename)
+{
+	/* slurp up filename's contents to memory */
+	FILE *fileptr;
+	char *buffer;
+	uint64_t filelen;
+
+	buffer = NULL;
+
+	fileptr = fopen(filename, "r");
+
+	if (fileptr) {
+		/* jump from start to finish of a file to get its size */
+		fseek(fileptr, 0, SEEK_END);
+		filelen = ftell(fileptr);
+
+		/* go back to the start */
+		rewind(fileptr);
+
+		buffer = malloc(filelen + 1); /* room for the file and a NULL byte */
+		if (buffer) {
+			fread(buffer, filelen, 1, fileptr);
+		}
+
+		fclose(fileptr);
+	}
+
+	return buffer; /* caller frees the memory if non-NULL */
 }
 
