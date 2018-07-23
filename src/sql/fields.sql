@@ -18,6 +18,6 @@ create table if not exists fields (
 	-- do we need to store the overall forces at each vertex?
 	-- no need to recompute
 
-	foreign key(run_index) references run(run_number)
+	foreign key(run_index) references run(run_number),
 	foreign key(vertex) references run(vertexes)
 );

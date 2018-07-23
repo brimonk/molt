@@ -19,9 +19,7 @@
 
 create table if not exists vertexes (
 	run_index		integer not null,
-
-	grid_id			integer not null, -- must have a grid
-
+	grid_id			integer not null,
 	xPos			real not null,
 	yPos			real not null,
 	zPos			real not null,

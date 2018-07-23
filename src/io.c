@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "sqlite3.h"
 
@@ -24,13 +25,13 @@ char *io_db_tbls[] =
 {
 	"src/sql/run.sql",
 	"src/sql/particles.sql",
-	"src/sql/grids.sql",
-	"src/sql/vertexes.sql",
 	"src/sql/fields.sql",
+	"src/sql/vertexes.sql",
 	NULL
 };
 
 #define SQLITE_ERRFMT "%s::%d %s\n"
+#define SQLITE_ERRFMT_EXTRA "%s::%d %s EXTRA: %s\n"
 
 struct err_tbl error_lookups[] = {
 	{SQLITE_OK, "How did you get here?"},
@@ -71,17 +72,19 @@ int process_sql_tbls(sqlite3 *db, char **tbl_list)
 {
 	/* tbl_list is assumed to be NULL terminated */
 	int i, val;
-	char *file_buffer, errbuf[BUF_SIZE];
+	char *file_buffer, *err;
 
-	for (i = 0, val = 0; tbl_list[i]; i++) {
+	for (i = 0, val = 0; tbl_list[i] != NULL; i++) {
 		file_buffer = disk_to_mem(tbl_list[i]);
 
 		if (file_buffer) {
 			/* execute the SQL */
-			val = sqlite3_exec(db, file_buffer, NULL, NULL, (char **)&errbuf);
+			printf("%s\n", tbl_list[i]);
+
+			val = sqlite3_exec(db, file_buffer, NULL, NULL, &err);
 
 			if (val != SQLITE_OK) {
-				SQLITE3_ERR(val);
+				SQLITE3_ERR_EXTRA(val, err);
 			} else {
 				free(file_buffer);
 			}
@@ -95,12 +98,19 @@ int process_sql_tbls(sqlite3 *db, char **tbl_list)
 }
 
 
-void sqlite3_wrap_errors(int val, char *file, int line)
+void sqlite3_wrap_errors(int val, char *file, int line, char *extra)
 {
 	int i;
 	for (i = 0; i < sizeof(error_lookups) / sizeof(struct err_tbl); i++) {
 		if (val == error_lookups[i].sqlite_err) {
-			printf(SQLITE_ERRFMT, file, line, error_lookups[i].err_str);
+
+			if (extra) {
+				printf(SQLITE_ERRFMT_EXTRA,
+						file, line, error_lookups[i].err_str, extra);
+			} else {
+				printf(SQLITE_ERRFMT, file, line, error_lookups[i].err_str);
+			}
+
 			break;
 		}
 	}
@@ -117,6 +127,7 @@ char *disk_to_mem(char *filename)
 	uint64_t filelen;
 
 	buffer = NULL;
+	filelen = 0;
 
 	fileptr = fopen(filename, "r");
 
@@ -129,7 +140,9 @@ char *disk_to_mem(char *filename)
 		rewind(fileptr);
 
 		buffer = malloc(filelen + 1); /* room for the file and a NULL byte */
+
 		if (buffer) {
+			memset(buffer, 0, filelen + 1);
 			fread(buffer, filelen, 1, fileptr);
 		}
 

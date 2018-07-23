@@ -44,12 +44,9 @@ struct vector s[999][999], v[999][999], E, B; // position, velocity, electric fi
 
 int main(int argc, char **argv)
 {
-    int val, parNo, noPar, loopCount, timeInd = 0; // timeInd indicates the iteration in time that the simulation is at
+    int val;
 	sqlite3 *db;
     
-    noPar = initialParameters(); // reading the initial parameters
-    parNo = 1;
-
 	/* set up the database */
 	val = sqlite3_open(DATABASE, &db);
 
@@ -58,18 +55,20 @@ int main(int argc, char **argv)
 	}
 
 	process_sql_tbls(db, io_db_tbls);
+
 	molt_run(db);
 
 	sqlite3_close(db);
 
 	return 0;
-
-    return 0;
 }
 
 int molt_run(sqlite3 *db)
 {
     int val, parNo, noPar, loopCount, timeInd = 0; // timeInd indicates the iteration in time that the simulation is at
+
+    noPar = initialParameters(); // reading the initial parameters
+    parNo = 1;
 
     displayInitialParameters(parNo, noPar, timeInd);  // displaying the initial parameters for all the particles
     
@@ -94,6 +93,7 @@ int molt_run(sqlite3 *db)
     
     fileManipulation(timeInd, loopCount, parNo, noPar); // writes all the data to .csv files, to be later read and plotted by Matlab
 
+	printf("\n");
 
 	return val;
 }
