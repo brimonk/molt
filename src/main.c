@@ -3,7 +3,7 @@
  * Fri Jul 20, 2018 13:46
  *
  * Extended from
- *		Mathematical work done by Matthew Causley
+ *		Mathematical work done by Matthew Causley, Andrew Christlieb, et al
  *		Particle simulation skeletoned by Khari Gray
  */
 
@@ -14,6 +14,7 @@
 
 #include "sqlite3.h"
 #include "io.h"
+#include "timedefs.h"
 
 #include "structures.h"
 #include "particles.h"

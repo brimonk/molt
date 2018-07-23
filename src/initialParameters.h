@@ -16,7 +16,7 @@ int initialParameters()
     maxE = 5; // maximum electric field
     maxB = 5; // maximum magnetic field
     
-    for(parNo=1; parNo<(noPar+1); parNo++) // sets the initial conditions for all particles
+    for(parNo = 0; parNo < noPar; parNo++) // sets the initial conditions for all particles
     {
         s[parNo][timeInd].x = ((float)rand()/(float)(RAND_MAX)) * maxPos; // particle's initial position
         s[parNo][timeInd].y = ((float)rand()/(float)(RAND_MAX)) * maxPos;
