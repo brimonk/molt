@@ -39,4 +39,4 @@ extern char *io_db_tbls[]; /* use our sql file list outside of io.c */
 void sqlite3_wrap_errors(int val, char *file, int line, char *extra);
 
 int io_exec_sql_tbls(sqlite3 *db, char **tbl_list);
-int io_insert(sqlite3 *db, char *sql, struct particle_t *parts);
+int io_insert(sqlite3 *db, char *sql, struct particle3_t *parts);

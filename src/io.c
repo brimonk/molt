@@ -75,7 +75,7 @@ struct err_tbl error_lookups[] = {
  * Fri Jul 27, 2018 14:07
  */
 
-int io_insert(sqlite3 *db, char *sql, struct particle_t *parts)
+int io_insert(sqlite3 *db, char *sql, struct particle3_t *parts)
 {
 	return 0;
 }
