@@ -10,6 +10,8 @@
  * called. This will execute all of the sql inside of the sql directory.
  */
 
+#include "particles.h"
+
 #define BUF_SIZE 2048
 
 char *disk_to_mem(char *filename);
@@ -36,4 +38,5 @@ extern char *io_db_tbls[]; /* use our sql file list outside of io.c */
 #define SQLITE3_ERR_EXTRA(a, b) (sqlite3_wrap_errors(a, __FILE__, __LINE__, b))
 void sqlite3_wrap_errors(int val, char *file, int line, char *extra);
 
-int process_sql_tbls(sqlite3 *db, char **tbl_list);
+int io_exec_sql_tbls(sqlite3 *db, char **tbl_list);
+int io_insert(sqlite3 *db, char *sql, struct particle_t *parts);

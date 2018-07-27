@@ -16,8 +16,8 @@
 #include "io.h"
 #include "timedefs.h"
 
-#include "structures.h"
 #include "particles.h"
+#include "structures.h"
 
 // necessary prototypes
 void updatePosition(int, int);
@@ -43,6 +43,10 @@ struct vector s[999][999], v[999][999], E, B; // position, velocity, electric fi
 
 #define DATABASE "molt_output.db"
 
+char *io_particle_insert =
+"insert into particles (run_index, time, particle_index, x_pos, y_pos, z_pos,"\
+		"x_vel, y_vel, z_vel) values (?, ?, ?, ?, ?, ?, ?, ?, ?);";
+
 int main(int argc, char **argv)
 {
     int val;
@@ -55,7 +59,7 @@ int main(int argc, char **argv)
 		SQLITE3_ERR(val);
 	}
 
-	process_sql_tbls(db, io_db_tbls);
+	io_exec_sql_tbls(db, io_db_tbls);
 
 	molt_run(db);
 
@@ -92,7 +96,10 @@ int molt_run(sqlite3 *db)
 
     loopCount = timeInd;
     
-    fileManipulation(timeInd, loopCount, parNo, noPar); // writes all the data to .csv files, to be later read and plotted by Matlab
+    // fileManipulation(timeInd, loopCount, parNo, noPar); // writes all the data to .csv files, to be later read and plotted by Matlab
+
+	/* dump the output into SQLite */
+	io_insert(db, io_particle_insert, &s);
 
 	printf("\n");
 

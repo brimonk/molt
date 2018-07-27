@@ -17,8 +17,8 @@
 
 #include "sqlite3.h"
 
-#include "particles.h"
 #include "io.h"
+#include "particles.h"
 
 /* this should be gathered dynamically from some rules somewhere */
 char *io_db_tbls[] = 
@@ -67,8 +67,20 @@ struct err_tbl error_lookups[] = {
 	{SQLITE_DONE, "sqlite3_step has finished executing"}
 };
 
+/*
+ * As of now, because the program only has to INSERT into SQLite (all other
+ * work is then done in	SQL), I've decided it's probably better for a single,
+ * specific routine for each core piece of the application
+ *
+ * Fri Jul 27, 2018 14:07
+ */
 
-int process_sql_tbls(sqlite3 *db, char **tbl_list)
+int io_insert(sqlite3 *db, char *sql, struct particle_t *parts)
+{
+	return 0;
+}
+
+int io_exec_sql_tbls(sqlite3 *db, char **tbl_list)
 {
 	/* tbl_list is assumed to be NULL terminated */
 	int i, val;
@@ -79,8 +91,6 @@ int process_sql_tbls(sqlite3 *db, char **tbl_list)
 
 		if (file_buffer) {
 			/* execute the SQL */
-			printf("%s\n", tbl_list[i]);
-
 			val = sqlite3_exec(db, file_buffer, NULL, NULL, &err);
 
 			if (val != SQLITE_OK) {
