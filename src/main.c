@@ -10,36 +10,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 #include <math.h>
 
 #include "sqlite3.h"
-#include "io.h"
-#include "timedefs.h"
-
 #include "particles.h"
-#include "structures.h"
+#include "io.h"
+
+#include "field_updates.h"
+#include "calcs.h"
 
 // necessary prototypes
-void updatePosition(int, int);
-void updateVelocity(int, int);
 struct vector vectorize(float, float, float);
 float Fx(float, float, float, float, float, float, float, float, float);
 float Fy(float, float, float, float, float, float, float, float, float);
 float Fz(float, float, float, float, float, float, float, float, float);
 int molt_run(sqlite3 *db);
+void vect_init(void *ptr, int n);
 
 // declaring global variables
-float timeInitial, timeFinal, timeChange, currTime;
-struct vector s[999][999], v[999][999], E, B; // position, velocity, electric field, magnetic field
+// struct vector s[999][999], v[999][999]; // position, velocity
 
 // user defined libraries
-#include "files.h" // funcitons that relate to writing all the data to file to be read and plotted by Matlab
-#include "eulersMethod.h" // functions that perform iterative techniques on position and velocity
-#include "changingFields.h" // changing field
-#include "forceCalculation.h" // functinos to calculate the force
-#include "initialParameters.h" // functions that accept the intiial condition for the simulation
+// #include "forceCalculation.h" // functinos to calculate the force
 
 #define DATABASE "molt_output.db"
+#define CURR_FLOATING_TIME(idx, step, init) ((idx + step + init))
 
 char *io_particle_insert =
 "insert into particles (run_index, time, particle_index, x_pos, y_pos, z_pos,"\
@@ -68,35 +64,47 @@ int main(int argc, char **argv)
 
 int molt_run(sqlite3 *db)
 {
-    int val, parNo, noPar, loopCount, timeInd = 0; // timeInd indicates the iteration in time that the simulation is at
+	vec3_t e_field, b_field;
+	vec3_t tm_vect;
+	double tm_initial, tm_curr, tm_step, tm_final = 0;
+    int time_i, max_iter, i, total_parts = 0; // timeInd indicates the iteration in time that the simulation is at
+	struct particle_t *dummy_arr;
 
-    noPar = initialParameters(); // reading the initial parameters
-    parNo = 1;
+	vect_init(&e_field, 3);
+	vect_init(&b_field, 3);
 
-    while(currTime < timeFinal) // plotting the position for each particle at each time step
-    {
-        for(parNo=1; parNo<(noPar+1); parNo++) // repeating funtions per number of particles
+	/* do some initialization right here */
+
+	total_parts = 5;
+	max_iter = (int)(tm_final / tm_step);
+
+	/* iterate over each time step, taking our snapshot */
+	for (time_i = 0; time_i < max_iter; time_i++) {
+        for(i = 0; i < total_parts; i++) // repeating funtions per number of particles
         {
-            
-            changingFields(parNo, timeInd); // dynamizing the fields
-            updatePosition(parNo, timeInd); // updating position values
-            updateVelocity(parNo, timeInd); // updating velocity values
-            if(parNo == noPar) // iterates to the next time step when all data has been collected for all particles for that instance
-            {
-                timeInd++;
-            }
-        }
-        currTime = currTime + timeChange; // incrementing time value
-    }
+            field_update(&dummy_arr[i], &e_field, &b_field);
+			part_pos_update(&dummy_arr[i], tm_step);
 
-    loopCount = timeInd;
+			/* store to disk here??? */
+
+			part_vel_update(&dummy_arr[i], &e_field, &b_field, tm_step);
+            // updatePosition(i, timeInd); // updating position values
+            // updateVelocity(i, timeInd); // updating velocity values
+        }
+
+		tm_curr = CURR_FLOATING_TIME(time_i, tm_step, tm_initial);
+
+		/* done with a time iteration, dump to the output */
+		// io_insert(db, io_particle_insert, NULL);
+    }
     
     // fileManipulation(timeInd, loopCount, parNo, noPar); // writes all the data to .csv files, to be later read and plotted by Matlab
 
-	/* dump the output into SQLite */
-	// io_insert(db, io_particle_insert, NULL);
+	return 0;
+}
 
-	printf("\n");
-
-	return val;
+void vect_init(void *ptr, int n)
+{
+	/* initializes a vector of size 'n' with zeroes */
+	memset(ptr, 0, sizeof(double) * n);
 }

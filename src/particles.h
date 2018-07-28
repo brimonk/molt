@@ -26,10 +26,10 @@ typedef vec_t vec5_t[5];
  * Shown here is a particle3_t, a particle with 3d position and velocity
  */
 
-struct particle3_t {
+struct particle_t {
 	unsigned int uid; /* s^32 - 1 max particles (shouldn't be an issue) */
 	vec3_t pos;
-	vec3_t dir;
+	vec3_t vel;
 };
 
 #endif
