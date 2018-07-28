@@ -6,6 +6,7 @@
  */
 
 #include "particles.h"
+#include "vert.h"
 #include "calcs.h"
 
 // updating position values

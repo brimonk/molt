@@ -12,40 +12,46 @@
 #include <time.h>
 #include <string.h>
 #include <math.h>
+#include <getopt.h>
 
 #include "sqlite3.h"
 #include "particles.h"
 #include "io.h"
 
-#include "field_updates.h"
+#include "vert.h"
 #include "calcs.h"
+#include "field_updates.h"
 
-// necessary prototypes
-struct vector vectorize(float, float, float);
-float Fx(float, float, float, float, float, float, float, float, float);
-float Fy(float, float, float, float, float, float, float, float, float);
-float Fz(float, float, float, float, float, float, float, float, float);
-int molt_run(sqlite3 *db);
-void vect_init(void *ptr, int n);
-
-// declaring global variables
-// struct vector s[999][999], v[999][999]; // position, velocity
-
-// user defined libraries
-// #include "forceCalculation.h" // functinos to calculate the force
+int molt_run(sqlite3 *db, struct particle_t *parts, int part_size,
+		vec3_t *verticies, vec3_t *e_field, vec3_t *b_field);
+int parse_args(int argc, char **argv, struct particle_t **part_ptr, int *pn,
+		vec3_t **verts, vec3_t **e_fld, vec3_t **b_fld);
+int parse_args_vec3(vec3_t *ptr, char *opt, char *str);
+void memerranddie(char *file, int line);
 
 #define DATABASE "molt_output.db"
+#define USAGE "%s [--vert x,y,z --vert ...] [-e x,y,z] [-b x,y,z] "\
+	"[-p number] [--part x[,y[,z]]] filename\n"
 #define CURR_FLOATING_TIME(idx, step, init) ((idx + step + init))
-
-char *io_particle_insert =
-"insert into particles (run_index, time, particle_index, x_pos, y_pos, z_pos,"\
-		"x_vel, y_vel, z_vel) values (?, ?, ?, ?, ?, ?, ?, ?, ?);";
+#define MEM_ERR() (memerranddie(__FILE__, __LINE__))
 
 int main(int argc, char **argv)
 {
-    int val;
 	sqlite3 *db;
-    
+	struct particle_t *particles;
+	vec3_t *verticies, *e_field, *b_field;
+    int val, part_num;
+	part_num = 0;
+
+	/* parse command line arguments (and other launch parameters) */
+	val = parse_args(argc, argv, &particles, &part_num,
+			&verticies, &e_field, &b_field);
+
+	if (val) {
+		fprintf(stderr, USAGE, argv[0]);
+		exit(1);
+	}
+
 	/* set up the database */
 	val = sqlite3_open(DATABASE, &db);
 
@@ -53,58 +59,155 @@ int main(int argc, char **argv)
 		SQLITE3_ERR(val);
 	}
 
+	/* make sure we have tables to dump data to */
 	io_exec_sql_tbls(db, io_db_tbls);
 
-	molt_run(db);
+	molt_run(db, particles, part_num, verticies, e_field, b_field);
 
 	sqlite3_close(db);
 
 	return 0;
 }
 
-int molt_run(sqlite3 *db)
+int molt_run(sqlite3 *db, struct particle_t *parts, int part_size,
+		vec3_t *verticies, vec3_t *e_field, vec3_t *b_field)
 {
-	vec3_t e_field, b_field;
-	vec3_t tm_vect;
-	double tm_initial, tm_curr, tm_step, tm_final = 0;
+	double tm_initial = 0, tm_curr, tm_step = 0.25, tm_final = 30;
     int time_i, max_iter, i, total_parts = 0; // timeInd indicates the iteration in time that the simulation is at
-	struct particle_t *dummy_arr;
 
-	vect_init(&e_field, 3);
-	vect_init(&b_field, 3);
+	vect_init(e_field, 3);
+	vect_init(b_field, 3);
 
 	/* do some initialization right here */
 
-	total_parts = 5;
 	max_iter = (int)(tm_final / tm_step);
 
 	/* iterate over each time step, taking our snapshot */
 	for (time_i = 0; time_i < max_iter; time_i++) {
         for(i = 0; i < total_parts; i++) // repeating funtions per number of particles
         {
-            field_update(&dummy_arr[i], &e_field, &b_field);
-			part_pos_update(&dummy_arr[i], tm_step);
+            field_update(&parts[i], e_field, b_field);
+			part_pos_update(&parts[i], tm_step);
 
 			/* store to disk here??? */
+			printf("[%d] p-%d (%.3lf, %.3lf, %.3lf)\n",
+					time_i, i,
+					parts[i].pos[0],
+					parts[i].pos[1],
+					parts[i].pos[2]);
 
-			part_vel_update(&dummy_arr[i], &e_field, &b_field, tm_step);
+
+			part_vel_update(&parts[i], e_field, b_field, tm_step);
+
             // updatePosition(i, timeInd); // updating position values
             // updateVelocity(i, timeInd); // updating velocity values
         }
 
 		tm_curr = CURR_FLOATING_TIME(time_i, tm_step, tm_initial);
-
-		/* done with a time iteration, dump to the output */
-		// io_insert(db, io_particle_insert, NULL);
     }
-    
-    // fileManipulation(timeInd, loopCount, parNo, noPar); // writes all the data to .csv files, to be later read and plotted by Matlab
 
 	return 0;
 }
 
-void vect_init(void *ptr, int n)
+/*
+ * command arguments
+ * --vert x[,y[,z]]			adds a new vertex with the requested coords
+ *
+ * -e     x[,y[,z]]			defines the initial electric field
+ * -b     x[,y[,z]]			defines the initial magnetic field
+ *
+ * -p     number			defines the total number of particles
+ * --part x[,y[,z]]			defines a particle from the total allowed particles
+ *
+ * filename					the output database you'd like to use
+ */
+
+int
+parse_args(int argc, char **argv, struct particle_t **part_ptr, int *pn,
+		vec3_t **verts, vec3_t **e_fld, vec3_t **b_fld)
 {
-	/* initializes a vector of size 'n' with zeroes */
-	memset(ptr, 0, sizeof(double) * n);
+	static struct option long_options[] = {
+		{"vert", required_argument, 0, 0},
+		{"part", required_argument, 0, 0},
+		{0, 0, 0, 0},
+	};
+
+	int val, c, digit_optind, option_index;
+	int this_option_optind = optind ? optind : 1;
+	vec3_t tmp;
+
+	val = 0;
+	digit_optind = 0;
+
+	if (argc < 2) {
+		return 1;
+	}
+
+	while (1) {
+		c = getopt_long(argc, argv, "e:b:p:", long_options, &option_index);
+		if (c == -1)
+			break;
+
+		switch (c) {
+		case 0:
+			/* long options */
+			break;
+
+		case 'b':
+			/* set the b field based on input */
+			break;
+
+		case 'e':
+			/* set the e field based on input */
+			if (parse_args_vec3(&tmp, "-e", optarg)) {
+				*e_fld = malloc(sizeof(vec3_t));
+				if (*e_fld) {
+					**e_fld[0] = tmp[0];
+					**e_fld[1] = tmp[1];
+					**e_fld[2] = tmp[2];
+				} else {
+					MEM_ERR();
+				}
+			}
+			break;
+
+		case 'p':
+			/* set the number of total particles in the system */
+			*pn = atoi(optarg);
+			break;
+		}
+	}
+
+	return val;
 }
+
+int parse_args_vec3(vec3_t *ptr, char *opt, char *str)
+{
+	/* parse a vec3_t from a string looking like "0.4,0.2,0.5" */
+	double x, y, z;
+	int scanned;
+
+	x = y = z = 0;
+
+	/* use the standard library where possible */
+	scanned = sscanf(str, "%lf,%lf,%lf", &x, &y, &z);
+
+	if (scanned != 3) {
+		fprintf(stderr,
+				"WARNING, received %d items from %s opt, where expected 3\n",
+				scanned, opt);
+	}
+
+	*ptr[0] = x;
+	*ptr[1] = y;
+	*ptr[2] = z;
+
+	return scanned;
+}
+
+void memerranddie(char *file, int line)
+{
+	fprintf(stderr, "Memory Error in %s:%d\n", file, line);
+	exit(1);
+}
+

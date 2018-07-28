@@ -11,13 +11,7 @@
 #ifndef __PARTICLES__
 #define __PARTICLES__
 
-/* begin by defining vectors from doubles */
-
-typedef double vec_t;
-typedef vec_t vec2_t[2];
-typedef vec_t vec3_t[3];
-typedef vec_t vec4_t[4];
-typedef vec_t vec5_t[5];
+#include "vert.h"
 
 /*
  * Not only does this dimensionaly expand as far as needed, but we can now

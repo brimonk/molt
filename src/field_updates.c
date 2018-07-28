@@ -1,3 +1,4 @@
+#include "vert.h"
 #include "particles.h"
 
 void field_update(vec3_t *e_field, vec3_t *b_field)
