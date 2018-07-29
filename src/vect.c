@@ -30,7 +30,7 @@ void dynarr_append(struct dynarr_t *ptr, void *add_me, int size)
 	}
 
 	/* actually append the item, so get the pointer */
-	tmp = DyNARR_GetPtr(ptr, size); // (((char *)ptr->data) + (index * ptr->obj_size));
+	tmp = DyNARR_GetPtr(ptr, ptr->curr_size); // (((char *)ptr->data) + (index * ptr->obj_size));
 
 	/* now memcpy the data to the slot in the dynarr */
 	memcpy(tmp, add_me, size);

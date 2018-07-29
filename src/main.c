@@ -39,10 +39,13 @@
 #include "vect.h"
 
 int molt_run(sqlite3 *db, struct dynarr_t *parts,
-		struct dynarr_t *verticies, vec3_t *e_field, vec3_t *b_field);
+		struct dynarr_t *verticies, vec3_t *e_field, vec3_t *b_field,
+		vec3_t *timevals);
 int parse_args(int argc, char **argv, struct dynarr_t *parts,
-		struct dynarr_t *verts, vec3_t *e_fld, vec3_t *b_fld);
+		struct dynarr_t *verts, vec3_t *e_fld, vec3_t *b_fld,
+		vec3_t *time_flds);
 int parse_args_vec3(vec3_t *ptr, char *opt, char *str);
+int parse_args_partt(struct particle_t *ptr, char *opt, char *str);
 void random_init(struct dynarr_t *part_ptr, struct dynarr_t *verts,
 		vec3_t *e_fld, vec3_t *b_fld);
 
@@ -51,9 +54,12 @@ void memerranddie(char *file, int line);
 int isnumericstr(char *str);
 
 #define DATABASE "molt_output.db"
+#define DEFAULT_TIME_START 0
+#define DEFAULT_TIME_END 5
+#define DEFAULT_TIME_STEP 0.5
 #define DEFAULT_PART_SIZE 64
 #define USAGE "%s [--vert x,y,z --vert ...] [-e x,y,z] [-b x,y,z] "\
-	"[-p number] [--part x,y,z --part .. ] filename\n"
+	"[-p number] [--part x,y,z,vx,vy,vz --part .. ] filename\n"
 
 #define CURR_FLOATING_TIME(idx, step, init) ((idx + step + init))
 #define MEM_ERR() (memerranddie(__FILE__, __LINE__))
@@ -61,14 +67,18 @@ int isnumericstr(char *str);
 int main(int argc, char **argv)
 {
 	sqlite3 *db;
-	struct dynarr_t particles, verticies;
-	vec3_t e_field, b_field;
+	struct dynarr_t particles = {0};
+	struct dynarr_t verticies = {0};
+	vec3_t e_field = {0};
+    vec3_t b_field = {0};
+	vec3_t timevals = {0};
     int val;
 
 	/* parse command line arguments (and other launch parameters) */
-	dynarr_init(&particles, sizeof(vec3_t));
+	dynarr_init(&particles, sizeof(struct particle_t));
 	dynarr_init(&verticies, sizeof(vec3_t));
-	val = parse_args(argc, argv, &particles, &verticies, &e_field, &b_field);
+	val = parse_args(argc, argv,
+			&particles, &verticies, &e_field, &b_field, &timevals);
 
 	if (val) {
 		fprintf(stderr, USAGE, argv[0]);
@@ -88,7 +98,7 @@ int main(int argc, char **argv)
 	/* make sure we have tables to dump data to */
 	io_exec_sql_tbls(db, io_db_tbls);
 
-	molt_run(db, &particles, &verticies, &e_field, &b_field);
+	molt_run(db, &particles, &verticies, &e_field, &b_field, &timevals);
 
 	sqlite3_close(db);
 
@@ -100,11 +110,16 @@ int main(int argc, char **argv)
 }
 
 int molt_run(sqlite3 *db, struct dynarr_t *parts,
-		struct dynarr_t *verticies, vec3_t *e_field, vec3_t *b_field)
+		struct dynarr_t *verticies, vec3_t *e_field, vec3_t *b_field,
+		vec3_t *timevals)
 {
 	struct particle_t *ptr;
-	double tm_initial = 0, tm_curr, tm_step = 0.25, tm_final = 30;
+	double tm_initial, tm_curr, tm_step, tm_final;
     int time_i, max_iter, i;
+
+	tm_initial = (*timevals)[0]; // convenience and ease of reading
+	tm_final = (*timevals)[1];
+	tm_step = (*timevals)[2];
 
 	max_iter = (int)(tm_final / tm_step);
 
@@ -143,20 +158,29 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts,
  * -p     number			defines the total number of particles
  * --part x[,y[,z]]			defines a particle from the total allowed particles
  *
+ * tstart					simulation's time start (default 0)
+ * tend						simulation's time end (default 5)
+ * tstep					simulation's time step (default .5)
+ *
  * filename					the output database you'd like to use
  */
 
 int parse_args(int argc, char **argv, struct dynarr_t *parts,
-		struct dynarr_t *verts, vec3_t *e_fld, vec3_t *b_fld)
+		struct dynarr_t *verts, vec3_t *e_fld, vec3_t *b_fld,
+		vec3_t *time_flds)
 {
 	static struct option long_options[] = {
 		{"vert", required_argument, 0, 0},
 		{"part", required_argument, 0, 0},
+		{"tstart", required_argument, 0, 0},
+		{"tstep", required_argument, 0, 0},
+		{"tend", required_argument, 0, 0},
 		{0, 0, 0, 0},
 	};
 
 	int val, pn, c, option_index;
 	vec3_t tmp;
+	struct particle_t part_tmp;
 
 	pn = val = 0;
 
@@ -182,18 +206,38 @@ int parse_args(int argc, char **argv, struct dynarr_t *parts,
 			} // vert
 
 			if (strcmp("part", long_options[option_index].name) == 0) {
-				if (parse_args_vec3(&tmp, "--part", optarg)) {
-					dynarr_append(parts, &tmp, sizeof(tmp));
-					VectorClear(tmp);
+				if (parse_args_partt(&part_tmp, "--part", optarg)) {
+					part_tmp.uid = parts->curr_size++;
+					dynarr_append(parts, &part_tmp, sizeof(part_tmp));
+					VectorClear(part_tmp.pos);
+					VectorClear(part_tmp.vel);
 				}
 			} // part
+
+			if (strcmp("tstart", long_options[option_index].name) == 0) {
+				if (optarg) {
+					(*time_flds)[0] = strtod(optarg, NULL);
+				}
+			}
+
+			if (strcmp("tend", long_options[option_index].name) == 0) {
+				if (optarg) {
+					(*time_flds)[1] = strtod(optarg, NULL);
+				}
+			}
+
+			if (strcmp("tstep", long_options[option_index].name) == 0) {
+				if (optarg) {
+					(*time_flds)[2] = strtod(optarg, NULL);
+				}
+			}
 
 			break;
 
 		case 'b':
 			/* set the b field based on input */
 			if (parse_args_vec3(&tmp, "-b", optarg)) {
-				VectorCopy(tmp, (*b_fld));
+				VectorCopy(tmp, *b_fld);
 				VectorClear(tmp);
 			}
 			break;
@@ -209,6 +253,7 @@ int parse_args(int argc, char **argv, struct dynarr_t *parts,
 		case 'p':
 			/* set the number of total particles in the system */
 			if (optarg) {
+				// error checking
 				pn = atoi(optarg);
 			}
 			break;
@@ -220,14 +265,12 @@ int parse_args(int argc, char **argv, struct dynarr_t *parts,
 
 int parse_args_vec3(vec3_t *ptr, char *opt, char *str)
 {
-	/* parse a vec3_t from a string looking like "0.4,0.2,0.5" */
-	double x, y, z;
+	/* parse a vec3_t from a string; looks like "0.4,0.2,0.5" */
+	vec3_t tmp = {0};
 	int scanned;
 
-	x = y = z = 0;
-
 	/* use the standard library where possible */
-	scanned = sscanf(str, "%lf,%lf,%lf", &x, &y, &z);
+	scanned = sscanf(str, "%lf,%lf,%lf", &tmp[0], &tmp[1], &tmp[2]);
 
 	if (3 < scanned) {
 		fprintf(stderr,
@@ -236,13 +279,35 @@ int parse_args_vec3(vec3_t *ptr, char *opt, char *str)
 				scanned, opt);
 	}
 
-	(*ptr)[0] = x;
-	(*ptr)[1] = y;
-	(*ptr)[2] = z;
+	VectorCopy(*ptr, tmp);
 
 	return scanned;
 }
 
+
+int parse_args_partt(struct particle_t *ptr, char *opt, char *str)
+{
+	/* parse a vec3_t from a string; looks like "0.4,0.2,0.5" */
+	struct particle_t tmp;
+	int scanned;
+
+	/* use the standard library where possible */
+	scanned = sscanf(str, "%lf,%lf,%lf,%lf,%lf,%lf",
+			&tmp.pos[0], &tmp.pos[1], &tmp.pos[2],
+			&tmp.vel[3], &tmp.vel[4], &tmp.vel[5]); 
+
+	if (3 < scanned) {
+		fprintf(stderr,
+				"WARNING, received %d items for '%s',"\
+				"where expected 3 or less\n",
+				scanned, opt);
+	}
+
+	VectorCopy(ptr->pos, tmp.pos);
+	VectorCopy(ptr->vel, tmp.vel);
+
+	return scanned;
+}
 
 void random_init(struct dynarr_t *part_ptr, struct dynarr_t *verts,
 		vec3_t *e_fld, vec3_t *b_fld)
