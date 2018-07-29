@@ -30,11 +30,30 @@ void dynarr_append(struct dynarr_t *ptr, void *add_me, int size)
 	}
 
 	/* actually append the item, so get the pointer */
-	tmp = (((char *)ptr->data) + (ptr->curr_size * ptr->obj_size));
+	tmp = DyNARR_GetPtr(ptr, size); // (((char *)ptr->data) + (index * ptr->obj_size));
 
 	/* now memcpy the data to the slot in the dynarr */
 	memcpy(tmp, add_me, size);
 	ptr->curr_size++;
+}
+
+void dynarr_setmaxsize(struct dynarr_t *ptr, int size)
+{
+	struct dynarr_t *tmp;
+	if (ptr->max_size < size) {
+		tmp = realloc(ptr->data, size * ptr->obj_size);
+
+		if (tmp) {
+			ptr->data = tmp;
+			ptr->max_size = size;
+		}
+	}
+}
+
+void dynarr_setobjsize(struct dynarr_t *ptr, int size)
+{
+	/* should be a macro */
+	ptr->obj_size = size;
 }
 
 void *dynarr_get(struct dynarr_t *ptr, int index)
@@ -56,7 +75,7 @@ void dynarr_set(struct dynarr_t *ptr, int index, void *value, int size)
 {
 	struct dynarr_t *tmp;
 
-	tmp = (((char *)ptr->data) + (index * ptr->obj_size));
+	tmp = DyNARR_GetPtr(ptr, index); // (((char *)ptr->data) + (index * ptr->obj_size));
 
 	/* memcpy the data */
 	memcpy(tmp, value, size);

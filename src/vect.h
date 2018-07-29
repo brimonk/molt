@@ -68,7 +68,7 @@ struct dynarr_t {
 	int max_size;
 
 	void *data;
-} dynarr;
+} dynarr_t;
 
 #define DYNARR_INITIAL_CAPACITY 64
 
@@ -77,5 +77,7 @@ void dynarr_append(struct dynarr_t *ptr, void *add_me, int size);
 void *dynarr_get(struct dynarr_t *ptr, int index);
 void dynarr_set(struct dynarr_t *ptr, int index, void *value, int size);
 void dynarr_free(struct dynarr_t *ptr);
+
+#define DyNARR_GetPtr(a,i) ((void *)(((char *)a->data) + (i * a->obj_size)))
 
 #endif
