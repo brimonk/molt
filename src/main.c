@@ -125,11 +125,11 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts,
 
 	/* iterate over each time step, taking our snapshot */
 	for (time_i = 0; time_i < max_iter; time_i++) {
+		ptr = (struct particle_t *)parts->data;
         for(i = 0; i < parts->curr_size; i++) // foreach particle
         {
-			ptr = DyNARR_GetPtr(parts, i); // ((char *)(parts->data)) + (parts->obj_size * i);
-            field_update(ptr, e_field, b_field);
-			part_pos_update(ptr, tm_step);
+            field_update(&ptr[i], e_field, b_field);
+			part_pos_update(&ptr[i], tm_step);
 
 			/* store to disk here??? */
 			printf("[%d] p-%d (%.3lf, %.3lf, %.3lf)\n",
@@ -207,10 +207,12 @@ int parse_args(int argc, char **argv, struct dynarr_t *parts,
 
 			if (strcmp("part", long_options[option_index].name) == 0) {
 				if (parse_args_partt(&part_tmp, "--part", optarg)) {
-					part_tmp.uid = parts->curr_size++;
+					part_tmp.uid = parts->curr_size;
 					dynarr_append(parts, &part_tmp, sizeof(part_tmp));
+
 					VectorClear(part_tmp.pos);
 					VectorClear(part_tmp.vel);
+					part_tmp.uid = 0;
 				}
 			} // part
 
@@ -279,7 +281,7 @@ int parse_args_vec3(vec3_t *ptr, char *opt, char *str)
 				scanned, opt);
 	}
 
-	VectorCopy(*ptr, tmp);
+	VectorCopy(tmp, *ptr);
 
 	return scanned;
 }
@@ -288,23 +290,25 @@ int parse_args_vec3(vec3_t *ptr, char *opt, char *str)
 int parse_args_partt(struct particle_t *ptr, char *opt, char *str)
 {
 	/* parse a vec3_t from a string; looks like "0.4,0.2,0.5" */
-	struct particle_t tmp;
+	vec3_t tmp;
+	char *split;
+	char sep_char = ':';
 	int scanned;
 
-	/* use the standard library where possible */
-	scanned = sscanf(str, "%lf,%lf,%lf,%lf,%lf,%lf",
-			&tmp.pos[0], &tmp.pos[1], &tmp.pos[2],
-			&tmp.vel[3], &tmp.vel[4], &tmp.vel[5]); 
+	split = strchr(str, sep_char);
 
-	if (3 < scanned) {
-		fprintf(stderr,
-				"WARNING, received %d items for '%s',"\
-				"where expected 3 or less\n",
-				scanned, opt);
+	// get the positions
+	if ((scanned = parse_args_vec3(&tmp, "", str))) {
+		VectorCopy(tmp, ptr->pos);
+		VectorClear(tmp);
 	}
 
-	VectorCopy(ptr->pos, tmp.pos);
-	VectorCopy(ptr->vel, tmp.vel);
+	if (split) { // if we have a ':' in the str, get the vel
+		if ((scanned = parse_args_vec3(&tmp, "", ++split))) {
+			VectorCopy(tmp, ptr->vel);
+			VectorClear(tmp);
+		}
+	}
 
 	return scanned;
 }

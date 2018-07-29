@@ -20,6 +20,7 @@ void dynarr_append(struct dynarr_t *ptr, void *add_me, int size)
 {
 	/* append an element to the dynarr, check if it'll be full first */
 	struct dynarr_t *tmp;
+	void *tmpvoid;
 	if (ptr->max_size <= ptr->curr_size) {
 		tmp = realloc(ptr->data, (ptr->max_size * 2) * ptr->obj_size);
 
@@ -30,10 +31,13 @@ void dynarr_append(struct dynarr_t *ptr, void *add_me, int size)
 	}
 
 	/* actually append the item, so get the pointer */
-	tmp = DyNARR_GetPtr(ptr, ptr->curr_size); // (((char *)ptr->data) + (index * ptr->obj_size));
+	// #define DyNARR_GetPtr(a,i) ((void *)(((char *)a->data) + (i * a->obj_size)))
+	// tmp = DyNARR_GetPtr(ptr, ptr->curr_size); // (((char *)ptr->data) + (index * ptr->obj_size));
+	// tmpvoid = (void *)(((char *)ptr->data) + (ptr->curr_size * ptr->obj_size));
+	tmpvoid = DynArr_GetPtr(ptr, ptr->curr_size);
 
 	/* now memcpy the data to the slot in the dynarr */
-	memcpy(tmp, add_me, size);
+	memcpy(tmpvoid, add_me, size);
 	ptr->curr_size++;
 }
 
@@ -75,7 +79,7 @@ void dynarr_set(struct dynarr_t *ptr, int index, void *value, int size)
 {
 	struct dynarr_t *tmp;
 
-	tmp = DyNARR_GetPtr(ptr, index); // (((char *)ptr->data) + (index * ptr->obj_size));
+	tmp = DynArr_GetPtr(ptr, index); // (((char *)ptr->data) + (index * ptr->obj_size));
 
 	/* memcpy the data */
 	memcpy(tmp, value, size);
