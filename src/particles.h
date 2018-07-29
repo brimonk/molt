@@ -11,7 +11,7 @@
 #ifndef __PARTICLES__
 #define __PARTICLES__
 
-#include "vert.h"
+#include "vect.h"
 
 /*
  * Not only does this dimensionaly expand as far as needed, but we can now

@@ -11,7 +11,7 @@
  */
 
 #include "particles.h"
-#include "vert.h"
+#include "vect.h"
 
 #define BUF_SIZE 2048
 

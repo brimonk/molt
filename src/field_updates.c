@@ -1,4 +1,4 @@
-#include "vert.h"
+#include "vect.h"
 #include "particles.h"
 
 void field_update(vec3_t *e_field, vec3_t *b_field)
@@ -6,6 +6,7 @@ void field_update(vec3_t *e_field, vec3_t *b_field)
 	/* changes fields off of some parameters */
 	/* TODO: fill this out later */
 
+	// Kari's original code below
     // if(s[parNo][timeInd].x <= half)
     // {
     //     E.x = .21; // particle's electric field

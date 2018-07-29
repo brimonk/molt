@@ -18,7 +18,7 @@
 #include "particles.h"
 #include "io.h"
 
-#include "vert.h"
+#include "vect.h"
 #include "calcs.h"
 #include "field_updates.h"
 
@@ -27,19 +27,21 @@ int molt_run(sqlite3 *db, struct particle_t *parts, int part_size,
 int parse_args(int argc, char **argv, struct particle_t **part_ptr, int *pn,
 		vec3_t **verts, vec3_t **e_fld, vec3_t **b_fld);
 int parse_args_vec3(vec3_t *ptr, char *opt, char *str);
+void random_init(struct particle_t **part_ptr, int pn, vec3_t **verts,
+		vec3_t **e_fld, vec3_t **b_fld);
 void memerranddie(char *file, int line);
 
 #define DATABASE "molt_output.db"
 #define USAGE "%s [--vert x,y,z --vert ...] [-e x,y,z] [-b x,y,z] "\
-	"[-p number] [--part x[,y[,z]]] filename\n"
+	"[-p number] [--part x,y,z --part .. ] filename\n"
 #define CURR_FLOATING_TIME(idx, step, init) ((idx + step + init))
 #define MEM_ERR() (memerranddie(__FILE__, __LINE__))
 
 int main(int argc, char **argv)
 {
 	sqlite3 *db;
-	struct particle_t *particles;
-	vec3_t *verticies, *e_field, *b_field;
+	struct particle_t *particles = NULL;
+	vec3_t *verticies = NULL, *e_field = NULL, *b_field = NULL;
     int val, part_num;
 	part_num = 0;
 
@@ -51,6 +53,9 @@ int main(int argc, char **argv)
 		fprintf(stderr, USAGE, argv[0]);
 		exit(1);
 	}
+
+	/* for the values that are NULL, go initialize them with random data */
+	random_init(&particles, part_num, &verticies, &e_field, &b_field);
 
 	/* set up the database */
 	val = sqlite3_open(DATABASE, &db);
@@ -66,6 +71,19 @@ int main(int argc, char **argv)
 
 	sqlite3_close(db);
 
+	/* free all of the memory we've allocated in the init procedure */
+	if (e_field)
+		free(e_field);
+
+	if (b_field)
+		free(b_field);
+
+	if (verticies)
+		free(verticies);
+
+	if (particles)
+		free(particles);
+
 	return 0;
 }
 
@@ -75,8 +93,8 @@ int molt_run(sqlite3 *db, struct particle_t *parts, int part_size,
 	double tm_initial = 0, tm_curr, tm_step = 0.25, tm_final = 30;
     int time_i, max_iter, i, total_parts = 0; // timeInd indicates the iteration in time that the simulation is at
 
-	vect_init(e_field, 3);
-	vect_init(b_field, 3);
+	VectorClear((*e_field));
+	VectorClear((*b_field));
 
 	/* do some initialization right here */
 
@@ -150,11 +168,31 @@ parse_args(int argc, char **argv, struct particle_t **part_ptr, int *pn,
 
 		switch (c) {
 		case 0:
-			/* long options */
+			/* long options - if chain because no easy, reliable way to index */
+			if (strcmp("vert", long_options[option_index].name) == 0)
+			{
+				if (parse_args_vec3(&tmp, "--vert", optarg)) {
+				}
+			} // vert
+
+			if (strcmp("part", long_options[option_index].name) == 0) {
+			} // part
+
 			break;
 
 		case 'b':
 			/* set the b field based on input */
+			if (parse_args_vec3(&tmp, "-b", optarg)) {
+				*b_fld = malloc(sizeof(vec3_t));
+				if (*b_fld) {
+					(**b_fld)[0] = tmp[0];
+					(**b_fld)[1] = tmp[1];
+					(**b_fld)[2] = tmp[2];
+					VectorClear(tmp);
+				} else {
+					MEM_ERR();
+				}
+			}
 			break;
 
 		case 'e':
@@ -162,9 +200,10 @@ parse_args(int argc, char **argv, struct particle_t **part_ptr, int *pn,
 			if (parse_args_vec3(&tmp, "-e", optarg)) {
 				*e_fld = malloc(sizeof(vec3_t));
 				if (*e_fld) {
-					**e_fld[0] = tmp[0];
-					**e_fld[1] = tmp[1];
-					**e_fld[2] = tmp[2];
+					(**e_fld)[0] = tmp[0];
+					(**e_fld)[1] = tmp[1];
+					(**e_fld)[2] = tmp[2];
+					VectorClear(tmp);
 				} else {
 					MEM_ERR();
 				}
@@ -173,7 +212,9 @@ parse_args(int argc, char **argv, struct particle_t **part_ptr, int *pn,
 
 		case 'p':
 			/* set the number of total particles in the system */
-			*pn = atoi(optarg);
+			if (optarg) {
+				*pn = atoi(optarg);
+			}
 			break;
 		}
 	}
@@ -192,17 +233,26 @@ int parse_args_vec3(vec3_t *ptr, char *opt, char *str)
 	/* use the standard library where possible */
 	scanned = sscanf(str, "%lf,%lf,%lf", &x, &y, &z);
 
-	if (scanned != 3) {
+	if (3 < scanned) {
 		fprintf(stderr,
-				"WARNING, received %d items from %s opt, where expected 3\n",
+				"WARNING, received %d items for '%s',"\
+				"where expected 3 or less\n",
 				scanned, opt);
 	}
 
-	*ptr[0] = x;
-	*ptr[1] = y;
-	*ptr[2] = z;
+	(*ptr)[0] = x;
+	(*ptr)[1] = y;
+	(*ptr)[2] = z;
 
 	return scanned;
+}
+
+
+void
+random_init(struct particle_t **part_ptr, int pn, vec3_t **verts,
+		vec3_t **e_fld, vec3_t **b_fld)
+{
+	/* finish initializing the data the user HASN'T put in */
 }
 
 void memerranddie(char *file, int line)
@@ -210,4 +260,3 @@ void memerranddie(char *file, int line)
 	fprintf(stderr, "Memory Error in %s:%d\n", file, line);
 	exit(1);
 }
-
