@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 #include "vect.h"
 
 void dynarr_init(struct dynarr_t *ptr, int obj_size)
@@ -15,8 +16,25 @@ void dynarr_init(struct dynarr_t *ptr, int obj_size)
 	}
 }
 
-void dynarr_append(struct dynarr_t *ptr, void *add_me)
+void dynarr_append(struct dynarr_t *ptr, void *add_me, int size)
 {
+	/* append an element to the dynarr, check if it'll be full first */
+	struct dynarr_t *tmp;
+	if (ptr->max_size <= ptr->curr_size) {
+		tmp = realloc(ptr->data, (ptr->max_size * 2) * ptr->obj_size);
+
+		if (tmp) {
+			ptr->data = tmp;
+			ptr->max_size *= 2;
+		}
+	}
+
+	/* actually append the item, so get the pointer */
+	tmp = (((char *)ptr->data) + (ptr->curr_size * ptr->obj_size));
+
+	/* now memcpy the data to the slot in the dynarr */
+	memcpy(tmp, add_me, size);
+	ptr->curr_size++;
 }
 
 void *dynarr_get(struct dynarr_t *ptr, int index)
@@ -34,8 +52,14 @@ void *dynarr_get(struct dynarr_t *ptr, int index)
 	return val;
 }
 
-void dynarr_set(struct dynarr_t *ptr, int index, void *value)
+void dynarr_set(struct dynarr_t *ptr, int index, void *value, int size)
 {
+	struct dynarr_t *tmp;
+
+	tmp = (((char *)ptr->data) + (index * ptr->obj_size));
+
+	/* memcpy the data */
+	memcpy(tmp, value, size);
 }
 
 void dynarr_free(struct dynarr_t *ptr)

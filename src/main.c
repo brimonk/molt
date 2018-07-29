@@ -150,12 +150,10 @@ parse_args(int argc, char **argv, struct particle_t **part_ptr, int *pn,
 		{0, 0, 0, 0},
 	};
 
-	int val, c, digit_optind, option_index;
-	int this_option_optind = optind ? optind : 1;
+	int val, c, option_index;
 	vec3_t tmp;
 
 	val = 0;
-	digit_optind = 0;
 
 	if (argc < 2) {
 		return 1;

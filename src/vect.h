@@ -73,9 +73,9 @@ struct dynarr_t {
 #define DYNARR_INITIAL_CAPACITY 64
 
 void dynarr_init(struct dynarr_t *ptr, int obj_size);
-void dynarr_append(struct dynarr_t *ptr, void *add_me);
+void dynarr_append(struct dynarr_t *ptr, void *add_me, int size);
 void *dynarr_get(struct dynarr_t *ptr, int index);
-void dynarr_set(struct dynarr_t *ptr, int index, void *value);
+void dynarr_set(struct dynarr_t *ptr, int index, void *value, int size);
 void dynarr_free(struct dynarr_t *ptr);
 
 #endif
