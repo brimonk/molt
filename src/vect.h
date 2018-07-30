@@ -76,6 +76,8 @@ struct dynarr_t {
 void dynarr_init(struct dynarr_t *ptr, int obj_size);
 void dynarr_append(struct dynarr_t *ptr, void *add_me, int size);
 void *dynarr_get(struct dynarr_t *ptr, int index);
+void dynarr_setmaxsize(struct dynarr_t *ptr, int size);
+void dynarr_setobjsize(struct dynarr_t *ptr, int size);
 void dynarr_set(struct dynarr_t *ptr, int index, void *value, int size);
 void dynarr_free(struct dynarr_t *ptr);
 

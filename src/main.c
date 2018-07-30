@@ -268,6 +268,10 @@ int parse_args(int argc, char **argv, struct dynarr_t *parts,
 		}
 	}
 
+	if (pn) {
+		dynarr_setmaxsize(parts, pn);
+	}
+
 	return val;
 }
 
@@ -327,21 +331,22 @@ void random_init(struct dynarr_t *part_ptr, struct dynarr_t *verts,
 
 	// check the e field
 	if (!((*e_fld)[0] || (*e_fld)[1] || (*e_fld)[2])) {
-		*e_fld[0] = GET_RAND_DOUBLE();
-		*e_fld[1] = GET_RAND_DOUBLE();
-		*e_fld[2] = GET_RAND_DOUBLE();
+		(*e_fld)[0] = GET_RAND_DOUBLE();
+		(*e_fld)[1] = GET_RAND_DOUBLE();
+		(*e_fld)[2] = GET_RAND_DOUBLE();
 	}
 
 	// check the b field
 	if (!((*e_fld)[0] || (*e_fld)[1] || (*e_fld)[2])) {
-		*b_fld[0] = GET_RAND_DOUBLE();
-		*b_fld[1] = GET_RAND_DOUBLE();
-		*b_fld[2] = GET_RAND_DOUBLE();
+		(*b_fld)[0] = GET_RAND_DOUBLE();
+		(*b_fld)[1] = GET_RAND_DOUBLE();
+		(*b_fld)[2] = GET_RAND_DOUBLE();
 	}
 
 	// check if we have enough vertexes. if not, fill out the rest
 
 	// check if we have enough particles. if not, fill out the rest
+	// with ensuring it's within the bounds of the vector
 }
 
 void memerranddie(char *file, int line)
