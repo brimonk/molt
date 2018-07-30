@@ -50,8 +50,12 @@ This is where all of the decidedly computer science only problems are detailed.
 	* Ensures full PCI bus saturation with data copying from device to host,
 	* Independent threads run the jobs, and write output data to storage/stdout
 * Initial Arguments as Command Line Parameters
-	* Initial and Final Time
-	* Time Step
-	* Number of Particles
-		* Initial Particle Position
+	* ~Time related values (tstart, tend, tstep)~
+	* Particles
+		* ~Number of particles (-p num)~
+		* ~User can declare between 0 and num specific coordinates using
+		  (x,y,z:vx,vy,vz)~
+		* ~Initial Particle Position~
+	* ~Verticies~
+		* ~User can define verticies in a similar way to Particles x,y,z~
 
