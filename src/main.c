@@ -8,6 +8,9 @@
  *
  * In-Memory Datastructuring
  *
+ *		To prevent as many cache-misses as possible, we (ab)use the concepts
+ *		of virtual memory, and effectively keep everything as an array.
+ *
  *		Particles
  *			stored as a collection of vec3_t's, behind a dynarr structure
  *			to make adding them easier
@@ -51,13 +54,15 @@ void random_init(struct dynarr_t *part_ptr, struct dynarr_t *verts,
 
 /* helper functions */
 void memerranddie(char *file, int line);
-int isnumericstr(char *str);
 
 #define DATABASE "molt_output.db"
 #define DEFAULT_TIME_START 0
 #define DEFAULT_TIME_END 5
 #define DEFAULT_TIME_STEP 0.5
 #define DEFAULT_PART_SIZE 64
+#define DEFAULT_FLOATING_HIGH 64.0
+#define GET_RAND_DOUBLE() (((double)rand()/(double)(RAND_MAX)) \
+		* DEFAULT_FLOATING_HIGH)
 #define USAGE "%s [--vert x,y,z --vert ...] [-e x,y,z] [-b x,y,z] "\
 	"[-p number] [--part x,y,z,vx,vy,vz --part .. ] filename\n"
 
@@ -132,8 +137,9 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts,
 			part_pos_update(&ptr[i], tm_step);
 
 			/* store to disk here??? */
-			printf("[%d] p-%d (%.3lf, %.3lf, %.3lf)\n",
-					time_i, i, ptr[i].pos[0], ptr[i].pos[1], ptr[i].pos[2]);
+			printf("[%d] p-%d pos(%.3lf, %.3lf, %.3lf) vel(%.3lf, %.3lf, %.3lf)\n",
+					time_i, i, ptr[i].pos[0], ptr[i].pos[1], ptr[i].pos[2],
+							   ptr[i].vel[0], ptr[i].vel[1], ptr[i].pos[2]);
 
 
 			part_vel_update(ptr, e_field, b_field, tm_step);
@@ -317,6 +323,25 @@ void random_init(struct dynarr_t *part_ptr, struct dynarr_t *verts,
 		vec3_t *e_fld, vec3_t *b_fld)
 {
 	/* finish initializing the data the user HASN'T put in */
+	srand((unsigned int)time(NULL));
+
+	// check the e field
+	if (!((*e_fld)[0] || (*e_fld)[1] || (*e_fld)[2])) {
+		*e_fld[0] = GET_RAND_DOUBLE();
+		*e_fld[1] = GET_RAND_DOUBLE();
+		*e_fld[2] = GET_RAND_DOUBLE();
+	}
+
+	// check the b field
+	if (!((*e_fld)[0] || (*e_fld)[1] || (*e_fld)[2])) {
+		*b_fld[0] = GET_RAND_DOUBLE();
+		*b_fld[1] = GET_RAND_DOUBLE();
+		*b_fld[2] = GET_RAND_DOUBLE();
+	}
+
+	// check if we have enough vertexes. if not, fill out the rest
+
+	// check if we have enough particles. if not, fill out the rest
 }
 
 void memerranddie(char *file, int line)
@@ -325,14 +350,3 @@ void memerranddie(char *file, int line)
 	exit(1);
 }
 
-int isnumericstr(char *str)
-{
-	int i;
-	for (i = 0; i < strlen(str); i++) {
-		if (!isdigit(str[i])) {
-			break;
-		}
-	}
-
-	return i == strlen(str);
-}
