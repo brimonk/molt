@@ -9,6 +9,7 @@ void dynarr_init(struct dynarr_t *ptr, int obj_size)
 		ptr->data = malloc(obj_size * DYNARR_INITIAL_CAPACITY);
 
 		if (ptr->data) {
+			memset(ptr->data, 0, obj_size * DYNARR_INITIAL_CAPACITY);
 			ptr->obj_size = obj_size;
 			ptr->max_size = DYNARR_INITIAL_CAPACITY;
 			ptr->curr_size = 0;
@@ -44,7 +45,7 @@ void dynarr_append(struct dynarr_t *ptr, void *add_me, int size)
 void dynarr_setmaxsize(struct dynarr_t *ptr, int size)
 {
 	struct dynarr_t *tmp;
-	if (ptr->max_size < size) {
+	if (ptr->curr_size < size) {
 		tmp = realloc(ptr->data, size * ptr->obj_size);
 
 		if (tmp) {

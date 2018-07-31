@@ -49,7 +49,7 @@ int parse_args(int argc, char **argv, struct dynarr_t *parts,
 		vec3_t *time_flds);
 int parse_args_vec3(vec3_t *ptr, char *opt, char *str);
 int parse_args_partt(struct particle_t *ptr, char *opt, char *str);
-void random_init(struct dynarr_t *part_ptr, struct dynarr_t *verts,
+void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 		vec3_t *e_fld, vec3_t *b_fld);
 
 /* helper functions */
@@ -137,8 +137,8 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts,
 			part_pos_update(&ptr[i], tm_step);
 
 			/* store to disk here??? */
-			printf("[%d] p-%d pos(%.3lf, %.3lf, %.3lf) vel(%.3lf, %.3lf, %.3lf)\n",
-					time_i, i, ptr[i].pos[0], ptr[i].pos[1], ptr[i].pos[2],
+			printf("[%d] p-%d pos %.3lf, %.3lf, %.3lf  vel %.3lf, %.3lf, %.3lf\n",
+					time_i, ptr[i].uid, ptr[i].pos[0], ptr[i].pos[1], ptr[i].pos[2],
 							   ptr[i].vel[0], ptr[i].vel[1], ptr[i].pos[2]);
 
 
@@ -323,10 +323,12 @@ int parse_args_partt(struct particle_t *ptr, char *opt, char *str)
 	return scanned;
 }
 
-void random_init(struct dynarr_t *part_ptr, struct dynarr_t *verts,
+void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 		vec3_t *e_fld, vec3_t *b_fld)
 {
 	/* finish initializing the data the user HASN'T put in */
+	int i;
+	struct particle_t *part_ptr, part_tmp;
 	srand((unsigned int)time(NULL));
 
 	// check the e field
@@ -347,6 +349,22 @@ void random_init(struct dynarr_t *part_ptr, struct dynarr_t *verts,
 
 	// check if we have enough particles. if not, fill out the rest
 	// with ensuring it's within the bounds of the vector
+	if (parts->max_size != parts->curr_size) {
+		part_ptr = parts->data;
+		for (i = parts->curr_size; i < parts->max_size; i++) {
+			part_tmp.uid = i;
+			// position
+			part_tmp.pos[0] = GET_RAND_DOUBLE();
+			part_tmp.pos[1] = GET_RAND_DOUBLE();
+			part_tmp.pos[2] = GET_RAND_DOUBLE();
+
+			// velocity
+			part_tmp.vel[0] = GET_RAND_DOUBLE();
+			part_tmp.vel[1] = GET_RAND_DOUBLE();
+			part_tmp.vel[2] = GET_RAND_DOUBLE();
+			dynarr_append(parts, &part_tmp, sizeof(part_tmp));
+		}
+	}
 }
 
 void memerranddie(char *file, int line)
