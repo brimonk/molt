@@ -3,9 +3,6 @@
  * Fri Jul 20, 2018 13:47
  *
  * defines particles and their related structures
- *
- * Look here: http://wiki.ioquake3.org/Vectors for information on why this
- * is written as it is.
  */
 
 #ifndef __PARTICLES__
@@ -24,7 +21,7 @@ struct particle_t {
 	unsigned int uid; /* s^32 - 1 max particles (shouldn't be an issue) */
 	vec3_t pos;
 	vec3_t vel;
-};
+}; // size => 52 bytes
 
 #endif
 

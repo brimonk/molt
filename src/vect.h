@@ -3,7 +3,10 @@
  * Sat Jul 28, 2018 03:03
  *
  * vect.c
- *   - A small vertex library, inspired by the Quake functions of similar use.
+ *   - A small vector library, inspired by the Quake functions for similar use.
+ *
+ * for information on why this is written as it is:
+ *   http://wiki.ioquake3.org/Vectors 
  */
 
 #ifndef __VERTICIES__
@@ -56,11 +59,13 @@ typedef vec_t vec6_t[6];
 	 (c)[1]=(a)[2]*(b)[0]-(a)[0]*(b)[2],\
 	 (c)[2]=(a)[0]*(b)[1]-(a)[1]*(b)[0])
 #define VectorClear(a) ((a)[0]=0,(a)[1]=0,(a)[2]=0)
+#define VectorPrint(a) \
+	(printf("%lf, %lf, %lf\n", (a)[0], (a)[1], (a)[2]))
 
 /* 
  * also handled in the vect library are C++-like vectors, or dynamic arrays
- * (this is a little confusing, and a better way to organize these two things
- * would be great).
+ * (this is a little confusing, and a better way to organize and name these
+ * two things would be great).
  */
 
 struct dynarr_t {

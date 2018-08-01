@@ -10,26 +10,32 @@
 #include "calcs.h"
 
 // updating position values
-void part_pos_update(struct particle_t *parts, double change)
+void part_pos_update(struct particle_t *part, double change)
 {
-	parts->pos[0] = parts->pos[0] + change * parts->vel[0];
-	parts->pos[1] = parts->pos[1] + change * parts->vel[1];
-	parts->pos[2] = parts->pos[2] + change * parts->vel[2];
+	vec3_t tmp;
+	VectorClear(tmp);
+	tmp[0] = part->pos[0] + change * part->vel[0];
+	tmp[1] = part->pos[1] + change * part->vel[1];
+	tmp[2] = part->pos[2] + change * part->vel[2];
+	VectorCopy(tmp, (part->pos));
 }
 
 // updating velocity values
 void part_vel_update(struct particle_t *part, vec3_t *e_field, vec3_t *b_field, double change)
 {
-	part->vel[0] = part->vel[0] + change * force_in_x(part, *e_field, *b_field);
-	part->vel[1] = part->vel[1] + change * force_in_y(part, *e_field, *b_field);
-	part->vel[2] = part->vel[2] + change * force_in_z(part, *e_field, *b_field);
+	vec3_t tmp;
+	VectorClear(tmp);
+	tmp[0] = part->vel[0] + change * force_in_x(part, *e_field, *b_field);
+	tmp[1] = part->vel[1] + change * force_in_y(part, *e_field, *b_field);
+	tmp[2] = part->vel[2] + change * force_in_z(part, *e_field, *b_field);
+	VectorCopy(tmp, (part->pos));
 }
 
 // dynamic force calculation
 double force_in_x(struct particle_t *part, vec3_t e_fld, vec3_t b_fld)
 {
 	// Ex + vy*Bz - vz*By;
-    return e_fld[0] + (part->vel[0] * b_fld[2]) - (part->vel[2] * b_fld[1]);
+    return e_fld[0] + (part->vel[1] * b_fld[2]) - (part->vel[2] * b_fld[1]);
 }
 
 double force_in_y(struct particle_t *part, vec3_t e_fld, vec3_t b_fld)

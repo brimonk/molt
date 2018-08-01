@@ -50,14 +50,14 @@ int parse_args(int argc, char **argv, struct dynarr_t *parts,
 int parse_args_vec3(vec3_t *ptr, char *opt, char *str);
 int parse_args_partt(struct particle_t *ptr, char *opt, char *str);
 void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
-		vec3_t *e_fld, vec3_t *b_fld);
+		vec3_t *e_fld, vec3_t *b_fld, vec3_t *times);
 
 /* helper functions */
 void memerranddie(char *file, int line);
 
 #define DATABASE "molt_output.db"
-#define DEFAULT_TIME_START 0
-#define DEFAULT_TIME_END 5
+#define DEFAULT_TIME_INITIAL 0
+#define DEFAULT_TIME_FINAL 5
 #define DEFAULT_TIME_STEP 0.5
 #define DEFAULT_PART_SIZE 64
 #define DEFAULT_FLOATING_HIGH 64.0
@@ -65,6 +65,8 @@ void memerranddie(char *file, int line);
 		* DEFAULT_FLOATING_HIGH)
 #define USAGE "%s [--vert x,y,z --vert ...] [-e x,y,z] [-b x,y,z] "\
 	"[-p number] [--part x,y,z,vx,vy,vz --part .. ] filename\n"
+#define RUN_LOOP_FORMAT "[%d] p-%d pos %.3lf, %.3lf, %.3lf "\
+	"vel %.3lf, %.3lf, %.3lf\n"
 
 #define CURR_FLOATING_TIME(idx, step, init) ((idx + step + init))
 #define MEM_ERR() (memerranddie(__FILE__, __LINE__))
@@ -75,9 +77,9 @@ int main(int argc, char **argv)
 	struct dynarr_t particles = {0};
 	struct dynarr_t verticies = {0};
 	vec3_t e_field = {0};
-    vec3_t b_field = {0};
+	vec3_t b_field = {0};
 	vec3_t timevals = {0};
-    int val;
+	int val;
 
 	/* parse command line arguments (and other launch parameters) */
 	dynarr_init(&particles, sizeof(struct particle_t));
@@ -91,7 +93,7 @@ int main(int argc, char **argv)
 	}
 
 	/* for the values that are NULL, go initialize them with random data */
-	random_init(&particles, &verticies, &e_field, &b_field);
+	random_init(&particles, &verticies, &e_field, &b_field, &timevals);
 
 	/* set up the database */
 	val = sqlite3_open(DATABASE, &db);
@@ -120,7 +122,7 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts,
 {
 	struct particle_t *ptr;
 	double tm_initial, tm_curr, tm_step, tm_final;
-    int time_i, max_iter, i;
+	int time_i, max_iter, i;
 
 	tm_initial = (*timevals)[0]; // convenience and ease of reading
 	tm_final = (*timevals)[1];
@@ -130,26 +132,24 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts,
 
 	/* iterate over each time step, taking our snapshot */
 	for (time_i = 0; time_i < max_iter; time_i++) {
-		ptr = (struct particle_t *)parts->data;
-        for(i = 0; i < parts->curr_size; i++) // foreach particle
-        {
-            field_update(&ptr[i], e_field, b_field);
+		// ptr = (struct particle_t *)parts->data;
+		ptr = dynarr_get(parts, 0);
+		for(i = 0; i < parts->curr_size; i++) // foreach particle
+		{
+			/* store to disk here */
+			printf(RUN_LOOP_FORMAT,
+					time_i, ptr[i].uid,
+					ptr[i].pos[0], ptr[i].pos[1], ptr[i].pos[2],
+					ptr[i].vel[0], ptr[i].vel[1], ptr[i].vel[2]);
+
+
+			field_update(&ptr[i], e_field, b_field);
 			part_pos_update(&ptr[i], tm_step);
-
-			/* store to disk here??? */
-			printf("[%d] p-%d pos %.3lf, %.3lf, %.3lf  vel %.3lf, %.3lf, %.3lf\n",
-					time_i, ptr[i].uid, ptr[i].pos[0], ptr[i].pos[1], ptr[i].pos[2],
-							   ptr[i].vel[0], ptr[i].vel[1], ptr[i].pos[2]);
-
-
 			part_vel_update(ptr, e_field, b_field, tm_step);
-
-            // updatePosition(i, timeInd); // updating position values
-            // updateVelocity(i, timeInd); // updating velocity values
-        }
+		}
 
 		tm_curr = CURR_FLOATING_TIME(time_i, tm_step, tm_initial);
-    }
+	}
 
 	return 0;
 }
@@ -158,10 +158,10 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts,
  * command arguments
  * --vert x[,y[,z]]			adds a new vertex with the requested coords
  *
- * -e     x[,y[,z]]			defines the initial electric field
- * -b     x[,y[,z]]			defines the initial magnetic field
+ * -e	 x[,y[,z]]			defines the initial electric field
+ * -b	 x[,y[,z]]			defines the initial magnetic field
  *
- * -p     number			defines the total number of particles
+ * -p	 number			defines the total number of particles
  * --part x[,y[,z]]			defines a particle from the total allowed particles
  *
  * tstart					simulation's time start (default 0)
@@ -324,7 +324,7 @@ int parse_args_partt(struct particle_t *ptr, char *opt, char *str)
 }
 
 void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
-		vec3_t *e_fld, vec3_t *b_fld)
+		vec3_t *e_fld, vec3_t *b_fld, vec3_t *times)
 {
 	/* finish initializing the data the user HASN'T put in */
 	int i;
@@ -365,6 +365,11 @@ void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 			dynarr_append(parts, &part_tmp, sizeof(part_tmp));
 		}
 	}
+
+	// set the default times
+	(*times)[0] = DEFAULT_TIME_INITIAL;
+	(*times)[1] = DEFAULT_TIME_FINAL;
+	(*times)[2] = DEFAULT_TIME_STEP;
 }
 
 void memerranddie(char *file, int line)

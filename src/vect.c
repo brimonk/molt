@@ -45,7 +45,7 @@ void dynarr_append(struct dynarr_t *ptr, void *add_me, int size)
 void dynarr_setmaxsize(struct dynarr_t *ptr, int size)
 {
 	struct dynarr_t *tmp;
-	if (ptr->curr_size < size) {
+	if (ptr->curr_size <= size) {
 		tmp = realloc(ptr->data, size * ptr->obj_size);
 
 		if (tmp) {
