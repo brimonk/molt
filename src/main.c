@@ -47,10 +47,11 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts,
 int parse_args(int argc, char **argv, struct dynarr_t *parts,
 		struct dynarr_t *verts, vec3_t *e_fld, vec3_t *b_fld,
 		vec3_t *time_flds);
-int parse_args_vec3(vec3_t *ptr, char *opt, char *str);
-int parse_args_partt(struct particle_t *ptr, char *opt, char *str);
 void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 		vec3_t *e_fld, vec3_t *b_fld, vec3_t *times);
+int parse_args_vec3(vec3_t *ptr, char *opt, char *str);
+int parse_args_partt(struct particle_t *ptr, char *opt, char *str);
+int parse_double(char *str, double *out);
 
 /* helper functions */
 void memerranddie(char *file, int line);
@@ -84,6 +85,7 @@ int main(int argc, char **argv)
 	/* parse command line arguments (and other launch parameters) */
 	dynarr_init(&particles, sizeof(struct particle_t));
 	dynarr_init(&verticies, sizeof(vec3_t));
+	VectorClear(timevals);
 	val = parse_args(argc, argv,
 			&particles, &verticies, &e_field, &b_field, &timevals);
 
@@ -185,6 +187,7 @@ int parse_args(int argc, char **argv, struct dynarr_t *parts,
 	};
 
 	int val, pn, c, option_index;
+	double tmptime;
 	vec3_t tmp;
 	struct particle_t part_tmp;
 
@@ -224,19 +227,28 @@ int parse_args(int argc, char **argv, struct dynarr_t *parts,
 
 			if (strcmp("tstart", long_options[option_index].name) == 0) {
 				if (optarg) {
-					(*time_flds)[0] = strtod(optarg, NULL);
+					if (parse_double(optarg, &tmptime)) {
+						(*time_flds)[0] = tmptime;
+						tmptime = 0.0;
+					}
 				}
 			}
 
 			if (strcmp("tend", long_options[option_index].name) == 0) {
 				if (optarg) {
-					(*time_flds)[1] = strtod(optarg, NULL);
+					if (parse_double(optarg, &tmptime)) {
+						(*time_flds)[1] = tmptime;
+						tmptime = 0.0;
+					}
 				}
 			}
 
 			if (strcmp("tstep", long_options[option_index].name) == 0) {
 				if (optarg) {
-					(*time_flds)[2] = strtod(optarg, NULL);
+					if (parse_double(optarg, &tmptime)) {
+						(*time_flds)[2] = tmptime;
+						tmptime = 0.0;
+					}
 				}
 			}
 
@@ -292,6 +304,20 @@ int parse_args_vec3(vec3_t *ptr, char *opt, char *str)
 	}
 
 	VectorCopy(tmp, *ptr);
+
+	return scanned;
+}
+
+int parse_double(char *str, double *out)
+{
+	int scanned;
+	double tmp;
+
+	scanned = sscanf(str, "%lf", &tmp);
+
+	if (scanned) {
+		*out = tmp;
+	}
 
 	return scanned;
 }
@@ -367,9 +393,13 @@ void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 	}
 
 	// set the default times
-	(*times)[0] = DEFAULT_TIME_INITIAL;
-	(*times)[1] = DEFAULT_TIME_FINAL;
-	(*times)[2] = DEFAULT_TIME_STEP;
+	if ((*times)[0] == 0 && (*times)[1] == 0 && (*times)[2] == 0) {
+		(*times)[0] = DEFAULT_TIME_INITIAL;
+		(*times)[1] = DEFAULT_TIME_FINAL;
+		(*times)[2] = DEFAULT_TIME_STEP;
+
+		printf("%lf, %lf, %lf\n", (*times)[0], (*times)[1], (*times)[2]);
+	}
 }
 
 void memerranddie(char *file, int line)
