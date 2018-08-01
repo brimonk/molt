@@ -1,5 +1,5 @@
 CC = cc
-LINKER = -ldl -lpthread -lcurl -lncurses
+LINKER = -ldl -lpthread
 FLAGS = -Wall -g3
 TARGET = molt
 SOURCES = $(wildcard src/*.c)
