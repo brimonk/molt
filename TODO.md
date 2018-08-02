@@ -46,10 +46,6 @@ struct particle_t {
 
 This is where all of the decidedly computer science only problems are detailed.
 
-* Input/Output subsystem
-	* Answer the question:
-		* generic io subsystem?
-		* simple io subsystem
 * Simple, efficient, and thread safe allocator
 	* Ensures full PCI bus saturation with data copying from device to host,
 	* Independent threads run the jobs, and write output data to storage/stdout

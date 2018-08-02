@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 /*
  * Brian Chrzanowski
  * Fri Jul 20, 2018 13:46
