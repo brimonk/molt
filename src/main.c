@@ -60,7 +60,7 @@ void memerranddie(char *file, int line);
 #define DEFAULT_TIME_INITIAL 0
 #define DEFAULT_TIME_FINAL 5
 #define DEFAULT_TIME_STEP 0.5
-#define DEFAULT_PART_SIZE 64
+#define DEFAULT_EDGE_SIZE 64
 #define DEFAULT_FLOATING_HIGH 64.0
 #define GET_RAND_DOUBLE() (((double)rand()/(double)(RAND_MAX)) \
 		* DEFAULT_FLOATING_HIGH)
@@ -82,7 +82,7 @@ int main(int argc, char **argv)
 	vec3_t timevals = {0};
 	int val;
 
-	/* parse command line arguments (and other launch parameters) */
+	/* init, and parse command line arguments (and other launch parameters) */
 	dynarr_init(&particles, sizeof(struct particle_t));
 	dynarr_init(&verticies, sizeof(vec3_t));
 	VectorClear(timevals);
@@ -352,9 +352,11 @@ int parse_args_partt(struct particle_t *ptr, char *opt, char *str)
 void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 		vec3_t *e_fld, vec3_t *b_fld, vec3_t *times)
 {
-	/* finish initializing the data the user HASN'T put in */
-	int i;
+	/* finish initializing the data the user HASN'T (or can't) put in */
+	int i, j, k;
 	struct particle_t *part_ptr, part_tmp;
+	vec3_t tmp;
+
 	srand((unsigned int)time(NULL));
 
 	// check the e field
@@ -371,7 +373,23 @@ void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 		(*b_fld)[2] = GET_RAND_DOUBLE();
 	}
 
-	// check if we have enough vertexes. if not, fill out the rest
+	// fill out our verticies.
+	// TODO: figure out if we'll ever need more than 9 verticies or more than
+	// 8 cubes for this simulation. For now, this will provide the simulation
+	// with 8 cubes, all of DEFAULT_EDGE_SIZE length. Keeping it a power of 2
+	// guarantees that it can be properly represented in a double.
+	for (i = -1; i < 2; i++) {
+		for (j = -1; j < 2; j++) {
+			for (k = -1; k < 2; k++) {
+				tmp[0] = DEFAULT_EDGE_SIZE * i;// x
+				tmp[1] = DEFAULT_EDGE_SIZE * j;// x
+				tmp[2] = DEFAULT_EDGE_SIZE * k;// x
+
+				// copy to our verts array
+				dynarr_append(verts, &tmp, sizeof(vec3_t));
+			}
+		}
+	}
 
 	// check if we have enough particles. if not, fill out the rest
 	// with ensuring it's within the bounds of the vector
@@ -392,13 +410,11 @@ void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 		}
 	}
 
-	// set the default times
+	// set the default times if everything's zeroes
 	if ((*times)[0] == 0 && (*times)[1] == 0 && (*times)[2] == 0) {
 		(*times)[0] = DEFAULT_TIME_INITIAL;
 		(*times)[1] = DEFAULT_TIME_FINAL;
 		(*times)[2] = DEFAULT_TIME_STEP;
-
-		printf("%lf, %lf, %lf\n", (*times)[0], (*times)[1], (*times)[2]);
 	}
 }
 
