@@ -10,6 +10,7 @@
  * called. This will execute all of the sql inside of the sql directory.
  */
 
+#include "sqlite3.h"
 #include "particles.h"
 #include "vect.h"
 
@@ -35,9 +36,32 @@ extern char *io_db_tbls[]; /* use our sql file list outside of io.c */
  * need, for useful debugging information
  */
 
+enum {
+	IO_DBWRAP_SELECT = 0x01,
+	IO_DBWRAP_INSERT = 0x02,
+	IO_DBWRAP_UPDATE = 0x04,
+	IO_DBWRAP_DELETE = 0x08
+};
+
+#define DEFAULT_STRLEN 256
+
+struct db_wrap_t {
+	sqlite3 *db;
+	char *sql;
+	void *data;
+	int (*func)(sqlite3_stmt *stmt, void *ptr);
+	int op;
+	int items;
+	int item_size;
+	int commit_size;
+};
+
+
+void io_erranddie(char *str, char *file, int line);
+void sqlite3_wrap_errors(int val, char *file, int line, char *extra);
+#define MEMORY_ERROR(a) (io_erranddie(a, __FILE__, __LINE__))
 #define SQLITE3_ERR(a) (sqlite3_wrap_errors(a, __FILE__, __LINE__, NULL))
 #define SQLITE3_ERR_EXTRA(a, b) (sqlite3_wrap_errors(a, __FILE__, __LINE__, b))
-void sqlite3_wrap_errors(int val, char *file, int line, char *extra);
 
+int io_dbwrap_do(struct db_wrap_t *wrapper);
 int io_exec_sql_tbls(sqlite3 *db, char **tbl_list);
-int io_insert(sqlite3 *db, char *sql, struct particle_t *parts);
