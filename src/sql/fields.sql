@@ -15,9 +15,6 @@ create table if not exists fields (
 	magnetic_y		real not null,
 	magnetic_z		real not null,
 
-	-- do we need to store the overall forces at each vertex?
-	-- no need to recompute
-
 	foreign key(run_index) references run(run_number),
 	foreign key(vertex) references run(vertexes)
 );

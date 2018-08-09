@@ -6,7 +6,7 @@
 
 create table if not exists particles (
 	run_index		integer not null,
-	time			real not null,    -- current 'time'. 0.00
+	time_idx		integer not null, -- number of time steps taken
 									  -- should be the beginning
 	particle_index	integer not null, -- simply the particle's number
 	x_pos			real not null,
