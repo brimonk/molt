@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <assert.h>
 
 #include "sqlite3.h"
 
@@ -41,11 +42,6 @@
  * Where a pointer to this can then be passed to a single function, and
  * logic will flow to specific functions to do what I discussed above.
  */
-
-static int io_dbwrap_select(struct db_wrap_t *wrapper);
-static int io_dbwrap_insert(struct db_wrap_t *wrapper);
-static int io_dbwrap_update(struct db_wrap_t *wrapper);
-static int io_dbwrap_delete(struct db_wrap_t *wrapper);
 
 /* this should be gathered dynamically from some rules somewhere */
 char *io_db_tbls[] = 
@@ -94,41 +90,12 @@ struct err_tbl error_lookups[] = {
 	{SQLITE_DONE, "sqlite3_step has finished executing"}
 };
 
-int io_dbwrap_do(struct db_wrap_t *wrapper)
-{
-	int val;
-	val = 0;
-
-	switch (wrapper->op) {
-	case IO_DBWRAP_SELECT:
-		val = io_dbwrap_select(wrapper);
-		break;
-
-	case IO_DBWRAP_INSERT:
-		val = io_dbwrap_insert(wrapper);
-		break;
-
-	case IO_DBWRAP_UPDATE:
-		val = io_dbwrap_update(wrapper);
-		break;
-
-	case IO_DBWRAP_DELETE:
-		val = io_dbwrap_delete(wrapper);
-		break;
-
-	default:
-		// this also might be some sort of plain exec statement
-		val = -1; // or some error code
-		break;
-	}
-
-	return val;
-}
-
-static int io_dbwrap_select(struct db_wrap_t *w)
+int io_dbwrap_do(struct db_wrap_t *w)
 {
 	sqlite3_stmt *stmt;
-	int i, j, val;
+	char *err_msg;
+	void *curr;
+	int i, val;
 	val = 0;
 
 	// prep the statement
@@ -138,29 +105,83 @@ static int io_dbwrap_select(struct db_wrap_t *w)
 	}
 
 	/*
-	 * now, we simply iterate over the 
+	 * as far as I can tell, select statements are the only special case.
+	 * in these cases, the read function pointer should be used instead of the
+	 * bind function pointer.
 	 */
 
-	for (i = 0; i < w->items; i++) {
-		for (j = 0; j < (w->commit_size > 0 ? w->commit_size : 1); j++) {
+	for (i = 0; i < w->items; i++) { // foreach
+		curr = ((char *)w->data) + (i * w->item_size);
+
+		switch (w->op) {
+		case IO_DBWRAP_SELECT:
+			// execute the statement, use callback to store the data
+			if (w->bind != NULL) {
+				w->bind(stmt, curr, w->extra);
+			}
+			sqlite3_step(stmt);
+			w->read(stmt, curr, w->extra);
+			break;
+
+		case IO_DBWRAP_INSERT:
+		case IO_DBWRAP_UPDATE:
+		case IO_DBWRAP_DELETE:
+			// use the callback, binding to stmt, then execute
+			if (w->bind != NULL) {
+				w->bind(stmt, curr, w->extra);
+			}
+			val = sqlite3_step(stmt);
+
+			// no need to remap, values should be in the db
+			if (val != SQLITE_DONE) {
+				SQLITE3_ERR(val);
+			}
+
+			// unbind, then reset
+			sqlite3_clear_bindings(stmt);
+			sqlite3_reset(stmt);
+			break;
+
+		default:
+			assert("Unknown db wrapper op code");
+			break;
 		}
 	}
 
+	sqlite3_finalize(stmt);
+
 	return 0;
 }
 
-static int io_dbwrap_insert(struct db_wrap_t *wrapper)
+int io_particle_bind(sqlite3_stmt *stmt, void *data, void *extra)
 {
-	return 0;
-}
+	// follows sql
+	// insert into particles (run_index, time, particle_index,
+	// 		x_pos, y_pos, z_pos, x_vel, y_vel, z_vel);
+	struct particle_t *item;
+	struct run_info_t *info;
 
-static int io_dbwrap_update(struct db_wrap_t *wrapper)
-{
-	return 0;
-}
+	if (data != NULL) {
+		item = data;
+	} else {
+		return 1; // err
+	}
 
-static int io_dbwrap_delete(struct db_wrap_t *wrapper)
-{
+	if (extra != NULL) {
+		info = extra;
+	}
+
+	// begin binding items
+	sqlite3_bind_int(stmt, 1, info->run_number);
+	sqlite3_bind_double(stmt, 2, info->time_step * info->time_idx);
+	sqlite3_bind_int(stmt, 3, item->uid);
+	sqlite3_bind_double(stmt, 4, item->pos[0]);
+	sqlite3_bind_double(stmt, 5, item->pos[1]);
+	sqlite3_bind_double(stmt, 6, item->pos[2]);
+	sqlite3_bind_double(stmt, 7, item->vel[0]);
+	sqlite3_bind_double(stmt, 8, item->vel[1]);
+	sqlite3_bind_double(stmt, 9, item->vel[2]);
+
 	return 0;
 }
 

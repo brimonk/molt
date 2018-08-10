@@ -5,10 +5,9 @@
 -- the implicit rowid for SQLite is used as a PK
 
 create table if not exists particles (
-	run_index		integer not null,
-	time_idx		integer not null, -- number of time steps taken
-									  -- should be the beginning
-	particle_index	integer not null, -- simply the particle's number
+	run_id			integer not null,
+	time_id			integer not null, -- number of time steps taken
+	particle_id		integer not null, -- simply the particle's number
 	x_pos			real not null,
 	y_pos			real not null,
 	z_pos			real not null,

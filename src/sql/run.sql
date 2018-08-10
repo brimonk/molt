@@ -7,6 +7,6 @@
 create table if not exists run (
 	run_number		integer primary key asc,
 	time_start		real not null,
-	time_interval	real not null,
+	time_step		real not null,
 	time_stop		real not null
 );

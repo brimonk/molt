@@ -62,6 +62,10 @@ void memerranddie(char *file, int line);
 #define DEFAULT_TIME_STEP 0.5
 #define DEFAULT_EDGE_SIZE 64
 #define DEFAULT_FLOATING_HIGH 64.0
+#define DB_INSERT_PARTICLE \
+	"insert into particles (run_id, time_id, particle_id,"\
+	"x_pos, y_pos, z_pos, x_vel, y_vel, z_vel) values "\
+	"(?, ?, ?, ?, ?, ?, ?, ?, ?);"
 #define GET_RAND_DOUBLE() (((double)rand()/(double)(RAND_MAX)) \
 		* DEFAULT_FLOATING_HIGH)
 #define USAGE "%s [--vert x,y,z --vert ...] [-e x,y,z] [-b x,y,z] "\
@@ -122,35 +126,40 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts,
 		struct dynarr_t *verticies, vec3_t *e_field, vec3_t *b_field,
 		vec3_t *timevals)
 {
+	struct run_info_t info;
+	struct db_wrap_t part_wrapper;
 	struct particle_t *ptr;
-	double tm_initial, tm_curr, tm_step, tm_final;
 	int time_i, max_iter, i;
 
-	tm_initial = (*timevals)[0]; // convenience and ease of reading
-	tm_final = (*timevals)[1];
-	tm_step = (*timevals)[2];
+	info.time_start = (*timevals)[0]; // convenience and ease of reading
+	info.time_stop = (*timevals)[1];
+	info.time_step = (*timevals)[2];
 
-	max_iter = (int)(tm_final / tm_step);
+	part_wrapper.db = db;
+	part_wrapper.sql = DB_INSERT_PARTICLE;
+	part_wrapper.data = parts->data;
+	part_wrapper.extra = &info;
+	part_wrapper.bind = io_particle_bind;
+	part_wrapper.op = IO_DBWRAP_INSERT;
+	part_wrapper.items = parts->curr_size;
+	part_wrapper.item_size = sizeof(struct particle_t);
+
+	max_iter = (int)((info.time_stop - info.time_start) / info.time_step);
 
 	/* iterate over each time step, taking our snapshot */
 	for (time_i = 0; time_i < max_iter; time_i++) {
-		// ptr = (struct particle_t *)parts->data;
+		info.time_idx = i;
+
 		ptr = dynarr_get(parts, 0);
 		for(i = 0; i < parts->curr_size; i++) // foreach particle
 		{
 			/* store to disk here */
-			printf(RUN_LOOP_FORMAT,
-					time_i, ptr[i].uid,
-					ptr[i].pos[0], ptr[i].pos[1], ptr[i].pos[2],
-					ptr[i].vel[0], ptr[i].vel[1], ptr[i].vel[2]);
-
+			io_dbwrap_do(&part_wrapper);
 
 			field_update(&ptr[i], e_field, b_field);
-			part_pos_update(&ptr[i], tm_step);
-			part_vel_update(ptr, e_field, b_field, tm_step);
+			part_pos_update(&ptr[i], info.time_step);
+			part_vel_update(ptr, e_field, b_field, info.time_step);
 		}
-
-		tm_curr = CURR_FLOATING_TIME(time_i, tm_step, tm_initial);
 	}
 
 	return 0;

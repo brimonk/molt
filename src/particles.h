@@ -11,7 +11,7 @@
 #include "vect.h"
 
 /*
- * Not only does this dimensionaly expand as far as needed, but we can now
+ * Not only does this dimensionality expand as far as needed, but we can now
  * have particles in whatever dimensionality we desire.
  *
  * Shown here is a particle3_t, a particle with 3d position and velocity
@@ -22,6 +22,15 @@ struct particle_t {
 	vec3_t pos;
 	vec3_t vel;
 }; // size => 52 bytes
+
+// this should probably be handled separately
+struct run_info_t {
+	int run_number;
+	int time_idx;
+	double time_start;
+	double time_step;
+	double time_stop;
+};
 
 #endif
 

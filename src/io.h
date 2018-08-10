@@ -37,10 +37,10 @@ extern char *io_db_tbls[]; /* use our sql file list outside of io.c */
  */
 
 enum {
-	IO_DBWRAP_SELECT = 0x01,
-	IO_DBWRAP_INSERT = 0x02,
-	IO_DBWRAP_UPDATE = 0x04,
-	IO_DBWRAP_DELETE = 0x08
+	IO_DBWRAP_SELECT,
+	IO_DBWRAP_INSERT,
+	IO_DBWRAP_UPDATE,
+	IO_DBWRAP_DELETE
 };
 
 #define DEFAULT_STRLEN 256
@@ -49,11 +49,13 @@ struct db_wrap_t {
 	sqlite3 *db;
 	char *sql;
 	void *data;
-	int (*func)(sqlite3_stmt *stmt, void *ptr);
+	void *extra; 	// extra parms that don't fit with *data,
+					// run information for particle_ts, etc
+	int (*bind)(sqlite3_stmt *stmt, void *ptr, void *extra);
+	int (*read)(sqlite3_stmt *stmt, void *ptr, void *extra);
 	int op;
 	int items;
 	int item_size;
-	int commit_size;
 };
 
 
@@ -63,5 +65,8 @@ void sqlite3_wrap_errors(int val, char *file, int line, char *extra);
 #define SQLITE3_ERR(a) (sqlite3_wrap_errors(a, __FILE__, __LINE__, NULL))
 #define SQLITE3_ERR_EXTRA(a, b) (sqlite3_wrap_errors(a, __FILE__, __LINE__, b))
 
-int io_dbwrap_do(struct db_wrap_t *wrapper);
+int io_dbwrap_do(struct db_wrap_t *w);
 int io_exec_sql_tbls(sqlite3 *db, char **tbl_list);
+
+/* database wrapper bind and read functions */
+int io_particle_bind(sqlite3_stmt *stmt, void *data, void *extra);
