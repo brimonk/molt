@@ -70,4 +70,4 @@ int io_exec_sql_tbls(sqlite3 *db, char **tbl_list);
 /* database wrapper bind and read functions */
 int io_particle_bind(sqlite3_stmt *stmt, void *data, void *extra);
 
-void io_get_newrunnum(sqlite3 *db, struct run_info_t *info);
+int io_select_currentrunidx(sqlite3 *db);

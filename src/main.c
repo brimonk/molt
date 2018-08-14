@@ -48,6 +48,8 @@ int parse_args(int argc, char **argv, struct dynarr_t *parts,
 		struct run_info_t *info);
 void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 		vec3_t *e_fld, vec3_t *b_fld, struct run_info_t *info);
+void store_static_run_info(sqlite3 *db, struct run_info_t *info,
+		struct dynarr_t *verts);
 int parse_args_vec3(vec3_t *ptr, char *opt, char *str);
 int parse_args_partt(struct particle_t *ptr, char *opt, char *str);
 int parse_double(char *str, double *out);
@@ -100,15 +102,15 @@ int main(int argc, char **argv)
 
 	/* set up the database */
 	val = sqlite3_open(DATABASE, &db);
-
 	if (val != SQLITE_OK) {
-		SQLITE3_ERR(val);
+		SQLITE3_ERR(db);
 	}
 
 	/* make sure we have tables to dump data to */
 	io_exec_sql_tbls(db, io_db_tbls);
 
 	/* before we run, we need to store our run and vertex information */
+	store_static_run_info(db, &info, &verticies);
 
 	molt_run(db, &particles, &verticies, &info, &e_field, &b_field);
 
@@ -418,6 +420,63 @@ void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 		info->time_stop = DEFAULT_TIME_FINAL;
 		info->time_step = DEFAULT_TIME_STEP;
 	}
+}
+
+void store_static_run_info(sqlite3 *db, struct run_info_t *info,
+		struct dynarr_t *verts)
+{
+	// insert run information
+	sqlite3_stmt *stmt;
+	char *runstmt =
+		"insert into run (time_start, time_step, time_stop) values "\
+		"(?, ?, ?);";
+	char *vertexstmt =
+		"insert into vertexes (run, xPos, yPos, zPos) values (?, ?, ?, ?);";
+	int val, runidx, i;
+
+	val = sqlite3_prepare_v2(db, runstmt, -1, &stmt, NULL);
+	if (val != SQLITE_OK) {
+		SQLITE3_ERR(db);
+	}
+
+	sqlite3_bind_double(stmt, 1, info->time_start);
+	sqlite3_bind_double(stmt, 2, info->time_step);
+	sqlite3_bind_double(stmt, 3, info->time_stop);
+
+	val = sqlite3_step(stmt);
+
+	if (val != SQLITE_DONE) {
+		SQLITE3_ERR(db);
+	}
+
+	sqlite3_finalize(stmt);
+
+	// first, get the current run index, so we have that
+	runidx = io_select_currentrunidx(db);
+
+	// now, loop through the verts, inserting them all
+	val = sqlite3_prepare_v2(db, vertexstmt, -1, &stmt, NULL);
+	if (val != SQLITE_OK) {
+		SQLITE3_ERR(db);
+	}
+
+	for (i = 0; i < verts->curr_size; i++) {
+		sqlite3_bind_int(stmt, 1, runidx);
+		// sqlite3_bind_double(stmt, 2, (*((vec3_t *)verts->data))[0]);
+		sqlite3_bind_double(stmt, 2, (*(vec3_t *)dynarr_get(verts, i))[0]);
+		sqlite3_bind_double(stmt, 3, (*(vec3_t *)dynarr_get(verts, i))[1]);
+		sqlite3_bind_double(stmt, 4, (*(vec3_t *)dynarr_get(verts, i))[2]);
+
+		val = sqlite3_step(stmt);
+		if (val != SQLITE_DONE) {
+			SQLITE3_ERR(db);
+		}
+
+		sqlite3_clear_bindings(stmt);
+		sqlite3_reset(stmt);
+	}
+
+	sqlite3_finalize(stmt);
 }
 
 void memerranddie(char *file, int line)

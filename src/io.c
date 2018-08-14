@@ -58,7 +58,6 @@ char *io_db_tbls[] =
 int io_dbwrap_do(struct db_wrap_t *w)
 {
 	sqlite3_stmt *stmt;
-	char *err_msg;
 	void *curr;
 	int i, val;
 	val = 0;
@@ -181,7 +180,6 @@ int io_exec_sql_tbls(sqlite3 *db, char **tbl_list)
 void sqlite3_wrap_errors(sqlite3 *db, char *file, int line)
 {
 	printf("%s::%d : %s\n", file, line, sqlite3_errmsg(db));
-
 	exit(1); /* exit, returning '1' (error) to the environment */
 }
 
@@ -226,23 +224,31 @@ void io_erranddie(char *str, char *file, int line)
 	exit(1);
 }
 
-int io_select_oneval_int(sqlite3 *db, char *sql, struct run_info_t *info)
+int io_select_currentrunidx(sqlite3 *db)
 {
+	int val, col, i;
 	sqlite3_stmt *stmt;
-	int val, count;
+	char *sql =
+		"select max(run_id) from run;";
 
 	val = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
 	if (val != SQLITE_OK) {
 		SQLITE3_ERR(db);
 	}
 
-	while ((val = sqlite3_step(stmt)) == SQLITE_ROW) {
-		count = sqlite3_column_int(stmt, 1);
+	val = sqlite3_step(stmt);
+
+	while (val == SQLITE_ROW) {
+		col = sqlite3_column_int(stmt, 0);
+		val = sqlite3_step(stmt);
 	}
 
 	if (val != SQLITE_DONE) {
+		fprintf(stderr, "%s\n", sqlite3_errstr(val));
 		SQLITE3_ERR(db);
 	}
 
-	return count;
+	sqlite3_finalize(stmt);
+
+	return col;
 }
