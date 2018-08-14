@@ -41,14 +41,13 @@
 #include "field_updates.h"
 #include "vect.h"
 
-int molt_run(sqlite3 *db, struct dynarr_t *parts,
-		struct dynarr_t *verticies, vec3_t *e_field, vec3_t *b_field,
-		vec3_t *timevals);
+int molt_run(sqlite3 *db, struct dynarr_t *parts, struct dynarr_t *verticies,
+		struct run_info_t *info, vec3_t *e_field, vec3_t *b_field);
 int parse_args(int argc, char **argv, struct dynarr_t *parts,
 		struct dynarr_t *verts, vec3_t *e_fld, vec3_t *b_fld,
-		vec3_t *time_flds);
+		struct run_info_t *info);
 void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
-		vec3_t *e_fld, vec3_t *b_fld, vec3_t *times);
+		vec3_t *e_fld, vec3_t *b_fld, struct run_info_t *info);
 int parse_args_vec3(vec3_t *ptr, char *opt, char *str);
 int parse_args_partt(struct particle_t *ptr, char *opt, char *str);
 int parse_double(char *str, double *out);
@@ -81,17 +80,15 @@ int main(int argc, char **argv)
 	sqlite3 *db;
 	struct dynarr_t particles = {0};
 	struct dynarr_t verticies = {0};
-	vec3_t e_field = {0};
-	vec3_t b_field = {0};
-	vec3_t timevals = {0};
+	struct run_info_t info = {0};
+	vec3_t e_field = {0}, b_field = {0};
 	int val;
 
 	/* init, and parse command line arguments (and other launch parameters) */
 	dynarr_init(&particles, sizeof(struct particle_t));
 	dynarr_init(&verticies, sizeof(vec3_t));
-	VectorClear(timevals);
 	val = parse_args(argc, argv,
-			&particles, &verticies, &e_field, &b_field, &timevals);
+			&particles, &verticies, &e_field, &b_field, &info);
 
 	if (val) {
 		fprintf(stderr, USAGE, argv[0]);
@@ -99,7 +96,7 @@ int main(int argc, char **argv)
 	}
 
 	/* for the values that are NULL, go initialize them with random data */
-	random_init(&particles, &verticies, &e_field, &b_field, &timevals);
+	random_init(&particles, &verticies, &e_field, &b_field, &info);
 
 	/* set up the database */
 	val = sqlite3_open(DATABASE, &db);
@@ -111,7 +108,9 @@ int main(int argc, char **argv)
 	/* make sure we have tables to dump data to */
 	io_exec_sql_tbls(db, io_db_tbls);
 
-	molt_run(db, &particles, &verticies, &e_field, &b_field, &timevals);
+	/* before we run, we need to store our run and vertex information */
+
+	molt_run(db, &particles, &verticies, &info, &e_field, &b_field);
 
 	sqlite3_close(db);
 
@@ -122,18 +121,12 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-int molt_run(sqlite3 *db, struct dynarr_t *parts,
-		struct dynarr_t *verticies, vec3_t *e_field, vec3_t *b_field,
-		vec3_t *timevals)
+int molt_run(sqlite3 *db, struct dynarr_t *parts, struct dynarr_t *verticies,
+		struct run_info_t *info, vec3_t *e_field, vec3_t *b_field)
 {
-	struct run_info_t info;
 	struct db_wrap_t part_wrapper;
 	struct particle_t *ptr;
 	int time_i, max_iter, i;
-
-	info.time_start = (*timevals)[0]; // convenience and ease of reading
-	info.time_stop = (*timevals)[1];
-	info.time_step = (*timevals)[2];
 
 	part_wrapper.db = db;
 	part_wrapper.sql = DB_INSERT_PARTICLE;
@@ -144,11 +137,11 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts,
 	part_wrapper.items = parts->curr_size;
 	part_wrapper.item_size = sizeof(struct particle_t);
 
-	max_iter = (int)((info.time_stop - info.time_start) / info.time_step);
+	max_iter = (int)((info->time_stop - info->time_start) / info->time_step);
 
 	/* iterate over each time step, taking our snapshot */
 	for (time_i = 0; time_i < max_iter; time_i++) {
-		info.time_idx = i;
+		info->time_idx = i;
 
 		ptr = dynarr_get(parts, 0);
 		for(i = 0; i < parts->curr_size; i++) // foreach particle
@@ -157,8 +150,8 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts,
 			io_dbwrap_do(&part_wrapper);
 
 			field_update(&ptr[i], e_field, b_field);
-			part_pos_update(&ptr[i], info.time_step);
-			part_vel_update(ptr, e_field, b_field, info.time_step);
+			part_pos_update(&ptr[i], info->time_step);
+			part_vel_update(ptr, e_field, b_field, info->time_step);
 		}
 	}
 
@@ -184,7 +177,7 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts,
 
 int parse_args(int argc, char **argv, struct dynarr_t *parts,
 		struct dynarr_t *verts, vec3_t *e_fld, vec3_t *b_fld,
-		vec3_t *time_flds)
+		struct run_info_t *info)
 {
 	static struct option long_options[] = {
 		{"vert", required_argument, 0, 0},
@@ -237,7 +230,7 @@ int parse_args(int argc, char **argv, struct dynarr_t *parts,
 			if (strcmp("tstart", long_options[option_index].name) == 0) {
 				if (optarg) {
 					if (parse_double(optarg, &tmptime)) {
-						(*time_flds)[0] = tmptime;
+						info->time_start = tmptime;
 						tmptime = 0.0;
 					}
 				}
@@ -246,7 +239,7 @@ int parse_args(int argc, char **argv, struct dynarr_t *parts,
 			if (strcmp("tend", long_options[option_index].name) == 0) {
 				if (optarg) {
 					if (parse_double(optarg, &tmptime)) {
-						(*time_flds)[1] = tmptime;
+						info->time_stop = tmptime;
 						tmptime = 0.0;
 					}
 				}
@@ -255,7 +248,7 @@ int parse_args(int argc, char **argv, struct dynarr_t *parts,
 			if (strcmp("tstep", long_options[option_index].name) == 0) {
 				if (optarg) {
 					if (parse_double(optarg, &tmptime)) {
-						(*time_flds)[2] = tmptime;
+						info->time_step = tmptime;
 						tmptime = 0.0;
 					}
 				}
@@ -359,7 +352,7 @@ int parse_args_partt(struct particle_t *ptr, char *opt, char *str)
 }
 
 void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
-		vec3_t *e_fld, vec3_t *b_fld, vec3_t *times)
+		vec3_t *e_fld, vec3_t *b_fld, struct run_info_t *info)
 {
 	/* finish initializing the data the user HASN'T (or can't) put in */
 	int i, j, k;
@@ -420,10 +413,10 @@ void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 	}
 
 	// set the default times if everything's zeroes
-	if ((*times)[0] == 0 && (*times)[1] == 0 && (*times)[2] == 0) {
-		(*times)[0] = DEFAULT_TIME_INITIAL;
-		(*times)[1] = DEFAULT_TIME_FINAL;
-		(*times)[2] = DEFAULT_TIME_STEP;
+	if (info->time_start == 0 && info->time_stop == 0 && info->time_step == 0) {
+		info->time_start = DEFAULT_TIME_INITIAL;
+		info->time_stop = DEFAULT_TIME_FINAL;
+		info->time_step = DEFAULT_TIME_STEP;
 	}
 }
 
