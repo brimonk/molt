@@ -18,6 +18,7 @@
 -- sure why.
 
 create table if not exists vertexes (
+	vertex_id		integer primary key asc,
 	run				integer not null,
 	grid_id			integer not null,
 	xPos			real not null,

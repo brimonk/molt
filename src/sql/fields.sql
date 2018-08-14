@@ -4,6 +4,7 @@
 -- stores the field values at a specific vertex
 
 create table if not exists fields (
+	field_id		integer primary key asc,
 	run				integer not null,
 	time_index		integer not null,
 
@@ -16,5 +17,5 @@ create table if not exists fields (
 	magnetic_z		real not null,
 
 	foreign key(run) references run(run_id),
-	foreign key(vertex) references run(vertexes)
+	foreign key(vertex) references vertexes(vertex_id)
 );
