@@ -60,13 +60,14 @@ struct db_wrap_t {
 
 
 void io_erranddie(char *str, char *file, int line);
-void sqlite3_wrap_errors(int val, char *file, int line, char *extra);
+void sqlite3_wrap_errors(sqlite3 *db, char *file, int line);
 #define MEMORY_ERROR(a) (io_erranddie(a, __FILE__, __LINE__))
-#define SQLITE3_ERR(a) (sqlite3_wrap_errors(a, __FILE__, __LINE__, NULL))
-#define SQLITE3_ERR_EXTRA(a, b) (sqlite3_wrap_errors(a, __FILE__, __LINE__, b))
+#define SQLITE3_ERR(a) (sqlite3_wrap_errors(a, __FILE__, __LINE__))
 
 int io_dbwrap_do(struct db_wrap_t *w);
 int io_exec_sql_tbls(sqlite3 *db, char **tbl_list);
 
 /* database wrapper bind and read functions */
 int io_particle_bind(sqlite3_stmt *stmt, void *data, void *extra);
+
+void io_get_newrunnum(sqlite3 *db, struct run_info_t *info);

@@ -54,41 +54,6 @@ char *io_db_tbls[] =
 };
 
 #define SQLITE_ERRFMT "%s::%d %s\n"
-#define SQLITE_ERRFMT_EXTRA "%s::%d %s EXTRA: %s\n"
-
-struct err_tbl error_lookups[] = {
-	{SQLITE_OK, "How did you get here?"},
-	{SQLITE_ERROR, "Generic SQLITE_ERROR returned"},
-	{SQLITE_INTERNAL, "Internal logic error in SQLite"},
-	{SQLITE_PERM, "Permission denied (check fs permissions)"},
-	{SQLITE_ABORT, "callback routine requested an abort"},
-	{SQLITE_BUSY, "the database file is locked"},
-	{SQLITE_LOCKED, "a table in the database is locked"},
-	{SQLITE_NOMEM, "a malloc() call failed"},
-	{SQLITE_READONLY, "attempt to write a readonly database"},
-	{SQLITE_INTERRUPT, "operation terminated by sqlite3_interrupt()"},
-	{SQLITE_IOERR, "some sort of disk I/O error happened"},
-	{SQLITE_CORRUPT, "the database disk image is malformed"},
-	{SQLITE_NOTFOUND, "unknown opcode in sqlite3_file_control()"},
-	{SQLITE_FULL, "insertion failed because the database is full"},
-	{SQLITE_CANTOPEN, "unable to open the database file"},
-	{SQLITE_PROTOCOL, "database lock protocol error"},
-	{SQLITE_EMPTY, "... this is for internal (sqlite3) use only..."},
-	{SQLITE_SCHEMA, "the schema has changed"},
-	{SQLITE_TOOBIG, "string or blob exceeds size limit"},
-	{SQLITE_CONSTRAINT, "abort due to constraint violation"},
-	{SQLITE_MISMATCH, "data type mismatch"},
-	{SQLITE_MISUSE, "library used incorrectly"},
-	{SQLITE_NOLFS, "uses os features not supported on host"},
-	{SQLITE_AUTH, "authorization denied"},
-	{SQLITE_FORMAT, "... this isn't supposed to be used..."},
-	{SQLITE_RANGE, "2nd parameter to sqlite3_bind out of range"},
-	{SQLITE_NOTADB, "file opened that is not a database file"},
-	{SQLITE_NOTICE, "notifications from sqlite3_log"},
-	{SQLITE_WARNING, "warnings from sqlite3_log"},
-	{SQLITE_ROW, "sqlite3_step has another row ready"},
-	{SQLITE_DONE, "sqlite3_step has finished executing"}
-};
 
 int io_dbwrap_do(struct db_wrap_t *w)
 {
@@ -101,7 +66,7 @@ int io_dbwrap_do(struct db_wrap_t *w)
 	// prep the statement
 	val = sqlite3_prepare_v2(w->db, w->sql, -1, &stmt, NULL);
 	if (val != SQLITE_OK) {
-		SQLITE3_ERR(val);
+		SQLITE3_ERR(w->db);
 	}
 
 	/*
@@ -134,7 +99,7 @@ int io_dbwrap_do(struct db_wrap_t *w)
 
 			// no need to remap, values should be in the db
 			if (val != SQLITE_DONE) {
-				SQLITE3_ERR(val);
+				SQLITE3_ERR(w->db);
 			}
 
 			// unbind, then reset
@@ -199,7 +164,7 @@ int io_exec_sql_tbls(sqlite3 *db, char **tbl_list)
 			val = sqlite3_exec(db, file_buffer, NULL, NULL, &err);
 
 			if (val != SQLITE_OK) {
-				SQLITE3_ERR_EXTRA(val, err);
+				SQLITE3_ERR(db);
 			} else {
 				free(file_buffer);
 			}
@@ -213,22 +178,9 @@ int io_exec_sql_tbls(sqlite3 *db, char **tbl_list)
 }
 
 
-void sqlite3_wrap_errors(int val, char *file, int line, char *extra)
+void sqlite3_wrap_errors(sqlite3 *db, char *file, int line)
 {
-	int i;
-	for (i = 0; i < sizeof(error_lookups) / sizeof(struct err_tbl); i++) {
-		if (val == error_lookups[i].sqlite_err) {
-
-			if (extra) {
-				printf(SQLITE_ERRFMT_EXTRA,
-						file, line, error_lookups[i].err_str, extra);
-			} else {
-				printf(SQLITE_ERRFMT, file, line, error_lookups[i].err_str);
-			}
-
-			break;
-		}
-	}
+	printf("%s::%d : %s\n", file, line, sqlite3_errmsg(db));
 
 	exit(1); /* exit, returning '1' (error) to the environment */
 }
@@ -274,3 +226,23 @@ void io_erranddie(char *str, char *file, int line)
 	exit(1);
 }
 
+int io_select_oneval_int(sqlite3 *db, char *sql, struct run_info_t *info)
+{
+	sqlite3_stmt *stmt;
+	int val, count;
+
+	val = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+	if (val != SQLITE_OK) {
+		SQLITE3_ERR(db);
+	}
+
+	while ((val = sqlite3_step(stmt)) == SQLITE_ROW) {
+		count = sqlite3_column_int(stmt, 1);
+	}
+
+	if (val != SQLITE_DONE) {
+		SQLITE3_ERR(db);
+	}
+
+	return count;
+}
