@@ -5,7 +5,7 @@
 -- this is also the "parent" table from which everything is defined
 
 create table if not exists run (
-	run_number		integer primary key asc,
+	run_id			integer primary key asc,
 	time_start		real not null,
 	time_step		real not null,
 	time_stop		real not null
