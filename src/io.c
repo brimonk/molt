@@ -119,11 +119,13 @@ int io_dbwrap_do(struct db_wrap_t *w)
 
 int io_particle_bind(sqlite3_stmt *stmt, void *data, void *extra)
 {
-	// follows sql
-	// insert into particles (run_index, time, particle_index,
-	// 		x_pos, y_pos, z_pos, x_vel, y_vel, z_vel);
+	// follows sql:
+	//   "insert into particles (run, particle_id, time_index, "
+	//   "x_pos, y_pos, z_pos, x_vel, y_vel, z_vel) values "
+	//   "(?, ?, ?, ?, ?, ?, ?, ?, ?);"
 	struct particle_t *item;
 	struct run_info_t *info;
+	int val;
 
 	if (data != NULL) {
 		item = data;
@@ -136,9 +138,13 @@ int io_particle_bind(sqlite3_stmt *stmt, void *data, void *extra)
 	}
 
 	// begin binding items
-	sqlite3_bind_int(stmt, 1, info->run_number);
-	sqlite3_bind_double(stmt, 2, info->time_step * info->time_idx);
-	sqlite3_bind_int(stmt, 3, item->uid);
+	val = sqlite3_bind_int(stmt, 1, info->run_number);
+	if (val != SQLITE_OK) {
+		fprintf(stderr, "%s\n", sqlite3_errstr(val));
+		exit(1);
+	}
+	sqlite3_bind_int(stmt, 2, item->uid);
+	sqlite3_bind_double(stmt, 3, info->time_idx);
 	sqlite3_bind_double(stmt, 4, item->pos[0]);
 	sqlite3_bind_double(stmt, 5, item->pos[1]);
 	sqlite3_bind_double(stmt, 6, item->pos[2]);

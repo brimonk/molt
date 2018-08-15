@@ -64,7 +64,7 @@ void memerranddie(char *file, int line);
 #define DEFAULT_EDGE_SIZE 64
 #define DEFAULT_FLOATING_HIGH 64.0
 #define DB_INSERT_PARTICLE \
-	"insert into particles (run_id, time_id, particle_id,"\
+	"insert into particles (run, particle_id, time_index, "\
 	"x_pos, y_pos, z_pos, x_vel, y_vel, z_vel) values "\
 	"(?, ?, ?, ?, ?, ?, ?, ?, ?);"
 #define GET_RAND_DOUBLE() (((double)rand()/(double)(RAND_MAX)) \
@@ -128,13 +128,14 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts, struct dynarr_t *verticies,
 {
 	struct db_wrap_t part_wrapper;
 	struct particle_t *ptr;
-	int time_i, max_iter, i;
+	int max_iter, i;
 
 	part_wrapper.db = db;
 	part_wrapper.sql = DB_INSERT_PARTICLE;
 	part_wrapper.data = parts->data;
-	part_wrapper.extra = &info;
+	part_wrapper.extra = info;
 	part_wrapper.bind = io_particle_bind;
+	part_wrapper.read = NULL;
 	part_wrapper.op = IO_DBWRAP_INSERT;
 	part_wrapper.items = parts->curr_size;
 	part_wrapper.item_size = sizeof(struct particle_t);
@@ -142,15 +143,15 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts, struct dynarr_t *verticies,
 	max_iter = (int)((info->time_stop - info->time_start) / info->time_step);
 
 	/* iterate over each time step, taking our snapshot */
-	for (time_i = 0; time_i < max_iter; time_i++) {
-		info->time_idx = i;
+	for (info->time_idx = 0; info->time_idx < max_iter; info->time_idx++) {
+
+		// store to disk here,
+		// revents special cases at the end, elegant initial state store
+		io_dbwrap_do(&part_wrapper);
 
 		ptr = dynarr_get(parts, 0);
 		for(i = 0; i < parts->curr_size; i++) // foreach particle
 		{
-			/* store to disk here */
-			io_dbwrap_do(&part_wrapper);
-
 			field_update(&ptr[i], e_field, b_field);
 			part_pos_update(&ptr[i], info->time_step);
 			part_vel_update(ptr, e_field, b_field, info->time_step);
@@ -453,6 +454,7 @@ void store_static_run_info(sqlite3 *db, struct run_info_t *info,
 
 	// first, get the current run index, so we have that
 	runidx = io_select_currentrunidx(db);
+	info->run_number = runidx;
 
 	// now, loop through the verts, inserting them all
 	val = sqlite3_prepare_v2(db, vertexstmt, -1, &stmt, NULL);
@@ -462,7 +464,6 @@ void store_static_run_info(sqlite3 *db, struct run_info_t *info,
 
 	for (i = 0; i < verts->curr_size; i++) {
 		sqlite3_bind_int(stmt, 1, runidx);
-		// sqlite3_bind_double(stmt, 2, (*((vec3_t *)verts->data))[0]);
 		sqlite3_bind_double(stmt, 2, (*(vec3_t *)dynarr_get(verts, i))[0]);
 		sqlite3_bind_double(stmt, 3, (*(vec3_t *)dynarr_get(verts, i))[1]);
 		sqlite3_bind_double(stmt, 4, (*(vec3_t *)dynarr_get(verts, i))[2]);

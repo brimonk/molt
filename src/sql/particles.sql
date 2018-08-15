@@ -6,8 +6,8 @@
 
 create table if not exists particles (
 	run				integer not null,
-	time_index		integer not null, -- number of time steps taken
 	particle_id		integer not null, -- simply the particle's number
+	time_index		integer not null, -- number of time steps taken
 	x_pos			real not null,
 	y_pos			real not null,
 	z_pos			real not null,
