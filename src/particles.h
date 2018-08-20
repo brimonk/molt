@@ -32,5 +32,10 @@ struct run_info_t {
 	double time_stop;
 };
 
+struct field_combo_t {
+	vec3_t *e_field;
+	vec3_t *b_field;
+};
+
 #endif
 

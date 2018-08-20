@@ -8,13 +8,13 @@ create table if not exists fields (
 	run				integer not null,
 	time_index		integer not null,
 
-	vertex			integer not null,
-	electric_x		real not null,
-	electric_y		real not null,
-	electric_z		real not null,
-	magnetic_x		real not null,
-	magnetic_y		real not null,
-	magnetic_z		real not null,
+	vertex			integer null,
+	e_x				real not null,
+	e_y				real not null,
+	e_z				real not null,
+	b_x				real not null,
+	b_y				real not null,
+	b_z				real not null,
 
 	foreign key(run) references run(run_id),
 	foreign key(vertex) references vertexes(vertex_id)

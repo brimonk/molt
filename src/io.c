@@ -155,6 +155,45 @@ int io_particle_bind(sqlite3_stmt *stmt, void *data, void *extra)
 	return 0;
 }
 
+int io_field_bind(sqlite3_stmt *stmt, void *data, void *extra)
+{
+	// follows sql:
+	// insert into fields
+	// (run, time_index, e_x, e_y, e_z, b_x, b_y, b_z)
+	// values
+	// (?, ?, ?, ?, ?, ?, ?, ?);
+	struct field_combo_t *item;
+	struct run_info_t *info;
+	int val;
+
+	if (data != NULL) {
+		item = data;
+	} else {
+		return 1; // err
+	}
+
+	if (extra != NULL) {
+		info = extra;
+	}
+
+	// begin binding items
+	val = sqlite3_bind_int(stmt, 1, info->run_number);
+	if (val != SQLITE_OK) {
+		fprintf(stderr, "%s\n", sqlite3_errstr(val));
+		exit(1);
+	}
+	sqlite3_bind_int(stmt, 2, info->time_idx);
+	sqlite3_bind_double(stmt, 3, (*item->e_field)[0]);
+	sqlite3_bind_double(stmt, 4, (*item->e_field)[1]);
+	sqlite3_bind_double(stmt, 5, (*item->e_field)[2]);
+	sqlite3_bind_double(stmt, 6, (*item->b_field)[0]);
+	sqlite3_bind_double(stmt, 7, (*item->b_field)[1]);
+	sqlite3_bind_double(stmt, 8, (*item->b_field)[2]);
+
+	return 0;
+
+}
+
 int io_exec_sql_tbls(sqlite3 *db, char **tbl_list)
 {
 	/* tbl_list is assumed to be NULL terminated */

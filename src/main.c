@@ -67,6 +67,10 @@ void memerranddie(char *file, int line);
 	"insert into particles (run, particle_id, time_index, "\
 	"x_pos, y_pos, z_pos, x_vel, y_vel, z_vel) values "\
 	"(?, ?, ?, ?, ?, ?, ?, ?, ?);"
+#define DB_INSERT_FIELD \
+	"insert into fields (run, time_index, e_x, e_y, e_z, b_x, b_y, b_z)" \
+	"values" \
+	"(?, ?, ?, ?, ?, ?, ?, ?);"
 #define GET_RAND_DOUBLE() (((double)rand()/(double)(RAND_MAX)) \
 		* DEFAULT_FLOATING_HIGH)
 #define USAGE "%s [--vert x,y,z --vert ...] [-e x,y,z] [-b x,y,z] "\
@@ -126,7 +130,8 @@ int main(int argc, char **argv)
 int molt_run(sqlite3 *db, struct dynarr_t *parts, struct dynarr_t *verticies,
 		struct run_info_t *info, vec3_t *e_field, vec3_t *b_field)
 {
-	struct db_wrap_t part_wrapper;
+	struct field_combo_t fields;
+	struct db_wrap_t part_wrapper, field_wrapper;
 	struct particle_t *ptr;
 	int max_iter, i;
 
@@ -140,6 +145,18 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts, struct dynarr_t *verticies,
 	part_wrapper.items = parts->curr_size;
 	part_wrapper.item_size = sizeof(struct particle_t);
 
+	fields.e_field = e_field;
+	fields.b_field = b_field;
+	field_wrapper.db = db;
+	field_wrapper.sql = DB_INSERT_FIELD;
+	field_wrapper.data = &fields;
+	field_wrapper.extra = info;
+	field_wrapper.bind = io_field_bind;
+	field_wrapper.read = NULL;
+	field_wrapper.op = IO_DBWRAP_INSERT;
+	field_wrapper.items = 1;
+	field_wrapper.item_size = sizeof(vec3_t *) * 2;
+
 	max_iter = (int)((info->time_stop - info->time_start) / info->time_step);
 
 	/* iterate over each time step, taking our snapshot */
@@ -148,10 +165,10 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts, struct dynarr_t *verticies,
 		// store to disk here,
 		// revents special cases at the end, elegant initial state store
 		io_dbwrap_do(&part_wrapper);
+		io_dbwrap_do(&field_wrapper);
 
 		ptr = dynarr_get(parts, 0);
-		for(i = 0; i < parts->curr_size; i++) // foreach particle
-		{
+		for(i = 0; i < parts->curr_size; i++) { // foreach particle
 			field_update(&ptr[i], e_field, b_field);
 			part_pos_update(&ptr[i], info->time_step);
 			part_vel_update(ptr, e_field, b_field, info->time_step);
@@ -372,7 +389,7 @@ void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 	}
 
 	// check the b field
-	if (!((*e_fld)[0] || (*e_fld)[1] || (*e_fld)[2])) {
+	if (!((*b_fld)[0] || (*b_fld)[1] || (*b_fld)[2])) {
 		(*b_fld)[0] = GET_RAND_DOUBLE();
 		(*b_fld)[1] = GET_RAND_DOUBLE();
 		(*b_fld)[2] = GET_RAND_DOUBLE();

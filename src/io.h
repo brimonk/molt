@@ -69,5 +69,6 @@ int io_exec_sql_tbls(sqlite3 *db, char **tbl_list);
 
 /* database wrapper bind and read functions */
 int io_particle_bind(sqlite3_stmt *stmt, void *data, void *extra);
+int io_field_bind(sqlite3_stmt *stmt, void *data, void *extra);
 
 int io_select_currentrunidx(sqlite3 *db);
