@@ -1,0 +1,20 @@
+.TH molt 1
+.SH NAME
+molt
+\- command line program to perform a plasma simulation using the Method Of
+Lines Transpose
+.SH SYNOPSIS
+.B molt
+[\fB\-\-vert\fR x[,y[,z]]] [\fB\-e\fR x[,y[,z]]] [\fB\-b\fR x[,y[,z]]]
+[\fB-p\fR \fINUMBER\fR] [\fB\-\-part\fR x[,y[,z[,vx[,vy[,vz]]]]]]
+.IR filename
+
+.SH DESCRIPTION
+.B molt
+
+modifies files by toggling a randomly chosen bit.
+.SH OPTIONS
+.TP
+.BR \-n ", " \-\-bits =\fIBITS\fR
+Set the number of bits to modify.
+Default is one bit.
