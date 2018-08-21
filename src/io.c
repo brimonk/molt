@@ -74,6 +74,8 @@ int io_dbwrap_do(struct db_wrap_t *w)
 	 * bind function pointer.
 	 */
 
+	sqlite3_exec(w->db, "BEGIN", 0, 0, 0);
+
 	for (i = 0; i < w->items; i++) { // foreach
 		curr = ((char *)w->data) + (i * w->item_size);
 
@@ -113,6 +115,7 @@ int io_dbwrap_do(struct db_wrap_t *w)
 	}
 
 	sqlite3_finalize(stmt);
+	sqlite3_exec(w->db, "COMMIT", 0, 0, 0);
 
 	return 0;
 }
@@ -222,6 +225,12 @@ int io_exec_sql_tbls(sqlite3 *db, char **tbl_list)
 }
 
 
+void io_db_setup(sqlite3 *db)
+{
+	sqlite3_exec(db, "pragma journal_mode=wal;", 0, 0, 0);
+}
+
+
 void sqlite3_wrap_errors(sqlite3 *db, char *file, int line)
 {
 	printf("%s::%d : %s\n", file, line, sqlite3_errmsg(db));
@@ -271,7 +280,7 @@ void io_erranddie(char *str, char *file, int line)
 
 int io_select_currentrunidx(sqlite3 *db)
 {
-	int val, col, i;
+	int val, col;
 	sqlite3_stmt *stmt;
 	char *sql =
 		"select max(run_id) from run;";

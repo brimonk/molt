@@ -110,6 +110,8 @@ int main(int argc, char **argv)
 		SQLITE3_ERR(db);
 	}
 
+	io_db_setup(db);
+
 	/* make sure we have tables to dump data to */
 	io_exec_sql_tbls(db, io_db_tbls);
 
@@ -171,7 +173,7 @@ int molt_run(sqlite3 *db, struct dynarr_t *parts, struct dynarr_t *verticies,
 		for(i = 0; i < parts->curr_size; i++) { // foreach particle
 			field_update(&ptr[i], e_field, b_field);
 			part_pos_update(&ptr[i], info->time_step);
-			part_vel_update(ptr, e_field, b_field, info->time_step);
+			part_vel_update(&ptr[i], e_field, b_field, info->time_step);
 		}
 	}
 
@@ -376,7 +378,7 @@ void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 {
 	/* finish initializing the data the user HASN'T (or can't) put in */
 	int i, j, k;
-	struct particle_t *part_ptr, part_tmp;
+	struct particle_t part_tmp;
 	vec3_t tmp;
 
 	srand((unsigned int)time(NULL));
@@ -416,7 +418,6 @@ void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 	// check if we have enough particles. if not, fill out the rest
 	// with ensuring it's within the bounds of the vector
 	if (parts->max_size != parts->curr_size) {
-		part_ptr = parts->data;
 		for (i = parts->curr_size; i < parts->max_size; i++) {
 			part_tmp.uid = i;
 			// position
@@ -433,9 +434,15 @@ void random_init(struct dynarr_t *parts, struct dynarr_t *verts,
 	}
 
 	// set the default times if everything's zeroes
-	if (info->time_start == 0 && info->time_stop == 0 && info->time_step == 0) {
+	if (info->time_start == 0) {
 		info->time_start = DEFAULT_TIME_INITIAL;
+	}
+
+	if (info->time_stop == 0) {
 		info->time_stop = DEFAULT_TIME_FINAL;
+	}
+
+	if (info-> time_step == 0) {
 		info->time_step = DEFAULT_TIME_STEP;
 	}
 }

@@ -64,8 +64,9 @@ void sqlite3_wrap_errors(sqlite3 *db, char *file, int line);
 #define MEMORY_ERROR(a) (io_erranddie(a, __FILE__, __LINE__))
 #define SQLITE3_ERR(a) (sqlite3_wrap_errors(a, __FILE__, __LINE__))
 
-int io_dbwrap_do(struct db_wrap_t *w);
+void io_db_setup(sqlite3 *db);
 int io_exec_sql_tbls(sqlite3 *db, char **tbl_list);
+int io_dbwrap_do(struct db_wrap_t *w);
 
 /* database wrapper bind and read functions */
 int io_particle_bind(sqlite3_stmt *stmt, void *data, void *extra);
