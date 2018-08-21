@@ -6,6 +6,8 @@
 
 # don't put databases in git history either
 *.db
+*.db-shm
+*.db-wal
 
 # don't keep the binary in source control either
 molt
