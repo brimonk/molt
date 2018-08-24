@@ -10,6 +10,7 @@
  * called. This will execute all of the sql inside of the sql directory.
  */
 
+#include "sqlite3.h"
 #include "particles.h"
 #include "vect.h"
 
@@ -35,9 +36,40 @@ extern char *io_db_tbls[]; /* use our sql file list outside of io.c */
  * need, for useful debugging information
  */
 
-#define SQLITE3_ERR(a) (sqlite3_wrap_errors(a, __FILE__, __LINE__, NULL))
-#define SQLITE3_ERR_EXTRA(a, b) (sqlite3_wrap_errors(a, __FILE__, __LINE__, b))
-void sqlite3_wrap_errors(int val, char *file, int line, char *extra);
+enum {
+	IO_DBWRAP_SELECT,
+	IO_DBWRAP_INSERT,
+	IO_DBWRAP_UPDATE,
+	IO_DBWRAP_DELETE
+};
 
+#define DEFAULT_STRLEN 256
+
+struct db_wrap_t {
+	sqlite3 *db;
+	char *sql;
+	void *data;
+	void *extra; 	// extra parms that don't fit with *data,
+					// run information for particle_ts, etc
+	int (*bind)(sqlite3_stmt *stmt, void *ptr, void *extra);
+	int (*read)(sqlite3_stmt *stmt, void *ptr, void *extra);
+	int op;
+	int items;
+	int item_size;
+};
+
+
+void io_erranddie(char *str, char *file, int line);
+void sqlite3_wrap_errors(sqlite3 *db, char *file, int line);
+#define MEMORY_ERROR(a) (io_erranddie(a, __FILE__, __LINE__))
+#define SQLITE3_ERR(a) (sqlite3_wrap_errors(a, __FILE__, __LINE__))
+
+void io_db_setup(sqlite3 *db);
 int io_exec_sql_tbls(sqlite3 *db, char **tbl_list);
-int io_insert(sqlite3 *db, char *sql, struct particle_t *parts);
+int io_dbwrap_do(struct db_wrap_t *w);
+
+/* database wrapper bind and read functions */
+int io_particle_bind(sqlite3_stmt *stmt, void *data, void *extra);
+int io_field_bind(sqlite3_stmt *stmt, void *data, void *extra);
+
+int io_select_currentrunidx(sqlite3 *db);

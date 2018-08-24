@@ -18,11 +18,11 @@
 -- sure why.
 
 create table if not exists vertexes (
-	run_index		integer not null,
-	grid_id			integer not null,
+	vertex_id		integer primary key asc,
+	run				integer not null,
 	xPos			real not null,
 	yPos			real not null,
 	zPos			real not null,
 
-	foreign key(run_index) references run(run_number)
+	foreign key(run) references run(run_id)
 );
