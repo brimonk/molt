@@ -113,6 +113,15 @@ see that later.
 Just keep in mind that this schema is for the program's requirements, and the
 foreign keys are for data integrity.
 
+The only other tricky portion of some tables is the constraint
+"integer primary key asc" which does a few things. First, the field is defined
+as an integer (go figure). Then, we state we'd like run_id to be a primary key,
+meaning this field will be unique for each and every row. Finally, we state that
+we'd like to always have it increase. This constraint will ensure that each
+value is ascending (beginning at 1). Interestingly enough, if the run_id isn't
+specified in an INSERT statement, the SQL engine will look at the most recent
+row, and simply increment that number to get the new one.
+
 ### SELECT
 
 As an introduction, let's first select all of the plain-jane particle
@@ -136,4 +145,144 @@ run         particle_id  time_index  x_pos             y_pos             z_pos  
 ```
 
 Which is simply everything in the table.
+
+This can be delimited by expressing what elements of the particle table you'd
+like. For instance, if I just want particle_id, time_index, x_pos, x_vel, I
+could write the following:
+
+```
+select particle_id, time_index, x_pos, x_vel from particles;
+```
+
+Which would only provide the following:
+
+
+```
+particle_id  time_index  x_pos             x_vel
+-----------  ----------  ----------------  ---------------
+0            0           1.72478604397028  22.636609773448
+1            0           37.633211838842   9.2420985145690
+2            0           37.7911608991172  30.362900181842
+3            0           16.036120302992   53.288524384279
+4            0           44.9767565340627  14.801336325146
+...
+```
+
+Notice still, that this query is still providing every record in the
+table; however, this doesn't delimit the rows, only the columns. To delimit
+within the rows, a ``WHERE`` clause is needed. Imagining a table with multiple
+runs, where ``run`` in the particle table is in {1, 2, 3, 4, 5...}, we can
+delimit the following query by appending a where clause. The following where
+clause will delimit the information to the "first" run.
+
+```
+select run, particle_id, time_index, x_pos, x_vel
+from particles
+where run = 1;
+```
+
+Which produces a table that looks like this:
+
+```
+run         particle_id  time_index  x_pos             x_vel
+----------  -----------  ----------  ----------------  ---------------
+1           0            0           1.72478604397028  22.636609773448
+1           1            0           37.633211838842   9.2420985145690
+1           2            0           37.7911608991172  30.362900181842
+1           3            0           16.036120302992   53.288524384279
+1           4            0           44.9767565340627  14.801336325146
+...
+(but run => 1 is the only value of run)
+```
+
+Those are the basics of ``SELECT`` statements. There are other clauses, like
+``ORDER BY``, ``LIMIT``, and some more; however, the syntax for those are wildly
+different depending on what database engine you use them in. Other things, like
+[Common Table Expressions](https://www.sqlite.org/lang_with.html), have wildly
+different syntaxes for each database engine, and the reader is encouraged to
+look those up as they're needed. There may be examples in ``~/scripts``.
+
+### INSERT
+
+Insert statements provided to a database engine are parsed, and will ``INSERT``
+a new row into the specified table. The syntax for SQLite can be found
+[here](https://sqlite.org/lang_insert.html).
+
+Showing some examples for an INSERT, the compiled MOLT program
+executes the following to INSERT a new record into the run table:
+
+```
+insert into run (time_start, time_step, time_stop) values (?, ?, ?);
+```
+
+Woah! Lots to explain there.
+
+The "insert into run" portion is fairly self-explanitory. We're simply inserting
+something into the run table. What exactly those values are will be specified in
+the following parenthesis surrounded parameters.
+
+In this example, we're inserting the fields, ``time_start``, ``time_step``, and
+``time_stop`` into run. If we look at the schema for the run table, something
+interesting shows:
+
+```
+create table if not exists run (
+	run_id                  integer primary key asc,
+	time_start              real not null,
+	time_step               real not null,
+	time_stop               real not null
+);
+```
+
+Which is the constraint pointed out in the CREATE table section. So, we needn't
+include it in our INSERT statement: the database will handle it for us.
+
+The field definition is then handled by a "values" clause, which specifies the
+values the statement is INSERTing. These can be any values that match the type
+of the specified columns. In this case, they all need to be REALs.
+
+In MOLT, instead of spending time performing string concatenation to prepare up
+a single SQL statement, then rinsing and repeating for each SQL statement,
+there's a better solution. You can use 
+[this interface](https://sqlite.org/c3ref/bind_blob.html) from the C interface
+to substitute variables in the values clause.
+
+Without it, inserting the default values would look something like this:
+
+```
+insert into run (time_start, time_step, time_stop) values (0, 0.5, 10);
+```
+
+### UPDATE
+
+``UPDATE`` statements are similar in function to the ``INSERT`` statement in
+that it directly alters what data is in the table. MOLT doesn't current use any
+UPDATE statements, but suppose we'd like to alter some data after a simulation.
+Saying we've found the simulation to be incorrect and all particles don't need
+any X values, x_pos or x_vel. The following will update x_pos and x_vel to be
+zero everywhere.
+
+```
+update particles set x_pos = 0, x_vel = 0;
+```
+
+Again, this kind of statement can be delimited with a ``WHERE`` clause.
+
+### DELETE
+
+``DELETE`` statements will remove records from a table. Simple enough.
+
+```
+DELETE from particles;
+```
+
+Will delete EVERYTHING from the particles table. This can be delimited to only
+remove certain rows with a WHERE clause.
+
+So, to only delete the particles that deal with the first run (run.run_id = 1),
+the following statement could be used:
+
+```
+delete from particles where run = 1;
+```
 
