@@ -125,7 +125,8 @@ row, and simply increment that number to get the new one.
 ### SELECT
 
 As an introduction, let's first select all of the plain-jane particle
-information. Just get everything in the table:
+information. Here's the [syntax](https://sqlite.org/lang_select.html). Just get
+everything in the table:
 
 ```
 select * from particles;
@@ -256,11 +257,13 @@ insert into run (time_start, time_step, time_stop) values (0, 0.5, 10);
 ### UPDATE
 
 ``UPDATE`` statements are similar in function to the ``INSERT`` statement in
-that it directly alters what data is in the table. MOLT doesn't current use any
-UPDATE statements, but suppose we'd like to alter some data after a simulation.
-Saying we've found the simulation to be incorrect and all particles don't need
-any X values, x_pos or x_vel. The following will update x_pos and x_vel to be
-zero everywhere.
+that it directly alters what data is in the table. Here's the
+[syntax](https://sqlite.org/lang_update.html).
+
+MOLT doesn't current use any UPDATE statements at the time of writing, but
+suppose we'd like to alter some data after a simulation.  Saying we've found the
+simulation to be incorrect and all particles don't need any X values, x_pos or
+x_vel. The following will update x_pos and x_vel to be zero everywhere.
 
 ```
 update particles set x_pos = 0, x_vel = 0;
@@ -270,7 +273,8 @@ Again, this kind of statement can be delimited with a ``WHERE`` clause.
 
 ### DELETE
 
-``DELETE`` statements will remove records from a table. Simple enough.
+``DELETE`` statements will remove records from a table. Here's the
+[syntax](https://sqlite.org/lang_delete.html). As an example:
 
 ```
 DELETE from particles;
@@ -286,3 +290,17 @@ the following statement could be used:
 delete from particles where run = 1;
 ```
 
+### Extended Information
+
+While this doesn't provide an exhaustive set of SQL options, the following
+set of resources should help take you from complete novice, to hopefully at
+least competent novice. ``:)``
+
+* [SQLite Documentation](https://sqlite.org/docs.html). Here's the overview page
+   to the SQLite's documentation. Included are some examples, grammar rules,
+   extensions and the like.
+* [Postgres Manual](https://www.postgresql.org/docs/9.2/static/sql.html). While
+  reading manuals won't be the best thing you can do, it can certainly help you
+  clear up some information.
+* [A SQL Primer by a Helpful Reddit User](https://leanpub.com/aprimeronsql/).
+  This is simply a free resource. Use it if you'd like.
