@@ -1,8 +1,8 @@
 /* simple function declarations */
-#include "particles.h"
+#include "structures.h"
 
-void part_pos_update(struct particle_t *part, double change);
-void part_vel_update(struct particle_t *part, vec3_t *e_field, vec3_t *b_field, double change);
-double force_in_x(struct particle_t *part, vec3_t e_fld, vec3_t b_fld);
-double force_in_y(struct particle_t *part, vec3_t e_fld, vec3_t b_fld);
-double force_in_z(struct particle_t *part, vec3_t e_fld, vec3_t b_fld);
+void part_pos_update(struct molt_t *molt, int id, double change);
+void part_vel_update(struct molt_t *molt, int id, double change);
+double force_in_x(struct molt_t *molt, int id);
+double force_in_y(struct molt_t *molt, int id);
+double force_in_z(struct molt_t *molt, int id);

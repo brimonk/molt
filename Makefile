@@ -1,6 +1,6 @@
 CC = cc
 LINKER = -ldl -lpthread
-FLAGS = -Wall -g3
+FLAGS = -Wall -g3 -march=native
 TARGET = molt
 SOURCES = $(wildcard src/*.c)
 OBJECTS = $(SOURCES:.c=.o)

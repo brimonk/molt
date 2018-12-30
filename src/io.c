@@ -12,38 +12,12 @@
 #include <assert.h>
 
 #include "sqlite3.h"
-
 #include "io.h"
-#include "particles.h"
 
-/*
- * The current plan, because it'll be really easy to extend later in time,
- * is to write generic-ish functions for select, insert, update, and delete.
- *
- * Each function will take a sqlite3 handle, a sql stmt to be run, a pointer
- * to an array of data, and a pointer to a function to execute to get
- * the raw form of that data.
- *
- * It's not the _best_, but shy of writing an ORM in a language that doesn't
- * have ORMs, it'll be fine.
- *
- * Another option is to wrap everything in a structure that looks something
- * like this
- *
- * struct db_wrap_t {
- * 		int debug; // optional
- * 		int op; // select = 1, insert = 2, update = 4, del = 8, other = err
- * 		char *sql;
- * 		void *data;
- * 		int datasize;
- * 		int (func *)(void *data, char **bufs)
- * };
- *
- * Where a pointer to this can then be passed to a single function, and
- * logic will flow to specific functions to do what I discussed above.
- */
+int io_store_parts(sqlite3 *db, struct molt_t *molt);
+int io_store_fields(sqlite3 *db, struct molt_t *molt);
 
-/* this should be gathered dynamically from some rules somewhere */
+/* this should be gathered at run time from some rules somewhere */
 char *io_db_tbls[] = 
 {
 	"src/sql/run.sql",
@@ -53,150 +27,6 @@ char *io_db_tbls[] =
 	NULL
 };
 
-#define SQLITE_ERRFMT "%s::%d %s\n"
-
-int io_dbwrap_do(struct db_wrap_t *w)
-{
-	sqlite3_stmt *stmt;
-	void *curr;
-	int i, val;
-	val = 0;
-
-	// prep the statement
-	val = sqlite3_prepare_v2(w->db, w->sql, -1, &stmt, NULL);
-	if (val != SQLITE_OK) {
-		SQLITE3_ERR(w->db);
-	}
-
-	/*
-	 * as far as I can tell, select statements are the only special case.
-	 * in these cases, the read function pointer should be used instead of the
-	 * bind function pointer.
-	 */
-
-	sqlite3_exec(w->db, "BEGIN", 0, 0, 0);
-
-	for (i = 0; i < w->items; i++) { // foreach
-		curr = ((char *)w->data) + (i * w->item_size);
-
-		switch (w->op) {
-		case IO_DBWRAP_SELECT:
-			// execute the statement, use callback to store the data
-			if (w->bind != NULL) {
-				w->bind(stmt, curr, w->extra);
-			}
-			sqlite3_step(stmt);
-			w->read(stmt, curr, w->extra);
-			break;
-
-		case IO_DBWRAP_INSERT:
-		case IO_DBWRAP_UPDATE:
-		case IO_DBWRAP_DELETE:
-			// use the callback, binding to stmt, then execute
-			if (w->bind != NULL) {
-				w->bind(stmt, curr, w->extra);
-			}
-			val = sqlite3_step(stmt);
-
-			// no need to remap, values should be in the db
-			if (val != SQLITE_DONE) {
-				SQLITE3_ERR(w->db);
-			}
-
-			// unbind, then reset
-			sqlite3_clear_bindings(stmt);
-			sqlite3_reset(stmt);
-			break;
-
-		default:
-			assert("Unknown db wrapper op code");
-			break;
-		}
-	}
-
-	sqlite3_finalize(stmt);
-	sqlite3_exec(w->db, "COMMIT", 0, 0, 0);
-
-	return 0;
-}
-
-int io_particle_bind(sqlite3_stmt *stmt, void *data, void *extra)
-{
-	// follows sql:
-	//   "insert into particles (run, particle_id, time_index, "
-	//   "x_pos, y_pos, z_pos, x_vel, y_vel, z_vel) values "
-	//   "(?, ?, ?, ?, ?, ?, ?, ?, ?);"
-	struct particle_t *item;
-	struct run_info_t *info;
-	int val;
-
-	if (data != NULL) {
-		item = data;
-	} else {
-		return 1; // err
-	}
-
-	if (extra != NULL) {
-		info = extra;
-	}
-
-	// begin binding items
-	val = sqlite3_bind_int(stmt, 1, info->run_number);
-	if (val != SQLITE_OK) {
-		fprintf(stderr, "%s\n", sqlite3_errstr(val));
-		exit(1);
-	}
-	sqlite3_bind_int(stmt, 2, item->uid);
-	sqlite3_bind_double(stmt, 3, info->time_idx);
-	sqlite3_bind_double(stmt, 4, item->pos[0]);
-	sqlite3_bind_double(stmt, 5, item->pos[1]);
-	sqlite3_bind_double(stmt, 6, item->pos[2]);
-	sqlite3_bind_double(stmt, 7, item->vel[0]);
-	sqlite3_bind_double(stmt, 8, item->vel[1]);
-	sqlite3_bind_double(stmt, 9, item->vel[2]);
-
-	return 0;
-}
-
-int io_field_bind(sqlite3_stmt *stmt, void *data, void *extra)
-{
-	// follows sql:
-	// insert into fields
-	// (run, time_index, e_x, e_y, e_z, b_x, b_y, b_z)
-	// values
-	// (?, ?, ?, ?, ?, ?, ?, ?);
-	struct field_combo_t *item;
-	struct run_info_t *info;
-	int val;
-
-	if (data != NULL) {
-		item = data;
-	} else {
-		return 1; // err
-	}
-
-	if (extra != NULL) {
-		info = extra;
-	}
-
-	// begin binding items
-	val = sqlite3_bind_int(stmt, 1, info->run_number);
-	if (val != SQLITE_OK) {
-		fprintf(stderr, "%s\n", sqlite3_errstr(val));
-		exit(1);
-	}
-	sqlite3_bind_int(stmt, 2, info->time_idx);
-	sqlite3_bind_double(stmt, 3, (*item->e_field)[0]);
-	sqlite3_bind_double(stmt, 4, (*item->e_field)[1]);
-	sqlite3_bind_double(stmt, 5, (*item->e_field)[2]);
-	sqlite3_bind_double(stmt, 6, (*item->b_field)[0]);
-	sqlite3_bind_double(stmt, 7, (*item->b_field)[1]);
-	sqlite3_bind_double(stmt, 8, (*item->b_field)[2]);
-
-	return 0;
-
-}
-
 int io_exec_sql_tbls(sqlite3 *db, char **tbl_list)
 {
 	/* tbl_list is assumed to be NULL terminated */
@@ -204,7 +34,7 @@ int io_exec_sql_tbls(sqlite3 *db, char **tbl_list)
 	char *file_buffer, *err;
 
 	for (i = 0, val = 0; tbl_list[i] != NULL; i++) {
-		file_buffer = disk_to_mem(tbl_list[i]);
+		file_buffer = io_loadfile(tbl_list[i]);
 
 		if (file_buffer) {
 			/* execute the SQL */
@@ -230,17 +60,9 @@ void io_db_setup(sqlite3 *db)
 	sqlite3_exec(db, "pragma journal_mode=wal;", 0, 0, 0);
 }
 
-
-void sqlite3_wrap_errors(sqlite3 *db, char *file, int line)
+/* io_loadfile : load the contents of 'filename' into buffer and return it */
+char *io_loadfile(char *filename)
 {
-	printf("%s::%d : %s\n", file, line, sqlite3_errmsg(db));
-	exit(1); /* exit, returning '1' (error) to the environment */
-}
-
-
-char *disk_to_mem(char *filename)
-{
-	/* slurp up filename's contents to memory */
 	FILE *fileptr;
 	char *buffer;
 	uint64_t filelen;
@@ -271,13 +93,6 @@ char *disk_to_mem(char *filename)
 	return buffer; /* caller frees the memory if non-NULL */
 }
 
-
-void io_erranddie(char *str, char *file, int line)
-{
-	fprintf(stderr, "%s:%d\t%s\n", file, line, str);
-	exit(1);
-}
-
 int io_select_currentrunidx(sqlite3 *db)
 {
 	int val, col;
@@ -305,4 +120,42 @@ int io_select_currentrunidx(sqlite3 *db)
 	sqlite3_finalize(stmt);
 
 	return col;
+}
+
+/* io_store_inforun : writes constant run information */
+int io_store_inforun(sqlite3 *db, struct molt_t *molt)
+{
+	return 0;
+}
+
+/* io_store_infots : write current timeslice of the problem into the database */
+int io_store_infots(sqlite3 *db, struct molt_t *molt)
+{
+	int val;
+
+	val = 0;
+
+	val += io_store_parts(db, molt);
+	val += io_store_fields(db, molt);
+
+	return val;
+}
+
+/* io_store_step : write particle information at the current timeslice */
+int io_store_parts(sqlite3 *db, struct molt_t *molt)
+{
+	return 0;
+}
+
+/* io_store_fields : write fields information at the current timeslice */
+int io_store_fields(sqlite3 *db, struct molt_t *molt)
+{
+	return 0;
+}
+
+void sqlite3_wrap_errors(sqlite3 *db, char *file, int line)
+{
+	fprintf(stderr, "%s:%d %s\n", file, line, sqlite3_errmsg(db));
+	sqlite3_close(db);
+	exit(1);
 }

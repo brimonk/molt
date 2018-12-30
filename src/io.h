@@ -10,66 +10,29 @@
  * called. This will execute all of the sql inside of the sql directory.
  */
 
+#ifndef MOLT_IO
+#define MOLT_IO
+
 #include "sqlite3.h"
-#include "particles.h"
 #include "vect.h"
+#include "structures.h"
 
 #define BUF_SIZE 2048
 
 char *disk_to_mem(char *filename);
 
-struct err_tbl {
-	int sqlite_err;
-	char *err_str;
-};
-
 extern char *io_db_tbls[]; /* use our sql file list outside of io.c */
 
-/*
- * small, sqlite3 fatal error handler
- *
- * this function exits the program, regardless of issues because most SQLite
- * errors that AREN'T handled, will trickle to here. This simply prints an
- * error message, and quits.
- *
- * using the SQLITE3_ERR macro with a SQLITE3 return value should be all you
- * need, for useful debugging information
- */
-
-enum {
-	IO_DBWRAP_SELECT,
-	IO_DBWRAP_INSERT,
-	IO_DBWRAP_UPDATE,
-	IO_DBWRAP_DELETE
-};
-
-#define DEFAULT_STRLEN 256
-
-struct db_wrap_t {
-	sqlite3 *db;
-	char *sql;
-	void *data;
-	void *extra; 	// extra parms that don't fit with *data,
-					// run information for particle_ts, etc
-	int (*bind)(sqlite3_stmt *stmt, void *ptr, void *extra);
-	int (*read)(sqlite3_stmt *stmt, void *ptr, void *extra);
-	int op;
-	int items;
-	int item_size;
-};
-
-
-void io_erranddie(char *str, char *file, int line);
 void sqlite3_wrap_errors(sqlite3 *db, char *file, int line);
 #define MEMORY_ERROR(a) (io_erranddie(a, __FILE__, __LINE__))
 #define SQLITE3_ERR(a) (sqlite3_wrap_errors(a, __FILE__, __LINE__))
 
 void io_db_setup(sqlite3 *db);
 int io_exec_sql_tbls(sqlite3 *db, char **tbl_list);
-int io_dbwrap_do(struct db_wrap_t *w);
-
-/* database wrapper bind and read functions */
-int io_particle_bind(sqlite3_stmt *stmt, void *data, void *extra);
-int io_field_bind(sqlite3_stmt *stmt, void *data, void *extra);
+char *io_loadfile(char *filename);
 
 int io_select_currentrunidx(sqlite3 *db);
+int io_store_inforun(sqlite3 *db, struct molt_t *molt);
+int io_store_infots(sqlite3 *db, struct molt_t *molt);
+
+#endif

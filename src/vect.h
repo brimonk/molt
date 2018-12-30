@@ -2,7 +2,7 @@
  * Brian Chrzanowski
  * Sat Jul 28, 2018 03:03
  *
- * vect.c
+ * vect.h
  *   - A small vector library, inspired by the Quake functions for similar use.
  *
  * for information on why this is written as it is:
@@ -22,7 +22,7 @@ typedef vec_t vec6_t[6];
 
 /* 
  * we can actually define inline vector operations
- *		Quake-III-Arena:q_shared.h starting at line 445
+ *		Quake-III-Arena:q_shared.h, ~line 445
  * Here's some explanation
  *
  * VectorDotProduct(a, b)
@@ -61,31 +61,5 @@ typedef vec_t vec6_t[6];
 #define VectorClear(a) ((a)[0]=0,(a)[1]=0,(a)[2]=0)
 #define VectorPrint(a) \
 	(printf("%lf, %lf, %lf\n", (a)[0], (a)[1], (a)[2]))
-
-/* 
- * also handled in the vect library are C++-like vectors, or dynamic arrays
- * (this is a little confusing, and a better way to organize and name these
- * two things would be great).
- */
-
-struct dynarr_t {
-	int obj_size;
-	int curr_size;
-	int max_size;
-
-	void *data;
-} dynarr_t;
-
-#define DYNARR_INITIAL_CAPACITY 64
-
-void dynarr_init(struct dynarr_t *ptr, int obj_size);
-void dynarr_append(struct dynarr_t *ptr, void *add_me, int size);
-void *dynarr_get(struct dynarr_t *ptr, int index);
-void dynarr_setmaxsize(struct dynarr_t *ptr, int size);
-void dynarr_setobjsize(struct dynarr_t *ptr, int size);
-void dynarr_set(struct dynarr_t *ptr, int index, void *value, int size);
-void dynarr_free(struct dynarr_t *ptr);
-
-#define DynArr_GetPtr(a,i) (void *)(((char *)a->data) + (i * a->obj_size));
 
 #endif

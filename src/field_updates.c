@@ -1,7 +1,7 @@
 #include "vect.h"
-#include "particles.h"
+#include "structures.h"
 
-void field_update(vec3_t *e_field, vec3_t *b_field)
+void field_update(struct molt_t *molt)
 {
 	/* changes fields off of some parameters */
 	/* TODO: fill this out later */
