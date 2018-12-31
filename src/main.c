@@ -17,7 +17,8 @@
  * ToDo
  * 1. Rewrite program to be organized in a single structure
  * 1a. Argument Parsing and Initialization from those arguments
- * 1b. Storage from the tables of 
+ * 1b. IO Routine Rewrite
+ * 1c. IO Error Code Checking
  */
 
 #include <stdio.h>
@@ -42,21 +43,22 @@ void molt_cleanup(sqlite3 *db, struct molt_t *molt);
 int parse_args(int argc, char **argv, struct molt_t *molt);
 int parse_args_vec3(vec3_t *ptr, char *opt, char *str);
 int parse_double(char *str, double *out);
+void set_default_args(struct molt_t *molt);
 
 /* helper functions */
-void memerranddie(char *file, int line);
+void erranddie(char *file, char *errstr, int line);
 
 #define DATABASE "molt_output.db"
-#define DEFAULT_TIME_INITIAL 0
-#define DEFAULT_TIME_FINAL 5
-#define DEFAULT_TIME_STEP 0.5
-#define DEFAULT_EDGE_SIZE 64
-#define DEFAULT_FLOATING_HIGH 64.0
+#define DEFAULT_TIME_START 0
+#define DEFAULT_TIME_STEP  0.5
+#define DEFAULT_TIME_STOP  5
+#define DEFAULT_EDGE_SIZE  64
 #define USAGE "%s [--vert x,y,z --vert ...] [-e x,y,z] [-b x,y,z] [-p num]"\
   "	filename\n"
+#define GET_RAND_DOUBLE() ((((double)rand()/(double)(RAND_MAX)) * 512) - 256)
 
 #define CURR_FLOATING_TIME(idx, step, init) ((idx + step + init))
-#define MEM_ERR() (memerranddie(__FILE__, __LINE__))
+#define ERRANDDIE(a) (erranddie(__FILE__, (a), __LINE__))
 
 int main(int argc, char **argv)
 {
@@ -69,6 +71,7 @@ int main(int argc, char **argv)
 	if (val != SQLITE_OK) {
 		SQLITE3_ERR(db);
 	}
+
 	io_db_setup(db);
 	io_exec_sql_tbls(db, io_db_tbls); /* ensure tables exist */
 
@@ -83,6 +86,7 @@ int main(int argc, char **argv)
 
 int molt_init(sqlite3 *db, struct molt_t *molt, int argc, char **argv)
 {
+	long i;
 	int val;
 
 	/* init, and parse command line arguments (and other launch parameters) */
@@ -92,6 +96,40 @@ int molt_init(sqlite3 *db, struct molt_t *molt, int argc, char **argv)
 		fprintf(stderr, USAGE, argv[0]);
 		exit(1);
 	}
+
+	/* retrieve the current run information */
+	molt->info.run_number = io_get_runid(db, molt);
+
+	/* memory allocation occurs in one hunk, and subdivided */
+	molt->x = malloc(sizeof(double) * molt->part_total * 6);
+	if (!molt->x) {
+		ERRANDDIE("Couldn't get simulation memory");
+	}
+
+	memset(molt->x, 0, sizeof(double) * molt->part_total * 6);
+
+	/* set up the rest of the simulation's pointers */
+	molt->x  = molt->x + 0;
+	molt->y  = molt->x + (molt->part_total * 1);
+	molt->z  = molt->x + (molt->part_total * 2);
+	molt->vx = molt->x + (molt->part_total * 3);
+	molt->vy = molt->x + (molt->part_total * 4);
+	molt->vz = molt->x + (molt->part_total * 5);
+
+	/* randomize ALL OF THE PARTICLE INFORMATION */
+	for (i = 0; i < molt->part_total; i++) {
+		molt->x[i]  = GET_RAND_DOUBLE();
+		molt->y[i]  = GET_RAND_DOUBLE();
+		molt->z[i]  = GET_RAND_DOUBLE();
+		molt->vx[i] = GET_RAND_DOUBLE();
+		molt->vy[i] = GET_RAND_DOUBLE();
+		molt->vz[i] = GET_RAND_DOUBLE();
+	}
+
+	/* make sure we store the static, common run information */
+	io_store_inforun(db, molt);
+
+	return 0;
 }
 
 int molt_run(sqlite3 *db, struct molt_t *molt)
@@ -106,6 +144,7 @@ int molt_run(sqlite3 *db, struct molt_t *molt)
 	/* iterate over each time step, taking our snapshot, computing the next  */
 	for (info->time_idx = 0; info->time_idx < max_iter; info->time_idx++) {
 		if (io_store_infots(db, molt)) {
+			SQLITE3_ERR(db);
 		}
 
 		for(i = 0; i < molt->part_total; i++) { // foreach particle
@@ -118,6 +157,7 @@ int molt_run(sqlite3 *db, struct molt_t *molt)
 	return 0;
 }
 
+/* molt_cleanup : cleanup the molt structure and finalize the db actions */
 void molt_cleanup(sqlite3 *db, struct molt_t *molt)
 {
 }
@@ -131,6 +171,8 @@ void molt_cleanup(sqlite3 *db, struct molt_t *molt)
  *
  * -p	 number			    defines the total number of particles
  *
+ * -h                       prints usage information
+ *
  * --tstart					simulation's time start (default 0)
  * --tend					simulation's time end (default 5)
  * --tstep					simulation's time step (default .5)
@@ -138,6 +180,7 @@ void molt_cleanup(sqlite3 *db, struct molt_t *molt)
  * filename					the output database you'd like to use
  */
 
+/* parse_args : parse command line arguments, storing in existing molt struct */
 int parse_args(int argc, char **argv, struct molt_t *molt)
 {
 	static struct option long_options[] = {
@@ -152,6 +195,9 @@ int parse_args(int argc, char **argv, struct molt_t *molt)
 	double tmptime;
 	vec3_t tmp;
 
+	/* set defaults before we parse the arguments */
+	set_default_args(molt);
+
 	pn = val = 0;
 
 	if (argc < 2) {
@@ -159,7 +205,7 @@ int parse_args(int argc, char **argv, struct molt_t *molt)
 	}
 
 	while (1) {
-		c = getopt_long(argc, argv, "e:b:p:", long_options, &option_index);
+		c = getopt_long(argc, argv, "e:b:p:h", long_options, &option_index);
 		if (c == -1)
 			break;
 
@@ -229,6 +275,11 @@ int parse_args(int argc, char **argv, struct molt_t *molt)
 				pn = atoi(optarg);
 			}
 			break;
+
+		case 'h':
+			/* print usage information and quit */
+			fprintf(stderr, USAGE, argv[0]);
+			exit(1);
 		}
 	}
 
@@ -237,6 +288,28 @@ int parse_args(int argc, char **argv, struct molt_t *molt)
 	}
 
 	return val;
+}
+
+/* set up the program's default arguments */
+void set_default_args(struct molt_t *molt)
+{
+	srand(time(NULL));
+
+	if (molt) { /* just in case */
+		molt->info.time_start = DEFAULT_TIME_START;
+		molt->info.time_step  = DEFAULT_TIME_STEP;
+		molt->info.time_stop  = DEFAULT_TIME_STOP;
+		molt->info.time_idx   = 0;
+		molt->part_total      = 256;
+
+		/* randomize constant fields */
+		molt->e_field[0] = GET_RAND_DOUBLE();
+		molt->e_field[1] = GET_RAND_DOUBLE();
+		molt->e_field[2] = GET_RAND_DOUBLE();
+		molt->b_field[0] = GET_RAND_DOUBLE();
+		molt->b_field[1] = GET_RAND_DOUBLE();
+		molt->b_field[2] = GET_RAND_DOUBLE();
+	}
 }
 
 int parse_double(char *str, double *out)
@@ -257,6 +330,7 @@ void random_init(struct molt_t *molt)
 {
 }
 
+/* parse_args_vec3 : parse a comma delimted vector string into a vec3_t */
 int parse_args_vec3(vec3_t *ptr, char *opt, char *str)
 {
 	/* parse a vec3_t from a string; looks like "0.4,0.2,0.5" */
@@ -278,9 +352,9 @@ int parse_args_vec3(vec3_t *ptr, char *opt, char *str)
 	return scanned;
 }
 
-void memerranddie(char *file, int line)
+void erranddie(char *file, char *errstr, int line)
 {
-	fprintf(stderr, "Memory Error in %s:%d\n", file, line);
+	fprintf(stderr, "%s:%d %s\n", file, line, errstr);
 	exit(1);
 }
 

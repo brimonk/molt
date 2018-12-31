@@ -1,15 +1,15 @@
-#ifndef STRUCTURES
-#define STRUCTURES
+#ifndef MOLT_STRUCTURES
+#define MOLT_STRUCTURES
 
 #include "vect.h"
 
 // this should probably be handled separately
 struct run_info_t {
-	int run_number;
-	int time_idx;
 	double time_start;
 	double time_step;
 	double time_stop;
+	int run_number;
+	int time_idx;
 };
 
 struct molt_t {
