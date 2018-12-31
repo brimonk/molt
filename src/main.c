@@ -6,16 +6,58 @@
  *		Mathematical work done by Matthew Causley, Andrew Christlieb, et al
  *		Particle simulation skeletoned by Khari Gray
  *
- * Structure
- *		The program is structured to set up some memory
+ * Mathematics ToDo
+ * 1. Reverse Engineer MATLAB
  *
- * ToDo
+ * Infrastructure ToDo
  * 1. Cleanup and Optimization
- * 1a. Rewrite program to be organized in a single structure
- * 1b. Argument Parsing and Initialization from those arguments
- * 1c. IO Routine Rewrite
  * 1d. IO Error Code Checking
- * 1e. 
+ *
+ * 2. Dynamic Computation Functions
+ * 2a. Write module to do field_updates with vectored CPU instructions
+ * 2c. Store that module in src/mod
+ * 2d. Update the build system to build everything in src/mod with specific
+ *     requirements
+ * 2e. Add Command Line Parameter to define the shared object to try
+ *     (Default is none)
+ *
+ *     Conceptually, these shared libs simply take a molt_t structure, and the
+ *     simulation moves from the current time index to the next.
+ *
+ * 3. Threaded Writing
+ *
+ *    Follow the Unix mindset for ease of implementation:
+ *	      Single-Threaded jobs that can Execute in Parallel.
+ *
+ *    Ideally, the main thread of execution "performs" the simulation
+ *    When one timeslice is completed, the main thread copies the program's
+ *    state into another hunk for output.
+ *
+ * 3a. Create a threadpool interface (pthread wrapper)
+ * 3b. Open SQLITE DB with threading support
+ * 3c. Set the size of the thread pool at compile time
+ * 3d. Create a "state queue" to store the timeslices.
+ *
+ *     In the case where the simulation is faster than storing slices, we
+ *     store timeslices in the queue. In the case where the simulation is
+ *     slower than storing slices, there are simply some threads that go unused.
+ *     This depends on the simulation a user is trying to run, but at the time
+ *     of typing, this seems to be a fair tradeoff.
+ *
+ * 4. Write and Test CUDA Accelerated set of MOLT Computations
+ * 4a. Create CUDA binary and compile as a shared object
+ * 4b. dlsym into that CUDA library successfully
+ * 4c. Begin testing for comparisons
+ *
+ * 5. Dynamic Field Controls
+ *
+ * Other Not-So-Important Problems
+ * 1. Define a way to define a constant starting solution
+ *    Like a "use the beginning of run x"
+ *    Module testing can then be done in SQL
+ *
+ * 2. Actually require the last argument as the db's parameter, and use that
+ *    file name
  */
 
 #include <stdio.h>
@@ -27,8 +69,8 @@
 #include <ctype.h>
 
 #include "sqlite3.h"
-#include "io.h"
 
+#include "io.h"
 #include "calcs.h"
 #include "field_updates.h"
 #include "vect.h"
@@ -41,8 +83,6 @@ int parse_args(int argc, char **argv, struct molt_t *molt);
 int parse_args_vec3(vec3_t *ptr, char *opt, char *str);
 int parse_double(char *str, double *out);
 void set_default_args(struct molt_t *molt);
-
-/* helper functions */
 void erranddie(sqlite3 *db, char *file, char *errstr, int line);
 
 #define DATABASE "molt_output.db"
