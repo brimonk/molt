@@ -176,6 +176,8 @@ int io_store_parts(sqlite3 *db, struct molt_t *molt)
 	long i;
 	int rc;
 
+	sqlite3_exec(db, "BEGIN", 0, 0, 0);
+
 	rc = sqlite3_prepare_v2(db, sql, strlen(sql), &stmt, NULL);
 
 	if (rc != SQLITE_OK)
@@ -186,22 +188,24 @@ int io_store_parts(sqlite3 *db, struct molt_t *molt)
 		rc = sqlite3_bind_int(stmt,    1, molt->info.run_number);
 		rc = sqlite3_bind_int64(stmt,  2, i);
 		rc = sqlite3_bind_int(stmt,    3, molt->info.time_idx);
-		rc = sqlite3_bind_double(stmt, 4, molt->x[i]);
-		rc = sqlite3_bind_double(stmt, 5, molt->y[i]);
-		rc = sqlite3_bind_double(stmt, 6, molt->z[i]);
-		rc = sqlite3_bind_double(stmt, 7, molt->vx[i]);
-		rc = sqlite3_bind_double(stmt, 8, molt->vy[i]);
-		rc = sqlite3_bind_double(stmt, 9, molt->vz[i]);
+		rc = sqlite3_bind_double(stmt, 4, molt->parts[i].x);
+		rc = sqlite3_bind_double(stmt, 5, molt->parts[i].y);
+		rc = sqlite3_bind_double(stmt, 6, molt->parts[i].z);
+		rc = sqlite3_bind_double(stmt, 7, molt->parts[i].vx);
+		rc = sqlite3_bind_double(stmt, 8, molt->parts[i].vy);
+		rc = sqlite3_bind_double(stmt, 9, molt->parts[i].vz);
 
 		/* execute the statement */
 		rc = sqlite3_step(stmt);
 
 		/* reset the statement for a new loop iteration */
-		// rc = sqlite3_reset(stmt);
+		rc = sqlite3_reset(stmt);
 		rc = sqlite3_clear_bindings(stmt);
 	}
 
 	rc = sqlite3_finalize(stmt);
+
+	sqlite3_exec(db, "COMMIT", 0, 0, 0);
 
 	return 0;
 }

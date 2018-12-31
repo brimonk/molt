@@ -6,19 +6,16 @@
  *		Mathematical work done by Matthew Causley, Andrew Christlieb, et al
  *		Particle simulation skeletoned by Khari Gray
  *
- * Organization
- *		For maximum cache coherency, I've decided that the entire program not
- *		have a ton of context switches. From a command line argument, the
- *		program retrieves all memory required to keep the simulation's state,
- *		and whatever extra memory a compute device might need, nearly equivalent
- *		to the size of a struct molt_t. The idea being, everything for the
- *		problem is relayed in a molt_t structure.
+ * Structure
+ *		The program is structured to set up some memory
  *
  * ToDo
- * 1. Rewrite program to be organized in a single structure
- * 1a. Argument Parsing and Initialization from those arguments
- * 1b. IO Routine Rewrite
- * 1c. IO Error Code Checking
+ * 1. Cleanup and Optimization
+ * 1a. Rewrite program to be organized in a single structure
+ * 1b. Argument Parsing and Initialization from those arguments
+ * 1c. IO Routine Rewrite
+ * 1d. IO Error Code Checking
+ * 1e. 
  */
 
 #include <stdio.h>
@@ -38,7 +35,7 @@
 
 int molt_init(sqlite3 *db, struct molt_t *molt, int argc, char **argv);
 int molt_run(sqlite3 *db, struct molt_t *molt);
-void molt_cleanup(sqlite3 *db, struct molt_t *molt);
+int molt_cleanup(sqlite3 *db, struct molt_t *molt);
 
 int parse_args(int argc, char **argv, struct molt_t *molt);
 int parse_args_vec3(vec3_t *ptr, char *opt, char *str);
@@ -46,19 +43,24 @@ int parse_double(char *str, double *out);
 void set_default_args(struct molt_t *molt);
 
 /* helper functions */
-void erranddie(char *file, char *errstr, int line);
+void erranddie(sqlite3 *db, char *file, char *errstr, int line);
 
 #define DATABASE "molt_output.db"
 #define DEFAULT_TIME_START 0
 #define DEFAULT_TIME_STEP  0.5
-#define DEFAULT_TIME_STOP  5
+#define DEFAULT_TIME_STOP  10
 #define DEFAULT_EDGE_SIZE  64
-#define USAGE "%s [--vert x,y,z --vert ...] [-e x,y,z] [-b x,y,z] [-p num]"\
-  "	filename\n"
-#define GET_RAND_DOUBLE() ((((double)rand()/(double)(RAND_MAX)) * 512) - 256)
-
 #define CURR_FLOATING_TIME(idx, step, init) ((idx + step + init))
-#define ERRANDDIE(a) (erranddie(__FILE__, (a), __LINE__))
+#define ERRANDDIE(b, a) (erranddie((b), __FILE__, (a), __LINE__))
+
+#ifndef DEFAULT_GRIDLEN
+#define DEFAULT_GRIDLEN 256
+#endif
+
+#define GET_RAND_DOUBLE() ((double)rand()/(double)(RAND_MAX) \
+		* DEFAULT_GRIDLEN - (DEFAULT_GRIDLEN / 2))
+#define USAGE "%s [--tstart num, --tstep num, --tend num] "\
+	" [-e x,y,z] [-b x,y,z] [-p num] filename\n"
 
 int main(int argc, char **argv)
 {
@@ -87,43 +89,32 @@ int main(int argc, char **argv)
 int molt_init(sqlite3 *db, struct molt_t *molt, int argc, char **argv)
 {
 	long i;
-	int val;
+	char buf[128];
 
 	/* init, and parse command line arguments (and other launch parameters) */
-	val = parse_args(argc, argv, molt);
-
-	if (val) {
-		fprintf(stderr, USAGE, argv[0]);
-		exit(1);
-	}
+	parse_args(argc, argv, molt);
 
 	/* retrieve the current run information */
 	molt->info.run_number = io_get_runid(db, molt);
 
-	/* memory allocation occurs in one hunk, and subdivided */
-	molt->x = malloc(sizeof(double) * molt->part_total * 6);
-	if (!molt->x) {
-		ERRANDDIE("Couldn't get simulation memory");
+	/* memory allocation occurs in one hunk, once */
+	molt->parts = malloc(sizeof(struct part_t) * molt->part_total);
+	if (!molt->parts) {
+		sprintf(buf, "Couldn't allocate enough memory [needed %ld KB]\n",
+			sizeof(struct part_t) * molt->part_total / 1024);
+		ERRANDDIE(db, buf);
 	}
 
-	memset(molt->x, 0, sizeof(double) * molt->part_total * 6);
-
-	/* set up the rest of the simulation's pointers */
-	molt->x  = molt->x + 0;
-	molt->y  = molt->x + (molt->part_total * 1);
-	molt->z  = molt->x + (molt->part_total * 2);
-	molt->vx = molt->x + (molt->part_total * 3);
-	molt->vy = molt->x + (molt->part_total * 4);
-	molt->vz = molt->x + (molt->part_total * 5);
+	memset(molt->parts, 0, sizeof(struct part_t) * molt->part_total);
 
 	/* randomize ALL OF THE PARTICLE INFORMATION */
 	for (i = 0; i < molt->part_total; i++) {
-		molt->x[i]  = GET_RAND_DOUBLE();
-		molt->y[i]  = GET_RAND_DOUBLE();
-		molt->z[i]  = GET_RAND_DOUBLE();
-		molt->vx[i] = GET_RAND_DOUBLE();
-		molt->vy[i] = GET_RAND_DOUBLE();
-		molt->vz[i] = GET_RAND_DOUBLE();
+		molt->parts[i].x  = GET_RAND_DOUBLE();
+		molt->parts[i].y  = GET_RAND_DOUBLE();
+		molt->parts[i].z  = GET_RAND_DOUBLE();
+		molt->parts[i].vx = GET_RAND_DOUBLE();
+		molt->parts[i].vy = GET_RAND_DOUBLE();
+		molt->parts[i].vz = GET_RAND_DOUBLE();
 	}
 
 	/* make sure we store the static, common run information */
@@ -148,7 +139,7 @@ int molt_run(sqlite3 *db, struct molt_t *molt)
 		}
 
 		for(i = 0; i < molt->part_total; i++) { // foreach particle
-			field_update(molt);
+			// field_update(molt);
 			part_pos_update(molt, i, info->time_step);
 			part_vel_update(molt, i, info->time_step);
 		}
@@ -158,8 +149,16 @@ int molt_run(sqlite3 *db, struct molt_t *molt)
 }
 
 /* molt_cleanup : cleanup the molt structure and finalize the db actions */
-void molt_cleanup(sqlite3 *db, struct molt_t *molt)
+int molt_cleanup(sqlite3 *db, struct molt_t *molt)
 {
+	/* free all of the dynamic content */
+	if (molt) {
+		if (molt->parts) {
+			free(molt->parts);
+		}
+	}
+
+	return 0;
 }
 
 /*
@@ -191,14 +190,14 @@ int parse_args(int argc, char **argv, struct molt_t *molt)
 		{0, 0, 0, 0},
 	};
 
-	int val, pn, c, option_index;
+	int pn, c, option_index;
 	double tmptime;
 	vec3_t tmp;
 
 	/* set defaults before we parse the arguments */
 	set_default_args(molt);
 
-	pn = val = 0;
+	pn = 0;
 
 	if (argc < 2) {
 		return 1;
@@ -287,7 +286,7 @@ int parse_args(int argc, char **argv, struct molt_t *molt)
 		molt->part_total = pn;
 	}
 
-	return val;
+	return 0;
 }
 
 /* set up the program's default arguments */
@@ -352,9 +351,10 @@ int parse_args_vec3(vec3_t *ptr, char *opt, char *str)
 	return scanned;
 }
 
-void erranddie(char *file, char *errstr, int line)
+void erranddie(sqlite3 *db, char *file, char *errstr, int line)
 {
 	fprintf(stderr, "%s:%d %s\n", file, line, errstr);
+	sqlite3_close(db); /* close db for wal and shm cleanup */
 	exit(1);
 }
 
