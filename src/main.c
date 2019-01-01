@@ -14,12 +14,11 @@
  * 1d. IO Error Code Checking
  *
  * 2. Dynamic Computation Functions
- * 2a. Write module to do field_updates with vectored CPU instructions
- * 2c. Store that module in src/mod
- * 2d. Update the build system to build everything in src/mod with specific
- *     requirements
- * 2e. Add Command Line Parameter to define the shared object to try
- *     (Default is none)
+ * 2a. Write example shared object
+ * 2b. Include shared objects into the build system (very specific)
+ * 2c. Add command line parameter to define shared object
+ * 2d. Write shared object loader
+ * 2e. Write shared object freer
  *
  *     Conceptually, these shared libs simply take a molt_t structure, and the
  *     simulation moves from the current time index to the next.
@@ -71,7 +70,6 @@
 #include "sqlite3.h"
 
 #include "io.h"
-#include "calcs.h"
 #include "field_updates.h"
 #include "vect.h"
 
@@ -178,11 +176,15 @@ int molt_run(sqlite3 *db, struct molt_t *molt)
 			SQLITE3_ERR(db);
 		}
 
+		/* call into the module and execute our functionality */
+
+#if 0
 		for(i = 0; i < molt->part_total; i++) { // foreach particle
 			// field_update(molt);
 			part_pos_update(molt, i, info->time_step);
 			part_vel_update(molt, i, info->time_step);
 		}
+#endif
 	}
 
 	return 0;

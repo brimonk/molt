@@ -5,7 +5,10 @@ TARGET = molt
 SOURCES = $(wildcard src/*.c)
 OBJECTS = $(SOURCES:.c=.o)
 
-all: $(TARGET)
+all: LoadableObjects $(TARGET)
+
+LoadableObjects:
+	$(CC) $(FLAGS) -fPIC -shared -o libsoftmolt src/mod/softmolt.c
 
 %.o: %.c
 	$(CC) -c $(FLAGS) -o $@ $<
