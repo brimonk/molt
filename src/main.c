@@ -14,14 +14,16 @@
  * 1d. IO Error Code Checking
  *
  * 2. Dynamic Computation Functions
- * 2a. Write example shared object
- * 2b. Include shared objects into the build system (very specific)
- * 2c. Add command line parameter to define shared object
- * 2d. Write shared object loader
- * 2e. Write shared object freer
+ * 2c. Add command line parameter to define shared object.
+ * 2f. Handle dynamic loading errors
+ *     (getting function handles)
  *
  *     Conceptually, these shared libs simply take a molt_t structure, and the
  *     simulation moves from the current time index to the next.
+ *
+ *     Each shared object that has module specific init/free code should use
+ *     __attribute__((constructor)) and __attribute__((destructor)). Read more
+ *     about this in the softmolt module.
  *
  * 3. Threaded Writing
  *
@@ -50,13 +52,17 @@
  *
  * 5. Dynamic Field Controls
  *
- * Other Not-So-Important Problems
+ * Low Priority Issues
  * 1. Define a way to define a constant starting solution
  *    Like a "use the beginning of run x"
  *    Module testing can then be done in SQL
  *
  * 2. Actually require the last argument as the db's parameter, and use that
  *    file name
+ *
+ * 3. Shared Object "doslice" function loading without requiring that as the
+ *    name. Potentially have to traverse the shared object structure using
+ *    dlinfo or something similar.
  */
 
 #include <stdio.h>
@@ -66,6 +72,7 @@
 #include <math.h>
 #include <getopt.h>
 #include <ctype.h>
+#include <dlfcn.h>
 
 #include "sqlite3.h"
 
@@ -73,9 +80,9 @@
 #include "field_updates.h"
 #include "vect.h"
 
-int molt_init(sqlite3 *db, struct molt_t *molt, int argc, char **argv);
-int molt_run(sqlite3 *db, struct molt_t *molt);
-int molt_cleanup(sqlite3 *db, struct molt_t *molt);
+int molt_init(sqlite3 *db, struct molt_t *molt, void **f, int argc, char **argv);
+int molt_run(sqlite3 *db, int (*func)(struct molt_t *molt), struct molt_t *molt);
+int molt_cleanup(sqlite3 *db, void *lib, struct molt_t *molt);
 
 int parse_args(int argc, char **argv, struct molt_t *molt);
 int parse_args_vec3(vec3_t *ptr, char *opt, char *str);
@@ -85,7 +92,7 @@ void erranddie(sqlite3 *db, char *file, char *errstr, int line);
 
 #define DATABASE "molt_output.db"
 #define DEFAULT_TIME_START 0
-#define DEFAULT_TIME_STEP  0.5
+#define DEFAULT_TIME_STEP  1
 #define DEFAULT_TIME_STOP  10
 #define DEFAULT_EDGE_SIZE  64
 #define CURR_FLOATING_TIME(idx, step, init) ((idx + step + init))
@@ -93,6 +100,10 @@ void erranddie(sqlite3 *db, char *file, char *errstr, int line);
 
 #ifndef DEFAULT_GRIDLEN
 #define DEFAULT_GRIDLEN 256
+#endif
+
+#ifndef DEFAULT_PARTS
+#define DEFAULT_PARTS 64
 #endif
 
 #define GET_RAND_DOUBLE() ((double)rand()/(double)(RAND_MAX) \
@@ -104,6 +115,9 @@ int main(int argc, char **argv)
 {
 	sqlite3 *db;
 	struct molt_t molt;
+	void *libhandle;
+	char *tmp;
+	int (*func) (struct molt_t *molt);
 	int val;
 
 	/* set up the database */
@@ -115,16 +129,24 @@ int main(int argc, char **argv)
 	io_db_setup(db);
 	io_exec_sql_tbls(db, io_db_tbls); /* ensure tables exist */
 
-	molt_init(db, &molt, argc, argv);
-	molt_run(db, &molt);
-	molt_cleanup(db, &molt);
+	molt_init(db, &molt, &libhandle, argc, argv);
+
+	/* resolve the library handle before anything else */
+	func = dlsym(libhandle, "doslice");
+	tmp = dlerror();
+	if (tmp) {
+		ERRANDDIE(db, tmp);
+	}
+
+	molt_run(db, func, &molt);
+	molt_cleanup(db, libhandle, &molt);
 
 	sqlite3_close(db);
 
 	return 0;
 }
 
-int molt_init(sqlite3 *db, struct molt_t *molt, int argc, char **argv)
+int molt_init(sqlite3 *db, struct molt_t *molt, void **f, int argc, char **argv)
 {
 	long i;
 	char buf[128];
@@ -158,13 +180,20 @@ int molt_init(sqlite3 *db, struct molt_t *molt, int argc, char **argv)
 	/* make sure we store the static, common run information */
 	io_store_inforun(db, molt);
 
+	/* load up the dynamic code to perform the simulation */
+	*f = dlopen("./libsoftmolt.so", RTLD_LAZY);
+
+	if (*f == NULL) {
+		ERRANDDIE(db, "Couldn't load shared object \"libsoftmolt.so\"");
+	}
+
 	return 0;
 }
 
-int molt_run(sqlite3 *db, struct molt_t *molt)
+int molt_run(sqlite3 *db, int (*func) (struct molt_t *molt), struct molt_t *molt)
 {
 	struct run_info_t *info;
-	int max_iter, i;
+	int max_iter;
 
 	info = &molt->info;
 
@@ -176,22 +205,17 @@ int molt_run(sqlite3 *db, struct molt_t *molt)
 			SQLITE3_ERR(db);
 		}
 
-		/* call into the module and execute our functionality */
-
-#if 0
-		for(i = 0; i < molt->part_total; i++) { // foreach particle
-			// field_update(molt);
-			part_pos_update(molt, i, info->time_step);
-			part_vel_update(molt, i, info->time_step);
+		/* call into the module and execute chosen functionality */
+		if (func(molt)) {
+			ERRANDDIE(db, "Module had error");
 		}
-#endif
 	}
 
 	return 0;
 }
 
 /* molt_cleanup : cleanup the molt structure and finalize the db actions */
-int molt_cleanup(sqlite3 *db, struct molt_t *molt)
+int molt_cleanup(sqlite3 *db, void *lib, struct molt_t *molt)
 {
 	/* free all of the dynamic content */
 	if (molt) {
@@ -199,6 +223,9 @@ int molt_cleanup(sqlite3 *db, struct molt_t *molt)
 			free(molt->parts);
 		}
 	}
+
+	/* unload library */
+	dlclose(lib);
 
 	return 0;
 }
@@ -341,7 +368,7 @@ void set_default_args(struct molt_t *molt)
 		molt->info.time_step  = DEFAULT_TIME_STEP;
 		molt->info.time_stop  = DEFAULT_TIME_STOP;
 		molt->info.time_idx   = 0;
-		molt->part_total      = 256;
+		molt->part_total      = DEFAULT_PARTS;
 
 		/* randomize constant fields */
 		molt->e_field[0] = GET_RAND_DOUBLE();

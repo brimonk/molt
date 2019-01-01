@@ -2,6 +2,8 @@
  * Brian Chrzanowski
  * Tue Jan 01, 2019 12:25 
  *
+ * "Software MOLT" Module
+ *
  * Dynamically loadable MOLT module that implements the computation for one
  * timeslice. These computations include, but are not limited to (TODO: fill out)
  *
@@ -23,6 +25,12 @@
  *
  * For functions that don't need any constructing, or deconstructing, these
  * could (probably) be safely excluded. Here, they're included for simplicity.
+ *
+ * As of now it is ALSO EXPECTED that the function that will perform the
+ * timeslice be called "doslice". As of writing, I'm looking into a way to mark
+ * any function with an attribute (something like __attribute__((doslice))) and
+ * load the function to perform the timeslice off of that marked attribute, but
+ * I have a feeling that isn't possible. Still looking though.
  */
 
 #include "../structures.h"
@@ -34,19 +42,22 @@ double force_in_x(struct molt_t *molt, int id);
 double force_in_y(struct molt_t *molt, int id);
 double force_in_z(struct molt_t *molt, int id);
 
+/* softmolt_init : libsoftmolt constructor */
 __attribute__((constructor))
 int softmolt_init()
 {
 	return 0;
 }
 
+/* softmolt_free : libsoftmolt deconstructor */
 __attribute__((destructor))
 int softmolt_free()
 {
 	return 0;
 }
 
-int softmolt_doslice(struct molt_t *molt)
+/* doslice : computes the next molt timeslice using the CPU "naively" */
+int doslice(struct molt_t *molt)
 {
 	long i;
 
