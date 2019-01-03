@@ -15,15 +15,12 @@
  *
  * 2. Dynamic Computation Functions
  * 2c. Add command line parameter to define shared object.
- * 2f. Handle dynamic loading errors
- *     (getting function handles)
+ * 2f. Handle dynamic loading errors (getting function handles)
+ * 2g. Write modules using different technologies
  *
- *     Conceptually, these shared libs simply take a molt_t structure, and the
- *     simulation moves from the current time index to the next.
- *
- *     Each shared object that has module specific init/free code should use
- *     __attribute__((constructor)) and __attribute__((destructor)). Read more
- *     about this in the softmolt module.
+ *     CUDA
+ *     OpenCL - Maybe OpenGL
+ *     PThreading CPU
  *
  * 3. Threaded Writing
  *
@@ -45,12 +42,11 @@
  *     This depends on the simulation a user is trying to run, but at the time
  *     of typing, this seems to be a fair tradeoff.
  *
- * 4. Write and Test CUDA Accelerated set of MOLT Computations
- * 4a. Create CUDA binary and compile as a shared object
- * 4b. dlsym into that CUDA library successfully
- * 4c. Begin testing for comparisons
+ *     Note: Currently the program is optimized for a large number of particles
+ *     with a small number of iterations. Some intelligent checking for WAL size
+ *     or whatnot might be all it takes.
  *
- * 5. Dynamic Field Controls
+ * 4. Dynamic Field Controls
  *
  * Low Priority Issues
  * 1. Define a way to define a constant starting solution
@@ -181,7 +177,7 @@ int molt_init(sqlite3 *db, struct molt_t *molt, void **f, int argc, char **argv)
 	io_store_inforun(db, molt);
 
 	/* load up the dynamic code to perform the simulation */
-	*f = dlopen("./libsoftmolt.so", RTLD_LAZY);
+	*f = dlopen("./liboclmolt.so", RTLD_LAZY);
 
 	if (*f == NULL) {
 		ERRANDDIE(db, "Couldn't load shared object \"libsoftmolt.so\"");
@@ -392,10 +388,6 @@ int parse_double(char *str, double *out)
 	}
 
 	return scanned;
-}
-
-void random_init(struct molt_t *molt)
-{
 }
 
 /* parse_args_vec3 : parse a comma delimted vector string into a vec3_t */
