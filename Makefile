@@ -18,26 +18,10 @@ CC = cc
 LINKER = -ldl -lpthread
 FLAGS = -Wall -g3 -march=native
 TARGET = molt
-DYNSOFT = libsoftmolt.so
-DYNOCL  = liboclmolt.so
 SOURCES = $(wildcard src/*.c)
 OBJECTS = $(SOURCES:.c=.o)
-# Define preprocessor parameters to change defaults. Like number of default
-# particles, or the default simulation gridsize.
-PREPROCESSPARMS = -DDEFAULT_GRIDLEN=128 -DDEFAULT_PARTS=1024
 
-all: DYNOBJECTS $(TARGET)
-
-$(DYNSOFT):
-	# Compile the "normal" software implementation
-	$(CC) $(FLAGS) -fPIC -shared -o libsoftmolt.so src/mod/softmolt.c
-
-$(DYNOCL):
-	# Compile the OpenCL Implementation
-	$(CC) $(FLAGS) -fPIC -shared -o liboclmolt.so src/mod/oclmolt.c -lOpenCL
-	# With the OpenCL Kernels (load the binary at runtime)
-
-DYNOBJECTS: $(DYNSOFT) $(DYNOCL)
+all: $(TARGET)
 
 %.o: %.c
 	$(CC) -c $(FLAGS) $(PREPROCESSPARMS) -o $@ $<

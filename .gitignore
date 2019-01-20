@@ -5,9 +5,7 @@
 .gdb_history
 
 # don't put databases in git history either
-*.db
-*.db-shm
-*.db-wal
+*.dat
 
 # don't keep the binary in source control either
 molt
