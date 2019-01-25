@@ -27,7 +27,6 @@
 #include "calcs.h"
 
 #define DEFAULTFILE "data.dat"
-#define DEFAULTFILEFLAGS 0664
 
 int main(int argc, char **argv)
 {
@@ -41,30 +40,27 @@ int main(int argc, char **argv)
 		1, 8, 9
 	};
 
-	fd = io_open(DEFAULTFILE, DEFAULTFILEFLAGS);
+	fd = io_open(DEFAULTFILE);
 
 	io_resize(fd, 1024 * 16);
 
 	ptr = io_mmap(fd, 1024 * 16);
 	memset(ptr, 0, 1024 * 16);
 
-	for (i = 'A'; i < 'Z' + 1; i++, ptr++) {
-		*ptr = i;
-	}
-
 	io_munmap(ptr);
-	io_close(fd);
 
 	/* demonstrate inverse matrix */
 	n = sqrt(sizeof(mat) / sizeof(mat[0]));
 
-	printf("Original Matrix\n");
-	matprint(mat, n);
+	dprintf(fd, "Original Matrix\n");
+	matprint(fd, mat, n);
 
 	matinv(mat, n);
 
-	printf("\nInverted Matrix\n");
-	matprint(mat, n);
+	dprintf(fd, "\nInverted Matrix\n");
+	matprint(fd, mat, n);
+
+	io_close(fd);
 
 	return 0;
 }

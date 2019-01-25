@@ -5,7 +5,11 @@
  * Input-Output Subsystem
  */
 
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+#include <errno.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -15,6 +19,16 @@
 #include "io.h"
 
 size_t mapping_len;
+
+static void io_errnohandle()
+{
+	char buf[128];
+
+	memset(buf, 0, 128);
+
+	strerror_r(errno, buf, sizeof(buf));
+	fprintf(stderr, "%s\n", buf);
+}
 
 /* mmap_wrap : wrap mmap to avoid passing our program's needs */
 void *io_mmap(int fd, size_t size)
@@ -46,14 +60,15 @@ int io_munmap(void *ptr)
 	return rc;
 }
 
-int io_open(char *name, int flags)
+int io_open(char *name)
 {
 	int rc;
 
-	rc = open(name, O_RDWR | O_CREAT, flags);
+	rc = open(name, O_RDWR | O_CREAT, 0666);
 
 	if (rc < 0) {
 		/* errno_error */
+		io_errnohandle();
 	}
 
 	return rc;

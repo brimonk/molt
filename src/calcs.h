@@ -10,7 +10,7 @@
  */
 
 /* matprint : function to print out an NxN matrix */
-void matprint(double *mat, int n);
+void matprint(int fd, double *mat, int n);
 
 /* matinv : given an n x n matrix, perform Gauss-Jordan elimination, in place */
 int matinv(double *mat, int n);

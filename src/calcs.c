@@ -7,20 +7,25 @@
  * Includes:
  *   matinv   - Matrix Inversion (Gauss-Jordan Elim)
  *   matprint - Matrix Printing (Debugging Only)
+ *
+ * TODO
+ * 1. test matinv
  */
 
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
 
+#define WORKINGSTACKSIZE 144
+
 /* matprint : function to print out an NxN matrix */
-void matprint(double *mat, int n)
+void matprint(int fd, double *mat, int n)
 {
 	int i, j;
 
 	for (i = 0; i < n; i++) {
 		for (j = 0; j < n; j++) {
-			printf("%.3f%c", mat[i * n + j], j == n - 1 ? '\n' : '\t');
+			dprintf(fd, "%.3f%c", mat[i * n + j], j == n - 1 ? '\n' : '\t');
 		}
 	}
 }
@@ -32,24 +37,23 @@ int matinv(double *mat, int n)
 	 * Attempt to perform Gauss-Jordan Elimination to find a matrix's inversion,
 	 * "in-place"
 	 *
-	 * This function gets cludgy for the personal requirement that it needs to
-	 * appear to work in-place. That means, no extra memory can be sent in. No
-	 * tricks of moving about the matrix from 0 -> 2 * n. Nothing like that.
-	 * Therefore, any loop that requires to perform such iterations are broken
-	 * up into two portions. One that works on the input 'mat', and one that
-	 * works on the entirely internal 'stack'.
+	 * This function gets cludgy for the requirement that it needs to appear to
+	 * work in-place. To avoid passing in working space memory, some working
+	 * space is created on the stack and used. This avoids operating system
+	 * calls with the downside being it's only suited for a
+	 * sqrt(WORKINGSTACKSIZE)^2 matrix.
 	 *
-	 * The first section is the "left", pre-augmented side.
+	 * In every place where the algorithm would wipe from the "left" column
+	 * to the "right" column, the algorithm is busted up into two segments, one
+	 * iteration for the input "left" matrix, and one for the working space,
+	 * "right".
 	 *
-	 * The second section is the "right", post-augmented portion of the matrix.
-	 *
-	 * TL;DR:
-	 *   Better interface for more writing.
+	 * TL;DR: Better, faster interface for typing.
 	 *
 	 * There be Dragons Here
 	 */
 
-	double stack[100], tmp; /* working space for at most a 10x10 matrix */
+	double stack[WORKINGSTACKSIZE], tmp; /* working space at most a 12x12 mat */
 	int i, j, k;
 
 	if (10 < n) {
@@ -63,12 +67,7 @@ int matinv(double *mat, int n)
 		stack[i * n + i] = 1;
 	}
 
-#if 0
-	printf("MATRIX\n");
-	matprint(mat, n);
-#endif
-
-	/* interchange step (TODO brian: check if this can actually be skipped) */
+	/* row interchange step */
 	for (i = n - 1; i > 0; i--) {
 		if (mat[i - 1] < mat[i]) {
 			for (j = 0; j < n; j++) { /* left */
@@ -117,18 +116,10 @@ int matinv(double *mat, int n)
 		}
 	}
 
-#if 0
-	printf("Row Replace\n");
-	matprint(mat, n);
-	matprint(stack, n);
-#endif
-
-
 	/* 
 	 * multiply each row by a nonzero integer, then divide row elements by the
 	 * diagonal element
 	 */
-
 	for (i = 0; i < n; i++) {
 		tmp = mat[i * n + i];
 
@@ -140,11 +131,6 @@ int matinv(double *mat, int n)
 			stack[i * n + j] = stack[i * n + j] / tmp;
 		}
 	}
-
-#if 0
-	printf("INV\n");
-	matprint(stack, n);
-#endif
 
 	memcpy(mat, stack, sizeof(double) * n * n);
 
