@@ -19,13 +19,13 @@
 #define WORKINGSTACKSIZE 144
 
 /* matprint : function to print out an NxN matrix */
-void matprint(int fd, double *mat, int n)
+void matprint(double *mat, int n)
 {
 	int i, j;
 
 	for (i = 0; i < n; i++) {
 		for (j = 0; j < n; j++) {
-			dprintf(fd, "%.3f%c", mat[i * n + j], j == n - 1 ? '\n' : '\t');
+			printf("%.3f%c", mat[i * n + j], j == n-1 ?'\n':'\t');
 		}
 	}
 }
