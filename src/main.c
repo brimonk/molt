@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -23,14 +24,22 @@
 #include "io.h"
 #include "structures.h"
 #include "vect.h"
+#include "calcs.h"
 
 #define DEFAULTFILE "data.dat"
 #define DEFAULTFILEFLAGS 0664
 
 int main(int argc, char **argv)
 {
-	int fd, i;
+	int fd, i, n;
 	char *ptr;
+
+	double mat[] =
+	{
+		4, 1, 8,
+		3,-4, 3,
+		1, 8, 9
+	};
 
 	fd = io_open(DEFAULTFILE, DEFAULTFILEFLAGS);
 
@@ -45,6 +54,17 @@ int main(int argc, char **argv)
 
 	io_munmap(ptr);
 	io_close(fd);
+
+	/* demonstrate inverse matrix */
+	n = sqrt(sizeof(mat) / sizeof(mat[0]));
+
+	printf("Original Matrix\n");
+	matprint(mat, n);
+
+	matinv(mat, n);
+
+	printf("\nInverted Matrix\n");
+	matprint(mat, n);
 
 	return 0;
 }

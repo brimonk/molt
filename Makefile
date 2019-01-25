@@ -15,7 +15,7 @@
 # DYNOBJECTS (dynamic object) target.
 
 CC = cc
-LINKER = -ldl -lpthread
+LINKER = -ldl -lm
 FLAGS = -Wall -g3 -march=native
 TARGET = molt
 SOURCES = $(wildcard src/*.c)
