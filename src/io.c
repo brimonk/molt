@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "io.h"
+#include "shared.h"
 
 size_t mapping_len;
 
@@ -98,5 +99,85 @@ int io_close(int fd)
 	}
 
 	return rc;
+}
+
+/* lump functions */
+
+/* io_lumpcheck : 0 if file has correct magic, else if it doesn't */
+int io_lumpcheck(void *ptr)
+{
+	struct lump_header_t *hdr;
+
+	hdr = ptr;
+	if (hdr->magic != MOLTLUMP_MAGIC) {
+		hdr->magic = MOLTLUMP_MAGIC;
+		hdr->version = MOLTCURRVERSION;
+		hdr->type = MOLTLUMP_TYPEBIO;
+
+		return 1;
+	}
+
+	return 0;
+}
+
+int io_lumpsetup(void *ptr)
+{
+	/*
+	 * just an example, store three lump_pot_ts, then store a matrix
+	 */
+
+	struct lump_header_t *hdr;
+
+	struct lump_pos_t *pos;
+	struct lump_mat_t *mat;
+
+	int i;
+
+	hdr = ptr;
+
+	/* setup and handle the */
+	hdr->lump[0].offset = sizeof(struct lump_header_t) + 1;
+	hdr->lump[0].size = sizeof(struct lump_pos_t) * 3;
+
+	pos = io_lumpgetid(ptr, MOLTLUMP_POSITIONS);
+
+	for (i = 0; i < 3; i++) {
+		pos[i].x = i * 3 + i;
+		pos[i].y = i * 3 - i;
+		pos[i].z = i * 3 * i;
+	}
+
+	return 0;
+}
+
+/* io_lumpgetid : gets a pointer to the lump via enum */
+void *io_lumpgetid(void *ptr, int idx)
+{
+	struct lump_header_t *hdr;
+
+	hdr = ptr;
+
+	return (void *)(((char *)ptr) + hdr->lump[idx].offset);
+}
+
+/* io_lumprecnum : returns the number of records that lump has */
+int io_lumprecnum(void *ptr, int idx)
+{
+	struct lump_header_t *hdr;
+	size_t val;
+
+	hdr = ptr;
+
+	switch (idx) {
+		case MOLTLUMP_POSITIONS:
+			val = sizeof(struct lump_pos_t);
+			break;
+
+		case MOLTLUMP_MATRIX:
+			val = sizeof(struct lump_mat_t);
+			break;
+	}
+
+	return hdr->lump[idx].size / val;
 }
 

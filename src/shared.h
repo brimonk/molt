@@ -8,6 +8,20 @@
 #ifndef MOLTSHARED
 #define MOLTSHARED
 
+#include <stdint.h>
+
+/* quick and dirty, cleaner typedefs */
+typedef uint8_t  u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+typedef int8_t   s8;
+typedef int16_t  s16;
+typedef int32_t  s32;
+typedef int64_t  s64;
+typedef float    f32;
+typedef double   f64;
+
 /* begin by defining vectors of multiple dimensionality */
 typedef double vec_t;
 typedef vec_t vec2_t[2];
@@ -58,9 +72,45 @@ typedef vec_t vec6_t[6];
 #define VectorPrint(a) \
 	(printf("%lf, %lf, %lf\n", (a)[0], (a)[1], (a)[2]))
 
-/*
- * define useful structures to order hold together run information
- */
+/* define simulation information */
+
+#define MOLTLUMP_MAGIC *(int *)"MOLT"
+#define MOLTCURRVERSION 1
+
+enum { /* type values */
+	MOLTLUMP_TYPEBIO, /* biological */
+	MOLTLUMP_TYPEPLA, /* plasma kinematics */
+};
+
+enum {
+	MOLTLUMP_POSITIONS,
+	MOLTLUMP_MATRIX
+};
+
+struct lump_t {
+	uint32_t offset; /* in bytes from the beginning */
+	uint32_t size;   /* in bytes, total. record_number = size / sizeof(x) */
+};
+
+struct lump_header_t {
+	uint32_t magic;
+	uint16_t version;
+	uint16_t type;
+	struct lump_t lump[2];
+};
+
+struct lump_pos_t {
+	/* uses MOLTLUMP_POSITIONS */
+	u16 x;
+	u16 y;
+	u16 z;
+};
+
+struct lump_mat_t {
+	/* uses MOLTLUMP_MATRIX */
+	u16 n;
+	f64 *mat;
+};
 
 #endif
 
