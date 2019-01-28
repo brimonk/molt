@@ -10,6 +10,9 @@
  *
  * TODO
  * 1. test matinv
+ * 2. write flipud
+ * 3. write vander generating func
+ * 4. Vector * Matrix, left multiplication
  */
 
 #include <stdio.h>
@@ -56,7 +59,7 @@ int matinv(double *mat, int n)
 	double stack[WORKINGSTACKSIZE], tmp; /* working space at most a 12x12 mat */
 	int i, j, k;
 
-	if (10 < n) {
+	if (12 < n) {
 		return 1;
 	}
 
