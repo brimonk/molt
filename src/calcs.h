@@ -9,6 +9,9 @@
  *   matprint - Matrix Printing (Debugging Only)
  */
 
+/* matvander : function to write a vandermonde matrix in mat from vect */
+void matvander(double *mat, double *vect, int n);
+
 /* matprint : function to print out an NxN matrix */
 void matprint(double *mat, int n);
 

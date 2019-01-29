@@ -32,12 +32,10 @@ int main(int argc, char **argv)
 	int fd, i, n;
 	char *ptr;
 
-	double mat[] =
-	{
-		4, 1, 8,
-		3,-4, 3,
-		1, 8, 9
-	};
+	double initset[] = {-2, -1, 0, 1, 2};
+	double mat[512];
+
+	memset(mat, 0, sizeof(double) * 512);
 
 	fd = io_open(DEFAULTFILE);
 
@@ -54,9 +52,19 @@ int main(int argc, char **argv)
 
 	pos = io_lumpgetid(ptr, MOLTLUMP_POSITIONS);
 
+	printf("{");
+	for (i = 0; i < 3; i++) {
+		printf("%lf%s", initset[i], i == 2 ? "}\n" : ", ");
+	}
+
+	matvander(mat, initset, 5);
+	matprint(mat, 5);
+
+#if 0
 	for (i = 0; i < io_lumprecnum(ptr, MOLTLUMP_POSITIONS); i++) {
 		printf("%d\t%d\t%d\n", pos[i].x, pos[i].y, pos[i].z);
 	}
+#endif
 
 	io_munmap(ptr);
 	io_close(fd);

@@ -21,6 +21,21 @@
 
 #define WORKINGSTACKSIZE 144
 
+/* matvander : create an NxN vandermonde matrix, from vector vect */
+void matvander(double *mat, double *vect, int n)
+{
+	int i, j, k;
+
+	k = 0;
+
+	for (i = n - 1; 0 <= i; i--) {
+		for (j = 0; j < n; j++) {
+			mat[j * n + i] = pow(vect[j], k);
+		}
+		k++;
+	}
+}
+
 /* matprint : function to print out an NxN matrix */
 void matprint(double *mat, int n)
 {
