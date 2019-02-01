@@ -1,33 +1,37 @@
 # Implementation of Method of Lines Transpose (MOLT)
 
 This project aims to create a proper implementation of MOLT, researched by
-Matthew Causley, Andrew Christlieb, and others.
+Matthew Causley, Andrew Christlieb, et al.
 
-## Program Structure
+## Installation
 
-Because this task is simply so huge, I've decided not only to divide my labor
-into multiple pieces, but to also divide the program's labor into multiple
-portions. Ideally, initial conditions are fed into the actual simulation
-program, and the state at various time intervals are simply recorded for
-later use.
+Installation requires a Linux machine with GCC and GNU Make installed.
 
-This allows for the project to operate in multiple steps, and for various
-simulation viewers to exist for various purposes, while not modifying the
-core simulation code at all.
+Reason for this is that the program heavily relies on memory-mapped files by way
+of mmap, and the Makefile I've written generates Makefile rules from each C
+source file. GCC automates this process, and effectively, will rebuild the
+portions of a program that need it when a header file changes.
 
-### Still To Do
+To install, run the following:
 
-1. Port the Matlab wave solver into C (C89)
-2. Extend portions of that serial C program to be parallelized in CUDA.
-3. Port Matlab code for a Particle-in-cell (PIC) solver, implementing
-   in both C and CUDA.
+```
+git clone https://github.com/brimonk/molt.git
+cd molt/
+make
+```
 
-4. Bolt the two together. Analyze for correctness.
-5. Write simulation viewer (either full 3d program, or a series of images
-   stitched together.
+And you'll be left with a binary called, `molt` in that directory.
 
-#### Considerations
+## Usage
 
-1. GPU/CPU optimizations
+_Usage Details Will Go Here When The Program Gets Close to Completion_
 
-	* Translate arrays of structures into structures of arrays for increased memory throughput
+## Implementation Details
+
+To allow the program to have a chance at being able to simulate interesting
+things, the program attempts to `mmap` some space on disk, as working space for
+the simulation. This data is expected to be filled with binary content, and for
+helper/visualization programs, it is expected this file has Little Endian data
+within.
+
+*Warning*: Not a lot of thought went into how to make this portable.

@@ -17,9 +17,13 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <limits.h>
+#include <float.h>
 #include <math.h>
 
-#define WORKINGSTACKSIZE 144
+#include "calcs.h"
+
+#define WORKINGSTACKSIZE  144
 
 /* matvander : create an NxN vandermonde matrix, from vector vect */
 void matvander(double *mat, double *vect, int n)
@@ -153,5 +157,94 @@ int matinv(double *mat, int n)
 	memcpy(mat, stack, sizeof(double) * n * n);
 
 	return 0;
+}
+
+/* cumsum : perform a cumulative sum over elem along dimension dim */
+void cumsum(double *elem, int len)
+{
+	/* this function models octave behavior, not what it states it does IMO */
+	double curr;
+	int i;
+
+	for (i = 0, curr = 0.0; i < len; i++) {
+		curr += elem[i];
+		elem[i] = curr;
+	}
+}
+
+/* exp_coeff : find the exponential coefficients, given nu and M */
+void exp_coeff(double *phi, int outlen, double nu)
+{
+	double d;
+	int i, sizem;
+
+	/*
+	 * WARNING: the passed in outlen NEEDS to be one "greater than" the initial
+	 * M value, as this *also* operates in place.
+	 */
+
+	memset(phi, 0, sizeof(double) * outlen);
+	sizem = outlen - 1; /* get the "real" size value */
+
+	/* seed the value of phi, and work backwards */
+	phi[sizem] = exp_int(nu, sizem);
+
+	d = exp(-nu);
+
+	for (i = sizem - 1; i >= 0; i--) {
+		phi[i] = nu / (i + 1) * (phi[i + 1] + d);
+	}
+}
+
+/* exp_int : perform an exponential integral (???) */
+double exp_int(double nu, int sizem)
+{
+	double t, s, k, d, phi;
+
+	d = exp(-nu);
+
+	if (nu < 1) { /* avoid precision loss by using a Taylor Series */
+		t = 1;
+		s = 0;
+		k = 1;
+
+		printf("precision %lf\n", DBL_EPSILON);
+		while (t > DBL_EPSILON) {
+			t = t * nu / (sizem + k);
+			s = s + t;
+			k++;
+		}
+
+		phi = d * s;
+
+	} else {
+		t = 1;
+		s = 1;
+
+		for (k = 0; k < sizem; k++) {
+			t = t * nu / k;
+			s = s + t;
+		}
+
+		phi = (1 - d * s) / t;
+	}
+
+	return phi;
+}
+
+/* vm_mult : vector matrix multiply */
+void vm_mult(double *out, double *invect, double *inmat,
+		int outlen, int invectlen, int inmatn)
+{
+	/* inmatn is the side length of our hopefully square matrix */
+	int i, j;
+
+	memset(out, 0, outlen * sizeof(double));
+
+	for (i = 0; i < inmatn; i++) {
+		for (j = 0; j < inmatn; j++) {
+			out[i] = out[i] + invect[j] * inmat[j * inmatn + i];
+		}
+	}
 }
  

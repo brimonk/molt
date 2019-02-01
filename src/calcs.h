@@ -17,3 +17,16 @@ void matprint(double *mat, int n);
 
 /* matinv : given an n x n matrix, perform Gauss-Jordan elimination, in place */
 int matinv(double *mat, int n);
+
+/* cumsum : perform a cumulative sum over elem along dimension dim */
+void cumsum(double *elem, int len);
+
+/* exp_coeff : find the exponential coefficients, given nu and M */
+void exp_coeff(double *phi, int outlen, double nu);
+
+/* exp_int : perform an exponentially recursive integral (???) */
+double exp_int(double nu, int sizem);
+
+/* vm_mult : vector matrix multiply */
+void vm_mult(double *out, double *invect, double *inmat,
+		int outlen, int invectlen, int inmatn);
