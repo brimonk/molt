@@ -32,10 +32,10 @@ int main(int argc, char **argv)
 	int fd, i, n;
 	char *ptr;
 
-	double mat[] =
-	{
-		1, 2, 3, 4, 5, 6, 7, 8, 9
-	};
+	double mat[7];
+	// {
+	// 	1, 2, 3, 4, 5, 6, 7
+	// };
 
 	fd = io_open(DEFAULTFILE);
 
@@ -52,19 +52,23 @@ int main(int argc, char **argv)
 
 	pos = io_lumpgetid(ptr, MOLTLUMP_POSITIONS);
 
+	/* test lumrecord IO */
 #if 0
 	for (i = 0; i < io_lumprecnum(ptr, MOLTLUMP_POSITIONS); i++) {
 		printf("%d\t%d\t%d\n", pos[i].x, pos[i].y, pos[i].z);
 	}
 #endif
 
-	printf("Phi: %8.20lf\n", exp_int(1.6469E-08, 6));
+	/* test exp_coeff */
+#if 1
+	exp_coeff(mat, 7, 1.6469E-08);
+	for (i = 0; i < 7; i++) {
+		printf("%.10e\n", mat[i]);
+	}
+#endif
 
 	io_munmap(ptr);
 	io_close(fd);
-
-	cumsum(mat, 9);
-	matprint(mat, 3);
 
 	return 0;
 }

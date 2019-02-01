@@ -21,6 +21,8 @@
 #include <float.h>
 #include <math.h>
 
+#include "calcs.h"
+
 #define WORKINGSTACKSIZE  144
 
 /* matprint : function to print out an NxN matrix */
@@ -152,6 +154,30 @@ void cumsum(double *elem, int len)
 	for (i = 0, curr = 0.0; i < len; i++) {
 		curr += elem[i];
 		elem[i] = curr;
+	}
+}
+
+/* exp_coeff : find the exponential coefficients, given nu and M */
+void exp_coeff(double *phi, int outlen, double nu)
+{
+	double d;
+	int i, sizem;
+
+	/*
+	 * WARNING: the passed in outlen NEEDS to be one "greater than" the initial
+	 * M value, as this *also* operates in place.
+	 */
+
+	memset(phi, 0, sizeof(double) * outlen);
+	sizem = outlen - 1; /* get the "real" size value */
+
+	/* seed the value of phi, and work backwards */
+	phi[sizem] = exp_int(nu, sizem);
+
+	d = exp(-nu);
+
+	for (i = sizem - 1; i >= 0; i--) {
+		phi[i] = nu / (i + 1) * (phi[i + 1] + d);
 	}
 }
 
