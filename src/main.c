@@ -58,6 +58,8 @@ int main(int argc, char **argv)
 	}
 #endif
 
+	printf("Phi: %8.20lf\n", exp_int(1.6469E-08, 6));
+
 	io_munmap(ptr);
 	io_close(fd);
 

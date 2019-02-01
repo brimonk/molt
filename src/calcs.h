@@ -17,3 +17,6 @@ int matinv(double *mat, int n);
 
 /* cumsum : perform a cumulative sum over elem along dimension dim */
 void cumsum(double *elem, int len);
+
+/* exp_int : perform an exponentially recursive integral (???) */
+double exp_int(double nu, int sizem);

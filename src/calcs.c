@@ -17,9 +17,11 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <limits.h>
+#include <float.h>
 #include <math.h>
 
-#define WORKINGSTACKSIZE 144
+#define WORKINGSTACKSIZE  144
 
 /* matprint : function to print out an NxN matrix */
 void matprint(double *mat, int n)
@@ -151,5 +153,41 @@ void cumsum(double *elem, int len)
 		curr += elem[i];
 		elem[i] = curr;
 	}
+}
+
+/* exp_int : perform an exponential integral (???) */
+double exp_int(double nu, int sizem)
+{
+	double t, s, k, d, phi;
+
+	d = exp(-nu);
+
+	if (nu < 1) { /* avoid precision loss by using a Taylor Series */
+		t = 1;
+		s = 0;
+		k = 1;
+
+		printf("precision %lf\n", DBL_EPSILON);
+		while (t > DBL_EPSILON) {
+			t = t * nu / (sizem + k);
+			s = s + t;
+			k++;
+		}
+
+		phi = d * s;
+
+	} else {
+		t = 1;
+		s = 1;
+
+		for (k = 0; k < sizem; k++) {
+			t = t * nu / k;
+			s = s + t;
+		}
+
+		phi = (1 - d * s) / t;
+	}
+
+	return phi;
 }
  
