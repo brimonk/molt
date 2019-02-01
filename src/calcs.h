@@ -14,3 +14,6 @@ void matprint(double *mat, int n);
 
 /* matinv : given an n x n matrix, perform Gauss-Jordan elimination, in place */
 int matinv(double *mat, int n);
+
+/* cumsum : perform a cumulative sum over elem along dimension dim */
+void cumsum(double *elem, int len);

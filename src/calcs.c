@@ -139,4 +139,17 @@ int matinv(double *mat, int n)
 
 	return 0;
 }
+
+/* cumsum : perform a cumulative sum over elem along dimension dim */
+void cumsum(double *elem, int len)
+{
+	/* this function models octave behavior, not what it states it does IMO */
+	double curr;
+	int i;
+
+	for (i = 0, curr = 0.0; i < len; i++) {
+		curr += elem[i];
+		elem[i] = curr;
+	}
+}
  

@@ -34,9 +34,7 @@ int main(int argc, char **argv)
 
 	double mat[] =
 	{
-		4, 1, 8,
-		3,-4, 3,
-		1, 8, 9
+		1, 2, 3, 4, 5, 6, 7, 8, 9
 	};
 
 	fd = io_open(DEFAULTFILE);
@@ -54,12 +52,17 @@ int main(int argc, char **argv)
 
 	pos = io_lumpgetid(ptr, MOLTLUMP_POSITIONS);
 
+#if 0
 	for (i = 0; i < io_lumprecnum(ptr, MOLTLUMP_POSITIONS); i++) {
 		printf("%d\t%d\t%d\n", pos[i].x, pos[i].y, pos[i].z);
 	}
+#endif
 
 	io_munmap(ptr);
 	io_close(fd);
+
+	cumsum(mat, 9);
+	matprint(mat, 3);
 
 	return 0;
 }
