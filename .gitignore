@@ -1,6 +1,9 @@
 # ignore all object files
 *.o
 
+# also ignore makefile rules generation
+*.d
+
 # ignore .gdb_history
 .gdb_history
 
