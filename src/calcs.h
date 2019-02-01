@@ -23,3 +23,7 @@ void exp_coeff(double *phi, int outlen, double nu);
 
 /* exp_int : perform an exponentially recursive integral (???) */
 double exp_int(double nu, int sizem);
+
+/* vm_mult : vector matrix multiply */
+void vm_mult(double *out, double *invect, double *inmat,
+		int outlen, int invectlen, int inmatn);

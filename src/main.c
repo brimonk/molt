@@ -26,16 +26,26 @@
 #include "shared.h"
 
 #define DEFAULTFILE "data.dat"
+#define DBL_MACRO_SIZE(x) sizeof(x) / sizeof(double)
 
 int main(int argc, char **argv)
 {
 	int fd, i, n;
 	char *ptr;
 
-	double mat[7];
-	// {
-	// 	1, 2, 3, 4, 5, 6, 7
-	// };
+	double mat[] =
+	{
+		1, 2, 3, 4,
+		5, 6, 7, 8,
+		9,10,11,12,
+	   13,14,15,16
+	};
+	double vector[] =
+	{
+		1, 2, 3, 4
+	};
+
+	double space[DBL_MACRO_SIZE(vector)];
 
 	fd = io_open(DEFAULTFILE);
 
@@ -60,11 +70,25 @@ int main(int argc, char **argv)
 #endif
 
 	/* test exp_coeff */
-#if 1
+#if 0
 	exp_coeff(mat, 7, 1.6469E-08);
 	for (i = 0; i < 7; i++) {
 		printf("%.10e\n", mat[i]);
 	}
+#endif
+
+#if 1 /* test vm_mult */
+	memset(space, 0, sizeof(space));
+
+	vm_mult(space, vector, mat,
+			DBL_MACRO_SIZE(vector),
+			DBL_MACRO_SIZE(vector),
+			sqrt(DBL_MACRO_SIZE(mat)));
+
+	for (i = 0; i < DBL_MACRO_SIZE(space); i++) {
+		printf("%.10e\n", space[i]);
+	}
+
 #endif
 
 	io_munmap(ptr);
