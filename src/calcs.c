@@ -16,14 +16,55 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 #include <float.h>
 #include <math.h>
 
 #include "calcs.h"
+#include "common.h"
 
 #define WORKINGSTACKSIZE  144
+
+/* get_exp_weights : construct local weights for int up to order M */
+void get_exp_weights(double *nu, double **wl, double **wr,
+		int nulen, int orderm)
+{
+	int i, j;
+	double *x, *phi, *ind;
+
+	x = malloc(sizeof(double) * (nulen + 1));
+	phi = malloc(sizeof(double) * (nulen + 1));
+	ind = malloc(sizeof(double) * (nulen + 1));
+	*wl = malloc(sizeof(double) * nulen * (orderm + 1));
+	*wr = malloc(sizeof(double) * nulen * (orderm + 1));
+
+	if (!x || !*wr || !*wl || !phi) {
+		PRINT_AND_DIE("Couldn't Get Enough Memory");
+	}
+
+	/* zero out our left and right working space */
+	memset(*wl, 0, sizeof(double) * nulen * (orderm + 1));
+	memset(*wr, 0, sizeof(double) * nulen * (orderm + 1));
+
+	/* get the cumulative sum, store in X */
+	memcpy(x + 1, nu, sizeof(double) * nulen);
+
+	for (i = 0; i < orderm / 2; i++) { /* perform the left stencil */
+		exp_coeff(phi, nulen + 1, nu[i]);
+	}
+
+	for (; i < nulen - orderm / 2; i++) { /* perform the middle stencil */
+		exp_coeff(phi, nulen + 1, nu[i]);
+	}
+
+	for (; i < nulen; i++) { /* perform the right stencil */
+		exp_coeff(phi, nulen + 1, nu[i]);
+	}
+
+	free(x);
+}
 
 /* matvander : create an NxN vandermonde matrix, from vector vect */
 void matvander(double *mat, double *vect, int n)
@@ -173,7 +214,7 @@ void cumsum(double *elem, int len)
 }
 
 /* exp_coeff : find the exponential coefficients, given nu and M */
-void exp_coeff(double *phi, int outlen, double nu)
+void exp_coeff(double *phi, int philen, double nu)
 {
 	double d;
 	int i, sizem;
@@ -183,8 +224,8 @@ void exp_coeff(double *phi, int outlen, double nu)
 	 * M value, as this *also* operates in place.
 	 */
 
-	memset(phi, 0, sizeof(double) * outlen);
-	sizem = outlen - 1; /* get the "real" size value */
+	memset(phi, 0, sizeof(double) * philen);
+	sizem = philen - 1; /* get the "real" size value */
 
 	/* seed the value of phi, and work backwards */
 	phi[sizem] = exp_int(nu, sizem);

@@ -9,6 +9,13 @@
  *   matprint - Matrix Printing (Debugging Only)
  */
 
+#ifndef MOLT_CALCS
+#define MOLT_CALCS
+
+/* get_exp_weights : construct local weights for int up to order M */
+void get_exp_weights(double *nu, double **wl, double **wr,
+		int nulen, int orderm);
+
 /* matvander : function to write a vandermonde matrix in mat from vect */
 void matvander(double *mat, double *vect, int n);
 
@@ -22,7 +29,7 @@ int matinv(double *mat, int n);
 void cumsum(double *elem, int len);
 
 /* exp_coeff : find the exponential coefficients, given nu and M */
-void exp_coeff(double *phi, int outlen, double nu);
+void exp_coeff(double *phi, int philen, double nu);
 
 /* exp_int : perform an exponentially recursive integral (???) */
 double exp_int(double nu, int sizem);
@@ -30,3 +37,5 @@ double exp_int(double nu, int sizem);
 /* vm_mult : vector matrix multiply */
 void vm_mult(double *out, double *invect, double *inmat,
 		int outlen, int invectlen, int inmatn);
+
+#endif

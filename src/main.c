@@ -33,25 +33,14 @@ int main(int argc, char **argv)
 	int fd, i, n;
 	char *ptr;
 
-	double initset[] = { -2, -1, 0, 1, 2 };
-	double vanderwork[512];
+	double nu[100];
+	double *wl, *wr;
 
-	double mat[] =
-	{
-		1, 2, 3, 4,
-		5, 6, 7, 8,
-		9,10,11,12,
-	   13,14,15,16
-	};
-	double vector[] =
-	{
-		1, 2, 3, 4
-	};
+	for (i = 0; i < 100; i++) {
+		nu[i] = (double)i;
+	}
 
-	double space[DBL_MACRO_SIZE(vector)];
-
-	memset(vanderwork, 0, 512 * sizeof(double));
-	memcpy(vanderwork, mat, sizeof(mat));
+	get_exp_weights(nu, &wl, &wr, 100, 6);
 
 	fd = io_open(DEFAULTFILE);
 
@@ -67,6 +56,13 @@ int main(int argc, char **argv)
 	struct lump_pos_t *pos;
 
 	pos = io_lumpgetid(ptr, MOLTLUMP_POSITIONS);
+
+	io_munmap(ptr);
+	io_close(fd);
+
+	return 0;
+}
+
 
 #if 0 /* test lumrecord IO */
 	for (i = 0; i < io_lumprecnum(ptr, MOLTLUMP_POSITIONS); i++) {
@@ -104,10 +100,3 @@ int main(int argc, char **argv)
 	}
 
 #endif
-
-	io_munmap(ptr);
-	io_close(fd);
-
-	return 0;
-}
-
