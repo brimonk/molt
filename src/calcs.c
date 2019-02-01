@@ -224,11 +224,11 @@ void vm_mult(double *out, double *invect, double *inmat,
 	/* inmatn is the side length of our hopefully square matrix */
 	int i, j;
 
-	memset(out, 0, sizeof(outlen) * sizeof(double));
+	memset(out, 0, outlen * sizeof(double));
 
 	for (i = 0; i < inmatn; i++) {
 		for (j = 0; j < inmatn; j++) {
-			out[i] = out[i] + invect[j] * inmat[i * inmatn + j];
+			out[i] = out[i] + invect[j] * inmat[j * inmatn + i];
 		}
 	}
 }
