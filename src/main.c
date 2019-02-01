@@ -33,6 +33,9 @@ int main(int argc, char **argv)
 	int fd, i, n;
 	char *ptr;
 
+	double initset[] = { -2, -1, 0, 1, 2 };
+	double vanderwork[512];
+
 	double mat[] =
 	{
 		1, 2, 3, 4,
@@ -46,6 +49,9 @@ int main(int argc, char **argv)
 	};
 
 	double space[DBL_MACRO_SIZE(vector)];
+
+	memset(vanderwork, 0, 512 * sizeof(double));
+	memcpy(vanderwork, mat, sizeof(mat));
 
 	fd = io_open(DEFAULTFILE);
 
@@ -62,18 +68,20 @@ int main(int argc, char **argv)
 
 	pos = io_lumpgetid(ptr, MOLTLUMP_POSITIONS);
 
-	printf("{");
-	for (i = 0; i < 3; i++) {
-		printf("%lf%s", initset[i], i == 2 ? "}\n" : ", ");
-	}
-
-	matvander(mat, initset, 5);
-	matprint(mat, 5);
-
 #if 0 /* test lumrecord IO */
 	for (i = 0; i < io_lumprecnum(ptr, MOLTLUMP_POSITIONS); i++) {
 		printf("%d\t%d\t%d\n", pos[i].x, pos[i].y, pos[i].z);
 	}
+#endif
+
+#if 0 /* test matvander */
+	printf("{");
+	for (i = 0; i < 5; i++) {
+		printf("%lf%s", initset[i], i == 4 ? "}\n" : ", ");
+	}
+
+	matvander(mat, initset, 5);
+	matprint(mat, 5);
 #endif
 
 #if 0 /* test exp_coeff */
@@ -83,7 +91,7 @@ int main(int argc, char **argv)
 	}
 #endif
 
-#if 1 /* test vm_mult */
+#if 0 /* test vm_mult */
 	memset(space, 0, sizeof(space));
 
 	vm_mult(space, vector, mat,
