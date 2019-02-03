@@ -31,39 +31,79 @@
 void get_exp_weights(double *nu, double **wl, double **wr,
 		int nulen, int orderm)
 {
-	int i, j;
-	double *x, *phi, *ind;
+	int i, j, k;
+	int rowlen, reallen;
+	double *x, *phi, *workvect_r, *workvect_l;
+	double *workmat_r, *workmat_l;
 
-	x = malloc(sizeof(double) * (nulen + 1));
-	phi = malloc(sizeof(double) * (nulen + 1));
-	ind = malloc(sizeof(double) * (nulen + 1));
-	*wl = malloc(sizeof(double) * nulen * (orderm + 1));
-	*wr = malloc(sizeof(double) * nulen * (orderm + 1));
+	rowlen = orderm + 1;
+	reallen = nulen + 1;
 
-	if (!x || !*wr || !*wl || !phi) {
+	/* retrieve temporary working space from the operating system */
+	x          = calloc(sizeof(double), reallen);
+	phi        = calloc(sizeof(double), rowlen);
+	workvect_r = calloc(sizeof(double), rowlen);
+	workvect_l = calloc(sizeof(double), rowlen);
+	workmat_r  = calloc(sizeof(double), rowlen * rowlen);
+	workmat_l  = calloc(sizeof(double), rowlen * rowlen);
+
+	/* WARNING : this memory is "returned" to the user */
+	*wl = calloc(sizeof(double), nulen * rowlen);
+	*wr = calloc(sizeof(double), nulen * rowlen);
+
+	if (!x || !*wr || !*wl || !phi ||
+			!workvect_r || !workvect_l || !workmat_r || !workmat_l) {
 		PRINT_AND_DIE("Couldn't Get Enough Memory");
 	}
 
-	/* zero out our left and right working space */
-	memset(*wl, 0, sizeof(double) * nulen * (orderm + 1));
-	memset(*wr, 0, sizeof(double) * nulen * (orderm + 1));
-
 	/* get the cumulative sum, store in X */
 	memcpy(x + 1, nu, sizeof(double) * nulen);
+	cumsum(x, reallen);
 
-	for (i = 0; i < orderm / 2; i++) { /* perform the left stencil */
-		exp_coeff(phi, nulen + 1, nu[i]);
-	}
+	for (i = 0; i < nulen; i++) {
+		/* get the current coefficients */
+		exp_coeff(phi, rowlen, nu[i]);
 
-	for (; i < nulen - orderm / 2; i++) { /* perform the middle stencil */
-		exp_coeff(phi, nulen + 1, nu[i]);
-	}
+		/* determine what indicies we need to operate over */
+		j = get_exp_ind(i, nulen, orderm);
 
-	for (; i < nulen; i++) { /* perform the right stencil */
-		exp_coeff(phi, nulen + 1, nu[i]);
+		/* fill our our Z vectors */
+		for (k = 0; k < rowlen; k++) { /* TODO (Brian): feels wonky */
+			workvect_l[k] = (x[j + k] - x[i]) / nu[i];
+			workvect_r[k] = (x[i + 1] - x[j + k]) / nu[i];
+		}
+
+		/* determine and find our vandermonde matrix */
+		matvander(workmat_l, workvect_l, rowlen);
+		matvander(workmat_r, workvect_r, rowlen);
+
+		/* invert both of them */
+		matinv(workmat_l, rowlen);
+		matinv(workmat_r, rowlen);
+
+		/* multiply our phi vector with our working matrix, giving the answer */
+		vm_mult((*wl) + (i * rowlen), phi, workmat_l, rowlen);
+		vm_mult((*wr) + (i * rowlen), phi, workmat_r, rowlen);
 	}
 
 	free(x);
+	free(phi);
+	free(workvect_r);
+	free(workvect_l);
+	free(workmat_r);
+	free(workmat_l);
+}
+
+/* get_exp_ind : get indexes of X for get_exp_weights */
+int get_exp_ind(int i, int n, int m)
+{
+	if (i <= m / 2) {
+		return 0;
+	} else if (n - m / 2 <= i) {
+		return n - m;
+	} else {
+		return i + -m / 2;
+	}
 }
 
 /* matvander : create an NxN vandermonde matrix, from vector vect */
@@ -220,12 +260,12 @@ void exp_coeff(double *phi, int philen, double nu)
 	int i, sizem;
 
 	/*
-	 * WARNING: the passed in outlen NEEDS to be one "greater than" the initial
+	 * WARNING: the passed in philen NEEDS to be one greater than the initial
 	 * M value, as this *also* operates in place.
 	 */
 
 	memset(phi, 0, sizeof(double) * philen);
-	sizem = philen - 1; /* get the "real" size value */
+	sizem = philen - 1; /* use sizem as an index */
 
 	/* seed the value of phi, and work backwards */
 	phi[sizem] = exp_int(nu, sizem);
@@ -249,7 +289,6 @@ double exp_int(double nu, int sizem)
 		s = 0;
 		k = 1;
 
-		printf("precision %lf\n", DBL_EPSILON);
 		while (t > DBL_EPSILON) {
 			t = t * nu / (sizem + k);
 			s = s + t;
@@ -273,18 +312,17 @@ double exp_int(double nu, int sizem)
 	return phi;
 }
 
-/* vm_mult : vector matrix multiply */
-void vm_mult(double *out, double *invect, double *inmat,
-		int outlen, int invectlen, int inmatn)
+/* vm_mult : perform vector matrix multiplication */
+void vm_mult(double *out, double *invect, double *inmat, int singledim)
 {
 	/* inmatn is the side length of our hopefully square matrix */
 	int i, j;
 
-	memset(out, 0, outlen * sizeof(double));
+	memset(out, 0, singledim * sizeof(double));
 
-	for (i = 0; i < inmatn; i++) {
-		for (j = 0; j < inmatn; j++) {
-			out[i] = out[i] + invect[j] * inmat[j * inmatn + i];
+	for (i = 0; i < singledim; i++) {
+		for (j = 0; j < singledim; j++) {
+			out[i] = out[i] + invect[j] * inmat[j * singledim + i];
 		}
 	}
 }

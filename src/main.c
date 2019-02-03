@@ -24,23 +24,43 @@
 #include "io.h"
 #include "calcs.h"
 #include "shared.h"
+#include "config.h"
 
 #define DEFAULTFILE "data.dat"
 #define DBL_MACRO_SIZE(x) sizeof(x) / sizeof(double)
 
 int main(int argc, char **argv)
 {
-	int fd, i, n;
+	int fd, i, j, n;
 	char *ptr;
 
-	double nu[100];
+	double nu[MOLT_TOTALWIDTH];
+	double x[MOLT_TOTALWIDTH + 1];
 	double *wl, *wr;
 
-	for (i = 0; i < 100; i++) {
-		nu[i] = (double)i;
+	for (i = 0; i < MOLT_TOTALWIDTH + 1; i++) {
+		x[i] = i * MOLT_STEPINX;
+		printf("%d\t%lf\n", i, x[i]);
 	}
 
-	get_exp_weights(nu, &wl, &wr, 100, 6);
+	for (i = 0; i < MOLT_TOTALWIDTH; i++) {
+		nu[i] = MOLT_ALPHA * (x[i + 1] - x[i]);
+		printf("%d\t%.8E\n", i, nu[i]);
+	}
+
+	get_exp_weights(nu, &wl, &wr, MOLT_TOTALWIDTH, MOLT_SPACEACC);
+
+#if 0
+	printf("WL Results\n");
+	for (i = 0; i < 101; i++) {
+		printf("%lf%c", wl[i], i == 7 ? '\n' : '\t');
+	}
+
+	printf("WR Results\n");
+	for (i = 0; i < 101; i++) {
+		printf("%lf%c", wr[i], i == 7 ? '\n' : '\t');
+	}
+#endif
 
 	fd = io_open(DEFAULTFILE);
 
@@ -59,6 +79,9 @@ int main(int argc, char **argv)
 
 	io_munmap(ptr);
 	io_close(fd);
+
+	// free(wr);
+	// free(wl);
 
 	return 0;
 }

@@ -16,6 +16,9 @@
 void get_exp_weights(double *nu, double **wl, double **wr,
 		int nulen, int orderm);
 
+/* get_exp_ind : get indexes of X for get_exp_weights */
+int get_exp_ind(int i, int n, int m);
+
 /* matvander : function to write a vandermonde matrix in mat from vect */
 void matvander(double *mat, double *vect, int n);
 
@@ -34,8 +37,7 @@ void exp_coeff(double *phi, int philen, double nu);
 /* exp_int : perform an exponentially recursive integral (???) */
 double exp_int(double nu, int sizem);
 
-/* vm_mult : vector matrix multiply */
-void vm_mult(double *out, double *invect, double *inmat,
-		int outlen, int invectlen, int inmatn);
+/* vm_mult : perform vector matrix multiplication */
+void vm_mult(double *out, double *invect, double *inmat, int singledim);
 
 #endif
