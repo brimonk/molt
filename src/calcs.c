@@ -2,17 +2,12 @@
  * Brian Chrzanowski
  * Tue Jan 22, 2019 21:51
  *
- * a collection of fancy Matlab operations that aren't trivial for computers
- *
- * Includes:
- *   matinv   - Matrix Inversion (Gauss-Jordan Elim)
- *   matprint - Matrix Printing (Debugging Only)
+ * A collection of fancy Matlab operations that aren't trivial for computers.
  *
  * TODO
- * 1. test matinv
- * 2. write flipud
- * 3. write vander generating func
- * 4. Vector * Matrix, left multiplication
+ * 1. Complete Get_Exp_Weights conversion
+ * 2. Prefix functions required to do that
+ * 3. Declare functions as static where not needed in public interface
  */
 
 #include <stdio.h>
@@ -75,13 +70,11 @@ void get_exp_weights(double *nu, double **wl, double **wr,
 			workvect_l[k] = (x[i + 1] - x[j + k]) / nu[i];
 		}
 
-		/* determine and find our vandermonde matrix */
-		matvander(workmat_l, workvect_l, rowlen);
-		matvander(workmat_r, workvect_r, rowlen);
+		invvan(workmat_l, workvect_l, rowlen);
+		invvan(workmat_r, workvect_r, rowlen);
 
-		/* invert both of them */
-		matinv(workmat_l, rowlen);
-		matinv(workmat_r, rowlen);
+		// matflip(workmat_l, rowlen);
+		// matflip(workmat_r, rowlen);
 
 		/* multiply our phi vector with our working matrix, giving the answer */
 		vm_mult((*wl) + (i * rowlen), phi, workmat_l, rowlen);
@@ -135,97 +128,50 @@ void matprint(double *mat, int n)
 	}
 }
 
-/* matinv : given an n x n matrix, perform Gauss-Jordan elimination, in place */
-int matinv(double *mat, int n)
+/* invvan : create an inverted vandermonde matrix */
+void invvan(double *mat, double *vect, int len)
 {
-	/*
-	 * Attempt to perform Gauss-Jordan Elimination to find a matrix's inversion,
-	 * "in-place"
-	 *
-	 * This function gets cludgy for the requirement that it needs to appear to
-	 * work in-place. To avoid passing in working space memory, some working
-	 * space is created on the stack and used. This avoids operating system
-	 * calls with the downside being it's only suited for a
-	 * sqrt(WORKINGSTACKSIZE)^2 matrix.
-	 *
-	 * In every place where the algorithm would wipe from the "left" column
-	 * to the "right" column, the algorithm is busted up into two segments, one
-	 * iteration for the input "left" matrix, and one for the working space,
-	 * "right".  
-	 * TL;DR: Better, faster interface for typing.
-	 *
-	 * There be Dragons Here
-	 */
+	double workvect[WORKINGSTACKN];
+	int i, j;
 
-	double ftmp;
-	int row, col, dim;
-	int i, j, k, itmp;
+	/* clear off some space */
+	memset(workvect, 0, WORKINGSTACKN * sizeof(double));
+	memset(mat, 0, len * len * sizeof(double));
 
-	double invmat[WORKINGSTACKN][WORKINGSTACKN * 2];
+	for (i = 0; i < len; i++) {
+	}
+}
 
-	dim = n;
-	// dim = 4;
+/* polyget : find coeff of a polyynomial with roots in src. store in dst */
+void polyget(double *dst, double *src, int dstlen, int srclen)
+{
+	double workvect[WORKINGSTACKN];
+	int i, j;
 
-	for (row = 0; row < dim; row++) {
-		for (col = 0; col < 2 * dim; col++) {
-			if (col < dim) { // copy into our working space matrix
-				invmat[row][col] = mat[row * dim + col];
-			} else {
-				if (row == col % dim)
-					invmat[row][col] = 1;
-				else
-					invmat[row][col] = 0;
-			}
-		}
+	if (dstlen != srclen + 1) {
+		return; /* should probably assert error */
 	}
 
-	/* --- USING GAUSS-JORDAN ELIMINATION --- */
-	for (j = 0; j<dim; j++){
-		itmp = j;
+	memset(workvect, 0, sizeof(workvect));
+	memset(dst,      0, sizeof(double) * dstlen);
 
-		/* finding maximum jth column element in last (dim-j) rows */
+	dst[0] = 1; /* leading coefficient is assumed as 1 */
 
-		for (i = j + 1; i<dim; i++)
-		if (invmat[i][j]>invmat[itmp][j])
-			itmp = i;
+	for (i = 0; i < srclen; i++) {
+		memcpy(workvect, dst, dstlen * sizeof(double));
 
-		if (fabs(invmat[itmp][j]) < MINVAL){
-			printf("\n Elements are too small to deal with !!!");
-			break;
-		}
-
-		/* swapping row which has maximum jth column element */
-
-		if (itmp != j)
-		for (k = 0; k < 2 * dim; k++){
-			ftmp = invmat[j][k];
-			invmat[j][k] = invmat[itmp][k];
-			invmat[itmp][k] = ftmp;
-		}
-
-		/* performing row operations to form required identity matrix out of the input matrix */
-
-		for (i = 0; i < dim; i++) {
-			ftmp = invmat[i][j];
-			for (k = 0; k < 2 * dim; k++) {
-				if (i != j){
-					invmat[i][k] -= (invmat[j][k] / invmat[j][j]) * ftmp;
-				} else{
-					invmat[i][k] /= ftmp;
-				}
-			}
-		}
-
-	}
-
-	/* copy our output matrix back to the source */
-	for (row = 0; row < dim; row++) {
-		for (col = 0; col < dim; col++) {
-			mat[row * dim + col] = invmat[row][col + dim];
+		for (j = 1; j <= i + 1; j++) {
+			dst[j] = workvect[j] - src[i] * workvect[j - 1];
 		}
 	}
+}
 
-	return 0;
+void polydiv()
+{
+}
+
+void polyval()
+{
 }
 
 /* cumsum : perform a cumulative sum over elem along dimension dim */

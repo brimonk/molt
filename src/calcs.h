@@ -25,8 +25,11 @@ void matvander(double *mat, double *vect, int n);
 /* matprint : function to print out an NxN matrix */
 void matprint(double *mat, int n);
 
-/* matinv : given an n x n matrix, perform Gauss-Jordan elimination, in place */
-int matinv(double *mat, int n);
+/* invvan : create an inverted vandermonde matrix */
+void invvan(double *mat, double *vect, int len);
+
+/* polyget : find coeff of a polyynomial with roots in src. store in dst */
+void polyget(double *dst, double *src, int dstlen, int srclen);
 
 /* cumsum : perform a cumulative sum over elem along dimension dim */
 void cumsum(double *elem, int len);

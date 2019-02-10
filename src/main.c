@@ -38,13 +38,12 @@ int main(int argc, char **argv)
 	double x[MOLT_TOTALWIDTH + 1];
 	double *wl, *wr;
 
-	double mat[] = {
-		1, 2, 4, 5,
-		6, 8, 2,-3,
-		4, 4,10,11,
-		1,-8, 6,88
-	};
+	double vectz[] = {-2, -1, 0, 1, 2, 3, 4};
+	double matz[49];
 
+	polyget(matz, vectz, 8, 7);
+
+#if 0
 	for (i = 0; i < MOLT_TOTALWIDTH + 1; i++) {
 		x[i] = i * MOLT_STEPINX;
 		// printf("%d\t%lf\n", i, x[i]);
@@ -88,6 +87,7 @@ int main(int argc, char **argv)
 	// free(wr);
 	// free(wl);
 
+#endif
 	return 0;
 }
 
