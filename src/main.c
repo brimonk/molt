@@ -45,21 +45,14 @@ int main(int argc, char **argv)
 		1,-8, 6,88
 	};
 
-	printf("BEFORE\n");
-	matprint(mat, 4);
-	matinv(mat, 4);
-	printf("AFTER\n");
-	matprint(mat, 4);
-
-#if 0
 	for (i = 0; i < MOLT_TOTALWIDTH + 1; i++) {
 		x[i] = i * MOLT_STEPINX;
-		printf("%d\t%lf\n", i, x[i]);
+		// printf("%d\t%lf\n", i, x[i]);
 	}
 
 	for (i = 0; i < MOLT_TOTALWIDTH; i++) {
 		nu[i] = MOLT_ALPHA * (x[i + 1] - x[i]);
-		printf("%d\t%.8E\n", i, nu[i]);
+		// printf("%d\t%.8E\n", i, nu[i]);
 	}
 
 	get_exp_weights(nu, &wl, &wr, MOLT_TOTALWIDTH, MOLT_SPACEACC);
@@ -73,7 +66,6 @@ int main(int argc, char **argv)
 	for (i = 0; i < 101; i++) {
 		printf("%lf%c", wr[i], i == 7 ? '\n' : '\t');
 	}
-#endif
 
 	fd = io_open(DEFAULTFILE);
 

@@ -26,7 +26,7 @@
 #include "common.h"
 
 // #define WORKINGSTACKSIZE  144
-#define MINVAL 0.00000005
+#define MINVAL 0.0000000000005
 #define WORKINGSTACKN 12
 
 /* get_exp_weights : construct local weights for int up to order M */
@@ -71,8 +71,8 @@ void get_exp_weights(double *nu, double **wl, double **wr,
 
 		/* fill our our Z vectors */
 		for (k = 0; k < rowlen; k++) { /* TODO (Brian): feels wonky */
-			workvect_l[k] = (x[j + k] - x[i]) / nu[i];
-			workvect_r[k] = (x[i + 1] - x[j + k]) / nu[i];
+			workvect_r[k] = (x[j + k] - x[i]) / nu[i];
+			workvect_l[k] = (x[i + 1] - x[j + k]) / nu[i];
 		}
 
 		/* determine and find our vandermonde matrix */
