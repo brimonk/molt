@@ -25,7 +25,9 @@
 #include "calcs.h"
 #include "common.h"
 
-#define WORKINGSTACKSIZE  144
+// #define WORKINGSTACKSIZE  144
+#define MINVAL 0.00000005
+#define WORKINGSTACKN 12
 
 /* get_exp_weights : construct local weights for int up to order M */
 void get_exp_weights(double *nu, double **wl, double **wr,
@@ -149,93 +151,79 @@ int matinv(double *mat, int n)
 	 * In every place where the algorithm would wipe from the "left" column
 	 * to the "right" column, the algorithm is busted up into two segments, one
 	 * iteration for the input "left" matrix, and one for the working space,
-	 * "right".
-	 *
+	 * "right".  
 	 * TL;DR: Better, faster interface for typing.
 	 *
 	 * There be Dragons Here
 	 */
 
-	double stack[WORKINGSTACKSIZE], tmp; /* working space at most a 12x12 mat */
-	int i, j, k;
+	double ftmp;
+	int row, col, dim;
+	int i, j, k, itmp;
 
-	if (12 < n) {
-		return 1;
-	}
+	double invmat[WORKINGSTACKN][WORKINGSTACKN * 2];
 
-	memset(stack, 0, sizeof(double) * n * n);
+	dim = n;
+	// dim = 4;
 
-	/* fill the tmp matrix with an identity */
-	for (i = 0; i < n; i++) {
-		stack[i * n + i] = 1;
-	}
-
-	/* row interchange step */
-	for (i = n - 1; i > 0; i--) {
-		if (mat[i - 1] < mat[i]) {
-			for (j = 0; j < n; j++) { /* left */
-				/* swap 'em */
-				tmp = mat[i * n + j];
-				mat[i * n + j] = mat[(i - 1) * n + j];
-				mat[(i - 1) * n + j] = tmp;
-			}
-
-			for (j = 0; j < n; j++) { /* right */
-				tmp = stack[i * n + j];
-				stack[i * n + j] = stack[(i - 1) * n + j];
-				stack[(i - 1) * n + j] = tmp;
+	for (row = 0; row < dim; row++) {
+		for (col = 0; col < 2 * dim; col++) {
+			if (col < dim) { // copy into our working space matrix
+				invmat[row][col] = mat[row * dim + col];
+			} else {
+				if (row == col % dim)
+					invmat[row][col] = 1;
+				else
+					invmat[row][col] = 0;
 			}
 		}
 	}
 
-	/* replace a row by sum of itself and const mul of another matrix row */
-	for (i = 0; i < n; i++) {
-		for (j = 0; j < n; j++) { /* left */
-			if (j != i) {
-				tmp = mat[j * n + i] / mat[i * n + i];
-				for (k = 0; k < n; k++) { /* left */
-					mat[j * n + k] -= mat[i * n + k] * tmp;
-					// mat[j * n + k] -= mat[i * k] * tmp;
-				}
+	/* --- USING GAUSS-JORDAN ELIMINATION --- */
+	for (j = 0; j<dim; j++){
+		itmp = j;
 
-				for (k = 0; k < n; k++) { /* right */
-					stack[j * n + k] -= stack[i * n + k] * tmp;
+		/* finding maximum jth column element in last (dim-j) rows */
+
+		for (i = j + 1; i<dim; i++)
+		if (invmat[i][j]>invmat[itmp][j])
+			itmp = i;
+
+		if (fabs(invmat[itmp][j]) < MINVAL){
+			printf("\n Elements are too small to deal with !!!");
+			break;
+		}
+
+		/* swapping row which has maximum jth column element */
+
+		if (itmp != j)
+		for (k = 0; k < 2 * dim; k++){
+			ftmp = invmat[j][k];
+			invmat[j][k] = invmat[itmp][k];
+			invmat[itmp][k] = ftmp;
+		}
+
+		/* performing row operations to form required identity matrix out of the input matrix */
+
+		for (i = 0; i < dim; i++) {
+			ftmp = invmat[i][j];
+			for (k = 0; k < 2 * dim; k++) {
+				if (i != j){
+					invmat[i][k] -= (invmat[j][k] / invmat[j][j]) * ftmp;
+				} else{
+					invmat[i][k] /= ftmp;
 				}
 			}
 		}
 
-		for (j = 0; j < n; j++) { /* right */
-			if (j != i) {
-				tmp = mat[j * n + i] / mat[i * n + i];
-				for (k = 0; k < n; k++) { /* left */
-					stack[j * n + k] -= mat[i * n + k] * tmp;
-					// mat[j * n + k] -= mat[i * k] * tmp;
-				}
-
-				for (k = 0; k < n; k++) { /* right */
-					stack[j * n + k] -= mat[i * n + k] * tmp;
-				}
-			}
-		}
 	}
 
-	/* 
-	 * multiply each row by a nonzero integer, then divide row elements by the
-	 * diagonal element
-	 */
-	for (i = 0; i < n; i++) {
-		tmp = mat[i * n + i];
-
-		for (j = 0; j < n; j++) { /* left */
-			mat[i * n + j] = mat[i * n + j] / tmp;
-		}
-
-		for (j = 0; j < n; j++) { /* right */
-			stack[i * n + j] = stack[i * n + j] / tmp;
+	/* copy our output matrix back to the source */
+	for (row = 0; row < dim; row++) {
+		for (col = 0; col < dim; col++) {
+			mat[row * dim + col] = invmat[row][col + dim];
 		}
 	}
-
-	memcpy(mat, stack, sizeof(double) * n * n);
 
 	return 0;
 }

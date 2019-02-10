@@ -38,6 +38,20 @@ int main(int argc, char **argv)
 	double x[MOLT_TOTALWIDTH + 1];
 	double *wl, *wr;
 
+	double mat[] = {
+		1, 2, 4, 5,
+		6, 8, 2,-3,
+		4, 4,10,11,
+		1,-8, 6,88
+	};
+
+	printf("BEFORE\n");
+	matprint(mat, 4);
+	matinv(mat, 4);
+	printf("AFTER\n");
+	matprint(mat, 4);
+
+#if 0
 	for (i = 0; i < MOLT_TOTALWIDTH + 1; i++) {
 		x[i] = i * MOLT_STEPINX;
 		printf("%d\t%lf\n", i, x[i]);
@@ -50,7 +64,6 @@ int main(int argc, char **argv)
 
 	get_exp_weights(nu, &wl, &wr, MOLT_TOTALWIDTH, MOLT_SPACEACC);
 
-#if 0
 	printf("WL Results\n");
 	for (i = 0; i < 101; i++) {
 		printf("%lf%c", wl[i], i == 7 ? '\n' : '\t');
