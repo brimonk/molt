@@ -31,6 +31,12 @@ void invvan(double *mat, double *vect, int len);
 /* polyget : find coeff of a polyynomial with roots in src. store in dst */
 void polyget(double *dst, double *src, int dstlen, int srclen);
 
+/* polydiv : use synthetic division to find the coefficients the poly */
+void polydiv(double *dst, double *src, double scale, int dstlen, int srclen);
+
+/* polyval : evaluate a polynomial at x = z */
+double polyval(double *vect, double scale, int vectlen);
+
 /* cumsum : perform a cumulative sum over elem along dimension dim */
 void cumsum(double *elem, int len);
 

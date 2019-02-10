@@ -38,10 +38,13 @@ int main(int argc, char **argv)
 	double x[MOLT_TOTALWIDTH + 1];
 	double *wl, *wr;
 
+	double tmp;
+
 	double vectz[] = {-2, -1, 0, 1, 2, 3, 4};
 	double matz[49];
 
-	polyget(matz, vectz, 8, 7);
+	invvan(matz, vectz, 7);
+	matprint(matz, 7);
 
 #if 0
 	for (i = 0; i < MOLT_TOTALWIDTH + 1; i++) {

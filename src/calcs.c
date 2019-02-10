@@ -15,8 +15,8 @@
 #include <string.h>
 #include <limits.h>
 #include <float.h>
-#include <math.h>
-
+#include <assert.h>
+#include <math.h> 
 #include "calcs.h"
 #include "common.h"
 
@@ -123,22 +123,35 @@ void matprint(double *mat, int n)
 
 	for (i = 0; i < n; i++) {
 		for (j = 0; j < n; j++) {
-			printf("%.3f%c", mat[i * n + j], j == n-1 ?'\n':'\t');
+			printf("%.3e%c", mat[i * n + j], j == n-1 ?'\n':'\t');
 		}
 	}
 }
 
-/* invvan : create an inverted vandermonde matrix */
+/* invvan : create an inverted Vandermonde matrix */
 void invvan(double *mat, double *vect, int len)
 {
-	double workvect[WORKINGSTACKN];
+	double workvect_a[WORKINGSTACKN], workvect_b[WORKINGSTACKN];
+	double currpolyval;
 	int i, j;
 
+	assert(len < WORKINGSTACKN);
+
 	/* clear off some space */
-	memset(workvect, 0, WORKINGSTACKN * sizeof(double));
-	memset(mat, 0, len * len * sizeof(double));
+	memset(workvect_a, 0, sizeof(workvect_b));
+	memset(workvect_b, 0, sizeof(workvect_b));
+	memset(mat, 0, len * len * sizeof(*mat));
+
+	/* get coefficients of p(x) = (x - Z1) ... (x - Zlen) */
+	polyget(workvect_a, vect, len + 1, len);
 
 	for (i = 0; i < len; i++) {
+		polydiv(workvect_b, workvect_a, vect[i], len, len + 1);
+		currpolyval = polyval(workvect_b, vect[i], len);
+
+		for (j = 0; j < len; j++) { /* MATLAB : mat(:,i) = b / p */
+			mat[j * len + i] = workvect_b[j] / currpolyval;
+		}
 	}
 }
 
@@ -148,9 +161,7 @@ void polyget(double *dst, double *src, int dstlen, int srclen)
 	double workvect[WORKINGSTACKN];
 	int i, j;
 
-	if (dstlen != srclen + 1) {
-		return; /* should probably assert error */
-	}
+	assert(dstlen == srclen + 1);
 
 	memset(workvect, 0, sizeof(workvect));
 	memset(dst,      0, sizeof(double) * dstlen);
@@ -166,12 +177,36 @@ void polyget(double *dst, double *src, int dstlen, int srclen)
 	}
 }
 
-void polydiv()
+/* polydiv : use synthetic division to find the coefficients the poly */
+void polydiv(double *dst, double *src, double scale, int dstlen, int srclen)
 {
+	/* 
+	 * Performs "b(x) = a(x) / (x - z)" in place
+	 */
+
+	int i;
+
+	assert(dstlen == srclen - 1);
+
+	memset(dst, 0, sizeof(double) * dstlen);
+	dst[0] = src[0];
+
+	for (i = 1; i < dstlen; i++) {
+		dst[i] = src[i] + scale * dst[i - 1];
+	}
 }
 
-void polyval()
+/* polyval : evaluate a polynomial at x = z */
+double polyval(double *vect, double scale, int vectlen)
 {
+	double retval;
+	int i;
+
+	for (retval = vect[0], i = 1; i < vectlen; i++) {
+		retval = retval * scale + vect[i];
+	}
+
+	return retval;
 }
 
 /* cumsum : perform a cumulative sum over elem along dimension dim */
