@@ -17,6 +17,7 @@
 #include <float.h>
 #include <assert.h>
 #include <math.h> 
+
 #include "calcs.h"
 #include "common.h"
 
@@ -73,8 +74,8 @@ void get_exp_weights(double *nu, double **wl, double **wr,
 		invvan(workmat_l, workvect_l, rowlen);
 		invvan(workmat_r, workvect_r, rowlen);
 
-		// matflip(workmat_l, rowlen);
-		// matflip(workmat_r, rowlen);
+		matflip(workmat_l, rowlen);
+		matflip(workmat_r, rowlen);
 
 		/* multiply our phi vector with our working matrix, giving the answer */
 		vm_mult((*wl) + (i * rowlen), phi, workmat_l, rowlen);
@@ -89,6 +90,23 @@ void get_exp_weights(double *nu, double **wl, double **wr,
 	free(workmat_l);
 }
 
+/* matflip : our implementation of Matlab's flipud */
+void matflip(double *mat, int n)
+{
+	/* flips mat about the horizontal axis (upside-down) */
+	double *ptra, *ptrb;
+	int i, j;
+
+	for (i = 0; i < n / 2; i++) {
+		ptra = &mat[i * n];
+		ptrb = &mat[(n - 1 - i) * n];
+
+		for (j = 0; j < n; j++) {
+			swapd(ptra++, ptrb++);
+		}
+	}
+}
+
 /* get_exp_ind : get indexes of X for get_exp_weights */
 int get_exp_ind(int i, int n, int m)
 {
@@ -98,21 +116,6 @@ int get_exp_ind(int i, int n, int m)
 		return n - m;
 	} else {
 		return i + -m / 2;
-	}
-}
-
-/* matvander : create an NxN vandermonde matrix, from vector vect */
-void matvander(double *mat, double *vect, int n)
-{
-	int i, j, k;
-
-	k = 0;
-
-	for (i = n - 1; 0 <= i; i--) {
-		for (j = 0; j < n; j++) {
-			mat[j * n + i] = pow(vect[j], k);
-		}
-		k++;
 	}
 }
 
@@ -292,6 +295,7 @@ void vm_mult(double *out, double *invect, double *inmat, int singledim)
 	for (i = 0; i < singledim; i++) {
 		for (j = 0; j < singledim; j++) {
 			out[i] = out[i] + invect[j] * inmat[j * singledim + i];
+			// out[i] = out[i] + invect[j] * inmat[i * singledim + j];
 		}
 	}
 }

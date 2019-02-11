@@ -25,6 +25,9 @@ void matvander(double *mat, double *vect, int n);
 /* matprint : function to print out an NxN matrix */
 void matprint(double *mat, int n);
 
+/* matflip : our implementation of Matlab's flipud */
+void matflip(double *mat, int n);
+
 /* invvan : create an inverted vandermonde matrix */
 void invvan(double *mat, double *vect, int len);
 

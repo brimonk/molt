@@ -38,15 +38,6 @@ int main(int argc, char **argv)
 	double x[MOLT_TOTALWIDTH + 1];
 	double *wl, *wr;
 
-	double tmp;
-
-	double vectz[] = {-2, -1, 0, 1, 2, 3, 4};
-	double matz[49];
-
-	invvan(matz, vectz, 7);
-	matprint(matz, 7);
-
-#if 0
 	for (i = 0; i < MOLT_TOTALWIDTH + 1; i++) {
 		x[i] = i * MOLT_STEPINX;
 		// printf("%d\t%lf\n", i, x[i]);
@@ -60,15 +51,22 @@ int main(int argc, char **argv)
 	get_exp_weights(nu, &wl, &wr, MOLT_TOTALWIDTH, MOLT_SPACEACC);
 
 	printf("WL Results\n");
-	for (i = 0; i < 101; i++) {
-		printf("%lf%c", wl[i], i == 7 ? '\n' : '\t');
+	for (i = 0; i < MOLT_TOTALWIDTH + 1; i++) {
+		for (j = 0; j < MOLT_SPACEACC + 1; j++)
+			printf("%.3e\t", wl[i * (MOLT_SPACEACC + 1) + j]);
+		printf("\n");
 	}
 
+#if 0
 	printf("WR Results\n");
-	for (i = 0; i < 101; i++) {
-		printf("%lf%c", wr[i], i == 7 ? '\n' : '\t');
+	for (i = 0; i < MOLT_TOTALWIDTH; i++) {
+		for (j = 0; j < MOLT_SPACEACC; j++)
+			printf("%.3e\t", wr[i]);
+		printf("\n");
 	}
+#endif
 
+#if 0
 	fd = io_open(DEFAULTFILE);
 
 	io_resize(fd, 1024 * 16);
@@ -86,11 +84,11 @@ int main(int argc, char **argv)
 
 	io_munmap(ptr);
 	io_close(fd);
-
-	// free(wr);
-	// free(wl);
-
 #endif
+
+	free(wr);
+	free(wl);
+
 	return 0;
 }
 
