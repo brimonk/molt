@@ -110,13 +110,37 @@ void matflip(double *mat, int n)
 /* get_exp_ind : get indexes of X for get_exp_weights */
 int get_exp_ind(int i, int n, int m)
 {
-	if (i <= m / 2) {
-		return 0;
-	} else if (n - m / 2 <= i) {
-		return n - m;
-	} else {
-		return i + -m / 2;
-	}
+	/*
+	 * there are "four" bounding points of this 1d situation.
+	 *
+	 *  0     - start
+	 *  m / 2 - left stencil edge
+	 *  n-m/2 - right stencil edge
+	 *  n     - end
+	 *
+	 *  Please PLEASE be careful editing this.
+	 */
+
+	int farleft, farright, left, right;
+	int rc;
+
+	i++;
+
+	farleft = 0;
+	left = m / 2;
+	right = n - m / 2;
+	farright = n;
+
+	if (farleft <= i && i < left)
+		rc = 0;
+
+	if (left <= i && i < right)
+		rc = i - m / 2;
+
+	if (right <= i && i <= farright)
+		rc = n - m;
+
+	return rc;
 }
 
 /* matprint : function to print out an NxN matrix */
