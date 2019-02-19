@@ -66,7 +66,7 @@ void get_exp_weights(double *nu, double **wl, double **wr,
 		j = get_exp_ind(i, nulen, orderm);
 
 		/* fill our our Z vectors */
-		for (k = 0; k < rowlen; k++) { /* TODO (Brian): feels wonky */
+		for (k = 0; k < rowlen; k++) {
 			workvect_r[k] = (x[j + k] - x[i]) / nu[i];
 			workvect_l[k] = (x[i + 1] - x[j + k]) / nu[i];
 		}

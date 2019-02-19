@@ -6,9 +6,15 @@
  *
  * TODO (Brian)
  *
- * 1. Implement Memory Mapped Storage
- * 2. Define a Binary File Format for aforementioned mmapped storage
- * 3. Implement GF_Quad and Get_Exp_Weights
+ * GF Quad
+ *  1. Better short comment description
+ *  2. 
+ *
+ * Storage
+ *  1. Setup more lumps
+ *  2. EField Storage
+ *  3. Permativity Storage
+ *  4. Weights Storage
  */
 
 #include <stdio.h>
@@ -51,20 +57,18 @@ int main(int argc, char **argv)
 	get_exp_weights(nu, &wl, &wr, MOLT_TOTALWIDTH, MOLT_SPACEACC);
 
 	printf("WL Results\n");
-	for (i = 0; i < MOLT_TOTALWIDTH + 1; i++) {
+	for (i = 0; i < MOLT_TOTALWIDTH; i++) {
 		for (j = 0; j < MOLT_SPACEACC + 1; j++)
 			printf("%.3e\t", wl[i * (MOLT_SPACEACC + 1) + j]);
 		printf("\n");
 	}
 
-#if 0
 	printf("WR Results\n");
 	for (i = 0; i < MOLT_TOTALWIDTH; i++) {
-		for (j = 0; j < MOLT_SPACEACC; j++)
-			printf("%.3e\t", wr[i]);
+		for (j = 0; j < MOLT_SPACEACC + 1; j++)
+			printf("%.3e\t", wr[i * (MOLT_SPACEACC + 1) + j]);
 		printf("\n");
 	}
-#endif
 
 #if 0
 	fd = io_open(DEFAULTFILE);
