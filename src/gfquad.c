@@ -12,11 +12,17 @@
 #include "shared.h"
 #include "calcs.h"
 
-f64 minarr(f64 *arr, s32 arrlen);
+static f64 minarr(f64 *arr, s32 arrlen);
+void gfquad_makel(f64 *wout, f64 *nu,
+		f64 *vl, f64 *vr, s32 vlen,
+		f64 *wl, f64 *wr, s32 wlen,
+		f64 wa, f64 wb, s32 orderm);
 
 /* sweepx : perform a molt sweep in x */
 void sweepx(f64 *uout, f64 *uin, f64 *nu, f64 *wl, f64 *wr, f64 *vl, f64 *vr,
-		s64 udimx, s64 udimy, s64 udimz, s64 nulen, s64 wlen, s64 vlen)
+		s64 udimx, s64 udimy, s64 udimz,
+		s64 nulen, s64 wlen, s64 vlen,
+		s64 orderm)
 {
 	s64 nx, ny, nz;
 	f64 *slice;
@@ -25,20 +31,16 @@ void sweepx(f64 *uout, f64 *uin, f64 *nu, f64 *wl, f64 *wr, f64 *vl, f64 *vr,
 		for (ny = 0; ny < udimy; ny++) {
 			/* retrieve */
 			slice = uin + IDX3D(0, ny, nz, udimy, udimz);
-
-			for (nx = 0; nx < udimx; nx++) {
-			}
+			gfquad_makel(slice, nu, vl, vr, vlen, wl, wr, wlen, 0, 0, orderm);
 		}
 	}
 }
 
-void gfquad_makel(
-		f64 *wout, f64 *nu,
+/* gfquad_makel : compute gfquad and operations for Dirchlet boundary conds */
+void gfquad_makel(f64 *wout, f64 *nu,
 		f64 *vl, f64 *vr, s32 vlen,
 		f64 *wl, f64 *wr, s32 wlen,
-		f64 wa, f64 wb, 
-		s32 orderm
-		)
+		f64 wa, f64 wb, s32 orderm)
 {
 	/*
 	 * gfquad_m call goes here
@@ -72,6 +74,7 @@ void gfquad_m(
 }
 
 /* minarr : finds the minimum f64 value in an array in linear time */
+static
 f64 minarr(f64 *arr, s32 arrlen)
 {
 	f64 retval;
