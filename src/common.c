@@ -16,12 +16,3 @@ void print_err_and_die(char *msg, char *file, int line)
 	exit(1);
 }
 
-/* swapd : swaps two doubles */
-void swapd(double *a, double *b)
-{
-	double tmp;
-
-	tmp = *a;
-	*a = *b;
-	*b = tmp;
-}

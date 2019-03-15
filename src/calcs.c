@@ -101,8 +101,8 @@ void matflip(double *mat, int n)
 		ptra = &mat[i * n];
 		ptrb = &mat[(n - 1 - i) * n];
 
-		for (j = 0; j < n; j++) {
-			swapd(ptra++, ptrb++);
+		for (j = 0; j < n; j++, ptra++, ptrb++) {
+			SWAP(*ptra, *ptrb, double);
 		}
 	}
 }

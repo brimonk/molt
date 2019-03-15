@@ -6,8 +6,9 @@
 #define IDX3D(x, y, z, ylen, zlen) \
 	((x) + ((y) * (ylen)) + ((z) * (ylen) * (zlen)))
 
+#define SWAP(x, y, T) do { T SWAP = x; x = y; y = SWAP; } while (0)
+
 void print_err_and_die(char *msg, char *file, int line);
-void swapd(double *a, double *b);
 
 #define PRINT_AND_DIE(x) (print_err_and_die((x), __FILE__, __LINE__))
 
