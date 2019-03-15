@@ -17,7 +17,7 @@
 #include <unistd.h>
 
 #include "io.h"
-#include "shared.h"
+#include "common.h"
 
 size_t mapping_len;
 

@@ -29,8 +29,8 @@
 
 #include "io.h"
 #include "calcs.h"
-#include "shared.h"
 #include "config.h"
+#include "gfquad.h"
 
 #define DEFAULTFILE "data.dat"
 #define DBL_MACRO_SIZE(x) sizeof(x) / sizeof(double)
@@ -40,8 +40,11 @@ int main(int argc, char **argv)
 	int fd, i, j, n;
 	char *ptr;
 
+	double out[MOLT_TOTALWIDTH];
+	double in[MOLT_TOTALWIDTH];
 	double nu[MOLT_TOTALWIDTH];
 	double x[MOLT_TOTALWIDTH + 1];
+	pvec2_t weights;
 	double *wl, *wr;
 
 	for (i = 0; i < MOLT_TOTALWIDTH + 1; i++) {
@@ -54,8 +57,17 @@ int main(int argc, char **argv)
 		// printf("%d\t%.8E\n", i, nu[i]);
 	}
 
-	get_exp_weights(nu, &wl, &wr, MOLT_TOTALWIDTH, MOLT_SPACEACC);
+	// get_exp_weights(nu, &wl, &wr, MOLT_TOTALWIDTH, MOLT_SPACEACC);
+	get_exp_weights(nu, &weights[0], &weights[1], MOLT_TOTALWIDTH, MOLT_SPACEACC);
 
+	gfquad_m(out, MOLT_TOTALWIDTH, in, MOLT_TOTALWIDTH, MOLT_SPACEACC,
+			nu, sizeof(nu)/sizeof(*nu), weights, MOLT_SPACEACC, MOLT_TOTALWIDTH);
+
+	for (i = 0; i < sizeof(out)/sizeof(*out); i++) {
+		printf("%lf\n", out[i]);
+	}
+
+#if 0
 	printf("WL Results\n");
 	for (i = 0; i < MOLT_TOTALWIDTH; i++) {
 		for (j = 0; j < MOLT_SPACEACC + 1; j++)
@@ -69,6 +81,7 @@ int main(int argc, char **argv)
 			printf("%.3e\t", wr[i * (MOLT_SPACEACC + 1) + j]);
 		printf("\n");
 	}
+#endif
 
 #if 0
 	fd = io_open(DEFAULTFILE);
@@ -90,8 +103,10 @@ int main(int argc, char **argv)
 	io_close(fd);
 #endif
 
-	free(wr);
-	free(wl);
+	//jfree(wr);
+	//jfree(wl);
+	free(weights[0]);
+	free(weights[1]);
 
 	return 0;
 }
