@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include <errno.h>
 #include <sys/mman.h>
@@ -26,11 +27,13 @@
 #include "io.h"
 #include "common.h"
 
-size_t mapping_len;
+static size_t mapping_len;
+char io_filename[256];
 
 /* function declarations */
 static int io_getpagesize();
 static void io_errnohandle();
+static int io_msync(void *base, void *ptr, size_t len, int flags);
 
 static void io_errnohandle()
 {
@@ -58,15 +61,23 @@ void *io_mmap(int fd, size_t size)
 	return ptr;
 }
 
+/* io_mssync : synchronous msync */
+int io_mssync(void *base, void *ptr, size_t len)
+{
+	return io_msync(base, ptr, len, MS_SYNC);
+}
+
+/* io_mssync : asynchronous msync */
+int io_masync(void *base, void *ptr, size_t len)
+{
+	return io_msync(base, ptr, len, MS_ASYNC);
+}
+
 /* io_msync : msync wrapper - ensures we write with a PAGESIZE multiple */
-int io_msync(void *base, void *ptr, size_t len, int flags)
+static int io_msync(void *base, void *ptr, size_t len, int flags)
 {
 	unsigned long addlsize;
 	int ret;
-
-	if (flags != MS_ASYNC) {
-		flags = MS_SYNC;
-	}
 
 	addlsize = ((unsigned long)ptr) % io_getpagesize();
 
@@ -78,11 +89,6 @@ int io_msync(void *base, void *ptr, size_t len, int flags)
 	}
 
 	return ret;
-}
-
-int io_masync(void *base, void *ptr, size_t len)
-{
-	return io_msync(base, ptr, len, MS_ASYNC);
 }
 
 /* io_getpagesize : wrapper for os independence */
@@ -115,7 +121,14 @@ int io_open(char *name)
 		io_errnohandle();
 	}
 
+	strncpy(io_filename, name, sizeof(io_filename));
+
 	return rc;
+}
+
+char *io_getfilename()
+{
+	return &io_filename[0];
 }
 
 int io_resize(int fd, size_t size)
@@ -222,5 +235,20 @@ int io_lumprecnum(void *ptr, int idx)
 	}
 
 	return hdr->lump[idx].size / val;
+}
+
+/* simple console message wrapper */
+
+/* io_fprintf : platform agnostic printf */
+int io_fprintf(FILE *fp, const char *fmt, ...)
+{
+	va_list plist;
+	int ret;
+
+	va_start(plist, fmt);
+	ret = vfprintf(fp, fmt, plist);
+	va_end(plist);
+
+	return ret;
 }
 

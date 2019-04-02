@@ -56,6 +56,10 @@ int main(int argc, char **argv)
 /* setup_simulation : sets up simulation based on config.h */
 void setup_simulation(void *base)
 {
+	// ensure we have a valid memory mapped file
+	if (io_lumpcheck(base)) {
+		io_fprintf(stdout, "Setting Up New File %s\n", io_getfilename());
+	}
 }
 
 /* applied_func : applies function "f" from the original source to data */
