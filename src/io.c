@@ -178,31 +178,6 @@ int io_lumpcheck(void *ptr)
 
 int io_lumpsetup(void *ptr)
 {
-	/*
-	 * just an example, store three lump_pot_ts, then store a matrix
-	 */
-
-	struct lump_header_t *hdr;
-
-	struct lump_pos_t *pos;
-	struct lump_mat_t *mat;
-
-	int i;
-
-	hdr = ptr;
-
-	/* setup and handle the */
-	hdr->lump[0].offset = sizeof(struct lump_header_t) + 1;
-	hdr->lump[0].size = sizeof(struct lump_pos_t) * 3;
-
-	pos = io_lumpgetid(ptr, MOLTLUMP_POSITIONS);
-
-	for (i = 0; i < 3; i++) {
-		pos[i].x = i * 3 + i;
-		pos[i].y = i * 3 - i;
-		pos[i].z = i * 3 * i;
-	}
-
 	return 0;
 }
 
@@ -220,21 +195,10 @@ void *io_lumpgetid(void *ptr, int idx)
 int io_lumprecnum(void *ptr, int idx)
 {
 	struct lump_header_t *hdr;
-	size_t val;
 
 	hdr = ptr;
 
-	switch (idx) {
-		case MOLTLUMP_POSITIONS:
-			val = sizeof(struct lump_pos_t);
-			break;
-
-		case MOLTLUMP_MATRIX:
-			val = sizeof(struct lump_mat_t);
-			break;
-	}
-
-	return hdr->lump[idx].size / val;
+	return hdr->lump[idx].lumpsize / hdr->lump[idx].elemsize;
 }
 
 /* simple console message wrapper */

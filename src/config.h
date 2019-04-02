@@ -8,6 +8,8 @@
 #ifndef MOLT_CONFIG
 #define MOLT_CONFIG
 
+#define CEILING(X, Y)   (((X) + (Y) - 1) / (Y))
+
 /* mathematical constants first */
 #define PI 3.14159265
 
@@ -26,34 +28,33 @@
 #define MOLT_TISSUESPEED     (MOLT_LIGHTSPEED / sqrt(MOLT_INFPERM))
 
 /* mesh parameters */
-#define MOLT_STEPINSEC       1E-2
-#define MOLT_STEPINX         2E-2 /* in meters */
-#define MOLT_STEPINY         2E-2 /* in meters */
-#define MOLT_STEPINZ         2E-2 /* in meters */
+#define MOLT_STEPINSEC       100
+#define MOLT_STEPINX         200 /* in cm */
+#define MOLT_STEPINY         200 /* in cm */
+#define MOLT_STEPINZ         200 /* in cm */
 
 #define MOLT_CFL \
 	(MOLT_TISSUESPEED * MOLT_STEPINSEC * \
 	 sqrt(1/pow(MOLT_STEPINX,2) + 1/pow(MOLT_STEPINY,2) \
 		 + 1/pow(MOLT_STEPINZ,2)) * 1E-10)
 
-
 /* dimension parameters */
-#define MOLT_SIMTIME         0.1 /* in seconds (steps are in picoseconds) */
-#define MOLT_DOMAINWIDTH     2 /* in meters */
-#define MOLT_DOMAINDEPTH     2 /* in meters */
-#define MOLT_DOMAINHEIGHT    2 /* in meters */
+#define MOLT_SIMTIME      0.1 /* in seconds (steps are in picoseconds) */
+#define MOLT_DOMAINWIDTH  2 /* in centimeters */
+#define MOLT_DOMAINDEPTH  2 /* in centimeters */
+#define MOLT_DOMAINHEIGHT 2 /* in centimeters */
 
-#define MOLT_TOTALSTEPS      ((long)(ceil(MOLT_SIMTIME/MOLT_STEPINSEC)))
-#define MOLT_TOTALWIDTH      ((long)(ceil(MOLT_DOMAINWIDTH/MOLT_STEPINX)))
-#define MOLT_TOTALDEEP       ((long)(ceil(MOLT_DOMAINDEPTH/MOLT_STEPINY)))
-#define MOLT_TOTALHEIGHT     ((long)(ceil(MOLT_DOMAINHEIGHT/MOLT_STEPINZ)))
+#define MOLT_TOTALSTEPS   ((long)(CEILING(MOLT_SIMTIME,MOLT_STEPINSEC)))
+#define MOLT_TOTALWIDTH   ((long)(CEILING(MOLT_DOMAINWIDTH,MOLT_STEPINX)))
+#define MOLT_TOTALDEEP    ((long)(CEILING(MOLT_DOMAINDEPTH,MOLT_STEPINY)))
+#define MOLT_TOTALHEIGHT  ((long)(CEILING(MOLT_DOMAINHEIGHT,MOLT_STEPINZ)))
 
-#define MOLT_XPOINTS         ((long)MOLT_TOTALWIDTH + 1)
-#define MOLT_YPOINTS         ((long)MOLT_TOTALDEEP + 1)
-#define MOLT_ZPOINTS         ((long)MOLT_TOTALHEIGHT + 1)
+#define MOLT_XPOINTS      ((long)((0 + MOLT_TOTALWIDTH) / MOLT_DOMAINWIDTH))
+#define MOLT_YPOINTS      ((long)((0 + MOLT_TOTALDEEP) / MOLT_DOMAINDEPTH))
+#define MOLT_ZPOINTS      ((long)((0 + MOLT_TOTALHEIGHT) / MOLT_DOMAINHEIGHT))
 
-#define MOLT_SPACEACC        6
-#define MOLT_TIMEACC         3
+#define MOLT_SPACEACC     6
+#define MOLT_TIMEACC      3
 
 #if     MOLT_TIMEACC == 3
 #define MOLT_BETA 1.23429074525305

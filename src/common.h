@@ -84,44 +84,90 @@ typedef pvec_t pvec6_t[6];
 #define VectorPrint(a) \
 	(printf("%lf, %lf, %lf\n", (a)[0], (a)[1], (a)[2]))
 
-/* define simulation information */
+/*
+ * define simulation information
+ */
+
+/* include the configuration header for config values */
+#include "config.h"
 
 #define MOLTLUMP_MAGIC *(int *)"MOLT"
+#define MOLTLUMP_TOTAL 8
 #define MOLTCURRVERSION 1
 
 enum { /* type values */
 	MOLTLUMP_TYPEBIO, /* biological */
-	MOLTLUMP_TYPEPLA, /* plasma kinematics */
 };
 
 enum {
-	MOLTLUMP_POSITIONS,
-	MOLTLUMP_MATRIX
+	MOLTLUMP_CONFIG,
+	MOLTLUMP_RUNINFO,
+	MOLTLUMP_EFIELD,
+	MOLTLUMP_PFIELD
 };
 
 struct lump_t {
-	uint32_t offset; /* in bytes from the beginning */
-	uint32_t size;   /* in bytes, total. record_number = size / sizeof(x) */
+	u64 offset;   /* in bytes from the beginning */
+	u64 lumpsize; /* in bytes, total. record_number = size / sizeof(x) */
+	u64 elemsize; /* sizeof(x) */
 };
 
 struct lump_header_t {
-	uint32_t magic;
-	uint16_t version;
-	uint16_t type;
-	struct lump_t lump[2];
+	u32 magic;
+	u16 version;
+	u16 type;
+	struct lump_t lump[MOLTLUMP_TOTAL];
 };
 
-struct lump_pos_t {
-	/* uses MOLTLUMP_POSITIONS */
-	u16 x;
-	u16 y;
-	u16 z;
+struct moltcfg_t {
+	/* free space parms */
+	double lightspeed;
+	double henrymeter;
+	double faradmeter;
+	/* tissue space parms */
+	double staticperm;
+	double infiniteperm;
+	double tau;
+	double distribtail;
+	double distribasym;
+	double tissuespeed;
+	/* mesh parms */
+	double step_in_sec;
+	double step_in_x;
+	double step_in_y;
+	double step_in_z;
+	double cfl;
+	/* dimension parms */
+	double sim_time;
+	double sim_x;
+	double sim_y;
+	double sim_z;
+	long sim_time_steps;
+	long sim_x_steps;
+	long sim_y_steps;
+	long sim_z_steps;
+	/* MOLT parameters */
+	double space_accuracy;
+	double time_accuracy;
+	double beta;
+	double alpha;
 };
 
-struct lump_mat_t {
-	/* uses MOLTLUMP_MATRIX */
-	u16 n;
-	f64 *mat;
+struct lump_runinfo_t {
+	f64 time_start;
+	f64 time_step;
+	f64 time_stop;
+	s32 curr_idx;
+	s32 total_steps;
+};
+struct lump_efield_t {
+	int xlen, ylen, zlen;
+	f64 data[MOLT_XPOINTS * MOLT_YPOINTS * MOLT_ZPOINTS];
+};
+
+struct lump_pfield_t {
+	int xlen, ylen, zlen;
+	f64 data[MOLT_XPOINTS * MOLT_YPOINTS * MOLT_ZPOINTS];
 };
 
 #endif
