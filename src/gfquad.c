@@ -3,6 +3,31 @@
  * Tue Feb 19, 2019 10:27
  *
  * GFQuad, Sweeping, and Time Stepping Functions are all included in here
+ *
+ * Note about Memory Layout
+ *
+ * It is consistently assumed that the dimensionality of multi-dimensional
+ * arrays when the data comes in is row ordered by X, then Y, then Z. This means
+ * that if we want to index into 5, 2, 3, to resolve the 1D index, we must
+ * perform: ((x) + ((y) * (ylen)) + ((z) * (ylen) * (zlen))) => 1D Index
+ *
+ * This isn't an issue when we operate over the X's of our data, meaning that we
+ * only ever need to retrieve the data by the rows of Xs. However, we maximize
+ * cache misses when we want to operate over a row in Y or a row in Z.
+ *
+ * The algorithm has to perform sweeps along X, Y, and Z to fully compute the
+ * dot products in those dimensions, and apply weights to them. The only
+ * difference between the sweeps is which slice of the 3d data you retrieve to
+ * apply the weights. Effectively, the algorithm is the same, you just have to
+ * tell do_sweep how long your row-based dimension is. This allows us to have
+ * the luxury to compute the geometry in any X, Y, and Z direction, while not
+ * writing specific code for the sweeping function.
+ *
+ * TODO (Brian)
+ * 1. GFQUAD operating over rows
+ * 2. write do_line function, with a do_lines function overhead
+ * 3. write reorg function to reorganize the 3d data into a different row-major
+ *    order
  */
 
 #include <stdio.h>
@@ -22,37 +47,28 @@ void gfquad_makel(f64 *wout, f64 *nu,
 static f64 vect_mul(f64 *veca, f64 *vecb, s32 veclen);
 static f64 minarr(f64 *arr, s32 arrlen);
 
-/* sweepx : perform a molt sweep in x */
-void sweepx(f64 *uout, f64 *uin, f64 *nu, f64 *wl, f64 *wr, f64 *vl, f64 *vr,
+/* time_step : performs a single timestep */
+void time_step(void *base, int timeidx)
+{
+	/* first retrieves our required hunk pointers from the base */
+}
+
+#if 0
+/* sweepx : perform a sweep to compute weights */
+void do_sweep(f64 *uout, f64 *uin, f64 *nu, f64 *wl, f64 *wr, f64 *vl, f64 *vr,
 		s64 udimx, s64 udimy, s64 udimz,
 		s64 nulen, s64 wlen, s64 vlen,
 		s64 orderm)
 {
-	s64 nx, ny, nz;
+	s64 i, j;
 	f64 *slice;
 
-	for (nz = 0; nz < udimz; nz++) {
-		for (ny = 0; ny < udimy; ny++) {
-			/* retrieve */
-			slice = uin + IDX3D(0, ny, nz, udimy, udimz);
-			gfquad_makel(slice, nu, vl, vr, vlen, wl, wr, wlen, 0, 0, orderm);
+	for (i = 0; i < dima; i++) {
+		for (j = 0; j < dimb; j++) {
 		}
 	}
 }
-
-/* gfquad_makel : compute gfquad and operations for Dirchlet boundary conds */
-void gfquad_makel(f64 *wout, f64 *nu,
-		f64 *vl, f64 *vr, s32 vlen,
-		f64 *wl, f64 *wr, s32 wlen,
-		f64 wa, f64 wb, s32 orderm)
-{
-	/*
-	 * gfquad_m call goes here
-	 *
-	 *
-	 * w = w + ( (wa-w(1))*(vL-dN*vR) + (wb-w(end))*(vR-dN*vL) )/(1-dN^2);
-	 */
-}
+#endif
 
 /* gfquad_m : does the GF Quad magic */
 void gfquad_m(
