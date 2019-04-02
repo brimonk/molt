@@ -28,10 +28,10 @@
 #define MOLT_TISSUESPEED     (MOLT_LIGHTSPEED / sqrt(MOLT_INFPERM))
 
 /* mesh parameters */
-#define MOLT_STEPINSEC       100
-#define MOLT_STEPINX         200 /* in cm */
-#define MOLT_STEPINY         200 /* in cm */
-#define MOLT_STEPINZ         200 /* in cm */
+#define MOLT_STEPINSEC       1
+#define MOLT_STEPINX         2 /* in cm */
+#define MOLT_STEPINY         2 /* in cm */
+#define MOLT_STEPINZ         2 /* in cm */
 
 #define MOLT_CFL \
 	(MOLT_TISSUESPEED * MOLT_STEPINSEC * \
@@ -39,19 +39,25 @@
 		 + 1/pow(MOLT_STEPINZ,2)) * 1E-10)
 
 /* dimension parameters */
-#define MOLT_SIMTIME      0.1 /* in seconds (steps are in picoseconds) */
-#define MOLT_DOMAINWIDTH  2 /* in centimeters */
-#define MOLT_DOMAINDEPTH  2 /* in centimeters */
-#define MOLT_DOMAINHEIGHT 2 /* in centimeters */
+#define MOLT_SIMTIME      100 /* in seconds (steps are in picoseconds) */
+#define MOLT_DOMAINWIDTH  200 /* in centimeters */
+#define MOLT_DOMAINDEPTH  200 /* in centimeters */
+#define MOLT_DOMAINHEIGHT 200 /* in centimeters */
 
-#define MOLT_TOTALSTEPS   ((long)(CEILING(MOLT_SIMTIME,MOLT_STEPINSEC)))
-#define MOLT_TOTALWIDTH   ((long)(CEILING(MOLT_DOMAINWIDTH,MOLT_STEPINX)))
-#define MOLT_TOTALDEEP    ((long)(CEILING(MOLT_DOMAINDEPTH,MOLT_STEPINY)))
-#define MOLT_TOTALHEIGHT  ((long)(CEILING(MOLT_DOMAINHEIGHT,MOLT_STEPINZ)))
+#define MOLT_TOTALSTEPS   (MOLT_SIMTIME / MOLT_STEPINSEC)
+#define MOLT_TOTALWIDTH   (MOLT_DOMAINWIDTH / MOLT_STEPINX)
+#define MOLT_TOTALDEEP    (MOLT_DOMAINDEPTH / MOLT_STEPINY)
+#define MOLT_TOTALHEIGHT  (MOLT_DOMAINHEIGHT / MOLT_STEPINZ)
 
+#if 0
 #define MOLT_XPOINTS      ((long)((0 + MOLT_TOTALWIDTH) / MOLT_DOMAINWIDTH))
 #define MOLT_YPOINTS      ((long)((0 + MOLT_TOTALDEEP) / MOLT_DOMAINDEPTH))
 #define MOLT_ZPOINTS      ((long)((0 + MOLT_TOTALHEIGHT) / MOLT_DOMAINHEIGHT))
+#else
+#define MOLT_XPOINTS      MOLT_TOTALWIDTH
+#define MOLT_YPOINTS      MOLT_TOTALDEEP
+#define MOLT_ZPOINTS      MOLT_TOTALHEIGHT
+#endif
 
 #define MOLT_SPACEACC     6
 #define MOLT_TIMEACC      3

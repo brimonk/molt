@@ -92,7 +92,7 @@ typedef pvec_t pvec6_t[6];
 #include "config.h"
 
 #define MOLTLUMP_MAGIC *(int *)"MOLT"
-#define MOLTLUMP_TOTAL 8
+#define MOLTLUMP_TOTAL 4
 #define MOLTCURRVERSION 1
 
 enum { /* type values */
@@ -160,6 +160,7 @@ struct lump_runinfo_t {
 	s32 curr_idx;
 	s32 total_steps;
 };
+
 struct lump_efield_t {
 	int xlen, ylen, zlen;
 	f64 data[MOLT_XPOINTS * MOLT_YPOINTS * MOLT_ZPOINTS];

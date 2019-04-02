@@ -176,29 +176,45 @@ int io_lumpcheck(void *ptr)
 	return 0;
 }
 
-int io_lumpsetup(void *ptr)
-{
-	return 0;
-}
-
-/* io_lumpgetid : gets a pointer to the lump via enum */
-void *io_lumpgetid(void *ptr, int idx)
+/* io_lumpgetbase : retrieves the base pointer for a lump */
+void *io_lumpgetbase(void *base, int lumpid)
 {
 	struct lump_header_t *hdr;
 
-	hdr = ptr;
+	hdr = base;
 
-	return (void *)(((char *)ptr) + hdr->lump[idx].offset);
+	return (void *)(((char *)base) + hdr->lump[lumpid].offset);
+}
+
+/* io_lumpgetid : gets a pointer to an array in the lump */
+void *io_lumpgetidx(void *base, int lumpid, int idx)
+{
+	void *ret;
+	struct lump_header_t *hdr;
+	int lumptotal;
+
+	hdr = base;
+
+	lumptotal = io_lumprecnum(base, lumpid);
+
+	if (idx < lumptotal) { // valid according to the lump table
+		ret = ((char *)base) + hdr->lump[lumpid].offset;
+		ret = ((char *)ret) + hdr->lump[lumpid].elemsize * idx;
+	} else {
+		ret = NULL;
+	}
+
+	return ret;
 }
 
 /* io_lumprecnum : returns the number of records that a given lump has */
-int io_lumprecnum(void *ptr, int idx)
+int io_lumprecnum(void *base, int lumpid)
 {
 	struct lump_header_t *hdr;
 
-	hdr = ptr;
+	hdr = base;
 
-	return hdr->lump[idx].lumpsize / hdr->lump[idx].elemsize;
+	return hdr->lump[lumpid].lumpsize / hdr->lump[lumpid].elemsize;
 }
 
 /* simple console message wrapper */

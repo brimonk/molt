@@ -35,7 +35,7 @@ void applied_funcg(void *base);
 int main(int argc, char **argv)
 {
 	void *hunk;
-	int fd;
+	int fd, i;
 
 	fd = io_open(DEFAULTFILE);
 
@@ -46,7 +46,13 @@ int main(int argc, char **argv)
 
 	setup_simulation(hunk);
 
-	io_masync(hunk, hunk, 1024 * 16);
+	io_mssync(hunk, hunk, 1024 * 16);
+
+	for (i = 0; i < MOLTLUMP_TOTAL; i++) {
+		printf("lump %d size : %ld\n",
+				i,
+				((struct lump_header_t *)hunk)->lump[i].elemsize);
+	}
 
 	io_munmap(hunk);
 	io_close(fd);
@@ -78,7 +84,23 @@ void setup_simulation(void *base)
 	/* setup our runtime info lump */
 	hdr->lump[1].offset = curr_offset;
 	hdr->lump[1].elemsize = sizeof(struct lump_runinfo_t);
-	hdr->lump[1].lumpsize = 1 * hdr->lump[0].elemsize;
+	hdr->lump[1].lumpsize = 1 * hdr->lump[1].elemsize;
+
+	curr_offset += hdr->lump[1].lumpsize;
+
+	/* setup our efield information */
+	hdr->lump[2].offset = curr_offset;
+	hdr->lump[2].elemsize = sizeof(struct lump_efield_t);
+	hdr->lump[2].lumpsize = MOLT_TOTALSTEPS * hdr->lump[2].elemsize;
+
+	curr_offset += hdr->lump[2].lumpsize;
+
+	/* setup our pfield information */
+	hdr->lump[3].offset = curr_offset;
+	hdr->lump[3].elemsize = sizeof(struct lump_pfield_t);
+	hdr->lump[3].lumpsize = MOLT_TOTALSTEPS * hdr->lump[3].elemsize;
+
+	curr_offset += hdr->lump[3].lumpsize;
 }
 
 void simsetup_cfg(struct moltcfg_t *cfg)
