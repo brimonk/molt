@@ -33,8 +33,8 @@
 
 #define MOLT_CFL \
 	(MOLT_TISSUESPEED * MOLT_STEPINSEC * \
-	 sqrt(1/pow(MOLT_STEPINX,2) + 1/pow(MOLT_STEPINY,2) + 1/pow(MOLT_STEPINZ)) \
-	 * 1E-10)
+	 sqrt(1/pow(MOLT_STEPINX,2) + 1/pow(MOLT_STEPINY,2) \
+		 + 1/pow(MOLT_STEPINZ,2)) * 1E-10)
 
 
 /* dimension parameters */
@@ -47,6 +47,10 @@
 #define MOLT_TOTALWIDTH      ((long)(ceil(MOLT_DOMAINWIDTH/MOLT_STEPINX)))
 #define MOLT_TOTALDEEP       ((long)(ceil(MOLT_DOMAINDEPTH/MOLT_STEPINY)))
 #define MOLT_TOTALHEIGHT     ((long)(ceil(MOLT_DOMAINHEIGHT/MOLT_STEPINZ)))
+
+#define MOLT_XPOINTS         ((long)MOLT_TOTALWIDTH + 1)
+#define MOLT_YPOINTS         ((long)MOLT_TOTALDEEP + 1)
+#define MOLT_ZPOINTS         ((long)MOLT_TOTALHEIGHT + 1)
 
 #define MOLT_SPACEACC        6
 #define MOLT_TIMEACC         3

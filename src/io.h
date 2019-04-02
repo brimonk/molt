@@ -6,6 +6,8 @@
 /* memory mapping wrappers */
 void *io_mmap(int fd, size_t size);
 int io_munmap(void *ptr);
+int io_msync(void *base, void *ptr, size_t len, int flags);
+int io_masync(void *base, void *ptr, size_t len);
 
 /* file wrapped operations */
 int io_open(char *name);

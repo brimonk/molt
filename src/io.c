@@ -3,6 +3,13 @@
  * Sun Jan 20, 2019 14:46
  *
  * Input-Output Subsystem
+ *
+ * wrapper functions handle errors within them and die if needed
+ *
+ * Functions
+ * io_mmap   : mmap wrapper. sizes disk file to be mmapped 
+ * io_munmap : munmap wrapper.
+ * io_msync  : msync wrapper. flushes changes made.
  */
 
 #include <stdio.h>
@@ -20,6 +27,10 @@
 #include "common.h"
 
 size_t mapping_len;
+
+/* function declarations */
+static int io_getpagesize();
+static void io_errnohandle();
 
 static void io_errnohandle()
 {
@@ -47,6 +58,39 @@ void *io_mmap(int fd, size_t size)
 	return ptr;
 }
 
+/* io_msync : msync wrapper - ensures we write with a PAGESIZE multiple */
+int io_msync(void *base, void *ptr, size_t len, int flags)
+{
+	unsigned long addlsize;
+	int ret;
+
+	if (flags != MS_ASYNC) {
+		flags = MS_SYNC;
+	}
+
+	addlsize = ((unsigned long)ptr) % io_getpagesize();
+
+	// sync the entire page
+	ret = msync(((char *)ptr) - addlsize, len + addlsize, flags);
+
+	if (ret) {
+		io_errnohandle();
+	}
+
+	return ret;
+}
+
+int io_masync(void *base, void *ptr, size_t len)
+{
+	return io_msync(base, ptr, len, MS_ASYNC);
+}
+
+/* io_getpagesize : wrapper for os independence */
+static int io_getpagesize()
+{
+	return getpagesize();
+}
+
 /* munmap_wrap : wrap munmap to avoid passing our program's needs */
 int io_munmap(void *ptr)
 {
@@ -54,8 +98,8 @@ int io_munmap(void *ptr)
 
 	rc = munmap(ptr, mapping_len);
 
-	if (!rc) {
-		/* errno_error; */
+	if (rc < 0) {
+		io_errnohandle();
 	}
 
 	return rc;
@@ -68,7 +112,6 @@ int io_open(char *name)
 	rc = open(name, O_RDWR | O_CREAT, 0666);
 
 	if (rc < 0) {
-		/* errno_error */
 		io_errnohandle();
 	}
 
@@ -82,7 +125,7 @@ int io_resize(int fd, size_t size)
 	rc = posix_fallocate(fd, 0, size);
 
 	if (rc < 0) {
-		/* errorno error here */
+		io_errnohandle();
 	}
 
 	return rc;
@@ -95,7 +138,7 @@ int io_close(int fd)
 	rc = close(fd);
 
 	if (rc < 0) {
-		/* errno_error */
+		io_errnohandle();
 	}
 
 	return rc;
@@ -160,7 +203,7 @@ void *io_lumpgetid(void *ptr, int idx)
 	return (void *)(((char *)ptr) + hdr->lump[idx].offset);
 }
 
-/* io_lumprecnum : returns the number of records that lump has */
+/* io_lumprecnum : returns the number of records that a given lump has */
 int io_lumprecnum(void *ptr, int idx)
 {
 	struct lump_header_t *hdr;
