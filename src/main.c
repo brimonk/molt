@@ -54,6 +54,9 @@ int main(int argc, char **argv)
 				((struct lump_header_t *)hunk)->lump[i].elemsize);
 	}
 
+	printf("steps\tx : %d y : %d z : %d\n",
+			MOLT_XPOINTS, MOLT_YPOINTS, MOLT_ZPOINTS);
+
 	io_munmap(hunk);
 	io_close(fd);
 
@@ -70,6 +73,10 @@ void setup_simulation(void *base)
 	if (io_lumpcheck(base)) {
 		io_fprintf(stdout, "Setting Up New File %s\n", io_getfilename());
 	}
+
+	/*
+	 * begin the setup by setting up our lump header and our lump directory
+	 */
 
 	hdr = base;
 	curr_offset = sizeof(struct lump_header_t);
@@ -101,6 +108,27 @@ void setup_simulation(void *base)
 	hdr->lump[3].lumpsize = MOLT_TOTALSTEPS * hdr->lump[3].elemsize;
 
 	curr_offset += hdr->lump[3].lumpsize;
+
+	/* setup our vweight information */
+	hdr->lump[4].offset = curr_offset;
+	hdr->lump[4].elemsize = sizeof(struct lump_vweight_t);
+	hdr->lump[4].lumpsize = MOLT_TOTALSTEPS * hdr->lump[4].elemsize;
+
+	curr_offset += hdr->lump[4].lumpsize;
+
+	/* setup our wweight information */
+	hdr->lump[5].offset = curr_offset;
+	hdr->lump[5].elemsize = sizeof(struct lump_wweight_t);
+	hdr->lump[5].lumpsize = MOLT_TOTALSTEPS * hdr->lump[5].elemsize;
+
+	curr_offset += hdr->lump[5].lumpsize;
+
+	/* setup our problem state */
+	hdr->lump[6].offset = curr_offset;
+	hdr->lump[6].elemsize = sizeof(struct lump_pstate_t);
+	hdr->lump[6].lumpsize = MOLT_TOTALSTEPS * hdr->lump[6].elemsize;
+
+	curr_offset += hdr->lump[6].lumpsize;
 }
 
 void simsetup_cfg(struct moltcfg_t *cfg)

@@ -92,7 +92,7 @@ typedef pvec_t pvec6_t[6];
 #include "config.h"
 
 #define MOLTLUMP_MAGIC *(int *)"MOLT"
-#define MOLTLUMP_TOTAL 4
+#define MOLTLUMP_TOTAL 7
 #define MOLTCURRVERSION 1
 
 enum { /* type values */
@@ -103,7 +103,10 @@ enum {
 	MOLTLUMP_CONFIG,
 	MOLTLUMP_RUNINFO,
 	MOLTLUMP_EFIELD,
-	MOLTLUMP_PFIELD
+	MOLTLUMP_PFIELD,
+	MOLTLUMP_VWEIGHT,
+	MOLTLUMP_WWEIGHT,
+	MOLTLUMP_PSTATE
 };
 
 struct lump_t {
@@ -162,12 +165,27 @@ struct lump_runinfo_t {
 };
 
 struct lump_efield_t {
-	int xlen, ylen, zlen;
 	f64 data[MOLT_XPOINTS * MOLT_YPOINTS * MOLT_ZPOINTS];
 };
 
 struct lump_pfield_t {
-	int xlen, ylen, zlen;
+	f64 data[MOLT_XPOINTS * MOLT_YPOINTS * MOLT_ZPOINTS];
+};
+
+struct lump_vweight_t {
+	f64 data[2 * MOLT_XPOINTS * MOLT_YPOINTS * MOLT_ZPOINTS];
+};
+
+struct lump_wweight_t {
+	f64 xr_weight[MOLT_TOTALWIDTH * (MOLT_SPACEACC + 1)];
+	f64 xl_weight[MOLT_TOTALWIDTH * (MOLT_SPACEACC + 1)];
+	f64 yr_weight[MOLT_TOTALDEEP * (MOLT_SPACEACC + 1)];
+	f64 yl_weight[MOLT_TOTALDEEP * (MOLT_SPACEACC + 1)];
+	f64 zr_weight[MOLT_TOTALHEIGHT * (MOLT_SPACEACC + 1)];
+	f64 zl_weight[MOLT_TOTALHEIGHT * (MOLT_SPACEACC + 1)];
+};
+
+struct lump_pstate_t { // problem state (the thing we simulate)
 	f64 data[MOLT_XPOINTS * MOLT_YPOINTS * MOLT_ZPOINTS];
 };
 
