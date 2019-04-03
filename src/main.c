@@ -5,8 +5,18 @@
  * Method Of Lines Transpose - Implicit Wave Solver with Pluggable Modules
  *
  * TODO (Brian)
- * 1. Simulation Setup With Hunks
- * 2. Function Handles (f, g)
+ * 1. resize the file for the simulation
+ * 2. Setup Simulation Data
+ * 2a. cfg
+ * 2b. runtime data
+ * 2c. wweight
+ * 2d. program state
+ * 3. time looping
+ * 3a. first_timestep
+ * 3b. d and c operators
+ * 3c. 3d array reorg
+ * 3d. do_sweep
+ * 3e. gf_quad
  */
 
 #include <stdio.h>
