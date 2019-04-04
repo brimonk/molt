@@ -16,13 +16,18 @@ int io_resize(int fd, size_t size);
 int io_close(int fd);
 char *io_getfilename();
 
+/* lump helper funcs */
+
+/* io_lumpcheck : 0 if file has correct magic, else if it doesn't */
+int io_lumpcheck(void *ptr);
+/* io_lumprecnum : returns the number of records that a given lump has */
+int io_lumprecnum(void *base, int lumpid);
+/* io_lumpgetbase : retrieves the base pointer for a lump */
+void *io_lumpgetbase(void *base, int lumpid);
+/* io_lumpgetidx : gets a pointer to an array in the lump */
+void *io_lumpgetidx(void *base, int lumpid, int idx);
+
 /* console message wrappers */
 int io_fprintf(FILE *fp, const char *fmt, ...);
-
-/* lump helper funcs */
-int io_lumpcheck(void *ptr);
-int io_lumpsetup(void *ptr);
-void *io_lumpgetid(void *ptr, int idx);
-int io_lumprecnum(void *ptr, int idx);
 
 #endif

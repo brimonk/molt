@@ -202,7 +202,7 @@ void *io_lumpgetbase(void *base, int lumpid)
 	return (void *)(((char *)base) + hdr->lump[lumpid].offset);
 }
 
-/* io_lumpgetid : gets a pointer to an array in the lump */
+/* io_lumpgetidx : gets a pointer to an array in the lump */
 void *io_lumpgetidx(void *base, int lumpid, int idx)
 {
 	void *ret;

@@ -5,9 +5,7 @@
  * Method Of Lines Transpose - Implicit Wave Solver with Pluggable Modules
  *
  * TODO (Brian)
- * 1. resize the file for the simulation
  * 2. Setup Simulation Data
- * 2a. cfg
  * 2b. runtime data
  * 2c. wweight
  * 2d. program state
@@ -57,8 +55,8 @@ int main(int argc, char **argv)
 
 	io_resize(fd, hunksize);
 
-	hunk = io_mmap(fd, 1024 * 16);
-	memset(hunk, 0, 1024 * 16);
+	hunk = io_mmap(fd, hunksize);
+	memset(hunk, 0, hunksize);
 
 	setup_simulation(&hunk, &hunksize, fd);
 
@@ -67,9 +65,8 @@ int main(int argc, char **argv)
 				i, ((struct lump_header_t *)hunk)->lump[i].elemsize);
 	}
 
-	printf("steps\tx : %d y : %d z : %d\n",
-			MOLT_XPOINTS, MOLT_YPOINTS, MOLT_ZPOINTS);
-
+	/* sync the file, then clean up */
+	io_mssync(hunk, hunk, hunksize);
 	io_munmap(hunk);
 	io_close(fd);
 
@@ -98,7 +95,9 @@ void setup_simulation(void **base, u64 *size, int fd)
 		*base = newblk;
 	}
 
-	printf("file size %ld\n", *size);
+	io_fprintf(stdout, "file size %ld\n", *size);
+
+	setuplump_cfg(io_lumpgetbase(*base, MOLTLUMP_CONFIG));
 }
 
 /* setup_lumps : returns size of file after lumpsystem setup */
@@ -174,6 +173,37 @@ u64 setup_lumps(void *base)
 /* simsetup_cfg : setup the config lump */
 void setuplump_cfg(struct moltcfg_t *cfg)
 {
+	/* free space parms */
+	cfg->lightspeed = MOLT_LIGHTSPEED;
+	cfg->henrymeter = MOLT_HENRYPERMETER;
+	cfg->faradmeter = MOLT_FARADSPERMETER;
+	/* tissue space parms */
+	cfg->staticperm = MOLT_STATICPERM;
+	cfg->infiniteperm = MOLT_INFPERM;
+	cfg->tau = MOLT_TAU;
+	cfg->distribtail = MOLT_DISTRIBTAIL;
+	cfg->distribasym = MOLT_DISTRIBASYM;
+	cfg->tissuespeed = MOLT_TISSUESPEED;
+	/* mesh parms */
+	cfg->step_in_sec = MOLT_STEPINSEC;
+	cfg->step_in_x = MOLT_STEPINX;
+	cfg->step_in_y = MOLT_STEPINY;
+	cfg->step_in_z = MOLT_STEPINZ;
+	cfg->cfl = MOLT_CFL;
+	/* dimension parms */
+	cfg->sim_time = MOLT_SIMTIME;
+	cfg->sim_x = MOLT_DOMAINWIDTH;
+	cfg->sim_y = MOLT_DOMAINDEPTH;
+	cfg->sim_z = MOLT_DOMAINHEIGHT;
+	cfg->sim_time_steps = MOLT_TOTALSTEPS;
+	cfg->sim_x_steps = MOLT_TOTALWIDTH;
+	cfg->sim_y_steps = MOLT_TOTALDEEP;
+	cfg->sim_z_steps = MOLT_TOTALHEIGHT;
+	/* MOLT parameters */
+	cfg->space_accuracy = MOLT_SPACEACC;
+	cfg->time_accuracy = MOLT_TIMEACC;
+	cfg->beta = MOLT_BETA;
+	cfg->alpha = MOLT_ALPHA;
 }
 
 /* simsetup_run : setup run information */
