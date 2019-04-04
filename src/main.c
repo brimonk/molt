@@ -46,14 +46,18 @@ void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw);
 void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww);
 void setuplump_pstate(struct lump_header_t *hdr, struct lump_pstate_t *state);
 
+void do_simulation(void *hunk, u64 hunksize);
+
 void applied_funcf(void *base);
 void applied_funcg(void *base);
+
+void debug(void *hunk);
 
 int main(int argc, char **argv)
 {
 	void *hunk;
 	u64 hunksize;
-	int fd, i;
+	int fd;
 
 	hunksize = sizeof(struct lump_header_t);
 
@@ -66,14 +70,9 @@ int main(int argc, char **argv)
 
 	setup_simulation(&hunk, &hunksize, fd);
 
-	for (i = 0; i < MOLTLUMP_TOTAL; i++) {
-		printf("lump %d size : %ld\n",
-				i, ((struct lump_header_t *)hunk)->lump[i].elemsize);
-	}
+	debug(hunk);
 
-	printf("total steps : %d\n",
-	((struct lump_runinfo_t *)io_lumpgetbase(hunk, MOLTLUMP_RUNINFO))->total_steps);
-
+	do_simulation(hunk, hunksize);
 
 	/* sync the file, then clean up */
 	io_mssync(hunk, hunk, hunksize);
@@ -81,6 +80,11 @@ int main(int argc, char **argv)
 	io_close(fd);
 
 	return 0;
+}
+
+/* do_simulation : actually does the simulating */
+void do_simulation(void *hunk, u64 hunksize)
+{
 }
 
 /* setup_simulation : sets up simulation based on config.h */
@@ -151,35 +155,35 @@ u64 setup_lumps(void *base)
 	/* setup our efield information */
 	hdr->lump[2].offset = curr_offset;
 	hdr->lump[2].elemsize = sizeof(struct lump_efield_t);
-	hdr->lump[2].lumpsize = MOLT_TOTALSTEPS * hdr->lump[2].elemsize;
+	hdr->lump[2].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[2].elemsize;
 
 	curr_offset += hdr->lump[2].lumpsize;
 
 	/* setup our pfield information */
 	hdr->lump[3].offset = curr_offset;
 	hdr->lump[3].elemsize = sizeof(struct lump_pfield_t);
-	hdr->lump[3].lumpsize = MOLT_TOTALSTEPS * hdr->lump[3].elemsize;
+	hdr->lump[3].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[3].elemsize;
 
 	curr_offset += hdr->lump[3].lumpsize;
 
 	/* setup our vweight information */
 	hdr->lump[4].offset = curr_offset;
 	hdr->lump[4].elemsize = sizeof(struct lump_vweight_t);
-	hdr->lump[4].lumpsize = MOLT_TOTALSTEPS * hdr->lump[4].elemsize;
+	hdr->lump[4].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[4].elemsize;
 
 	curr_offset += hdr->lump[4].lumpsize;
 
 	/* setup our wweight information */
 	hdr->lump[5].offset = curr_offset;
 	hdr->lump[5].elemsize = sizeof(struct lump_wweight_t);
-	hdr->lump[5].lumpsize = MOLT_TOTALSTEPS * hdr->lump[5].elemsize;
+	hdr->lump[5].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[5].elemsize;
 
 	curr_offset += hdr->lump[5].lumpsize;
 
 	/* setup our problem state */
 	hdr->lump[6].offset = curr_offset;
 	hdr->lump[6].elemsize = sizeof(struct lump_pstate_t);
-	hdr->lump[6].lumpsize = MOLT_TOTALSTEPS * hdr->lump[6].elemsize;
+	hdr->lump[6].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[6].elemsize;
 
 	curr_offset += hdr->lump[6].lumpsize;
 
@@ -270,4 +274,22 @@ void applied_funcg(void *base)
 {
 }
 #endif
+
+void debug(void *hunk)
+{
+	struct lump_header_t *hdr;
+	int i;
+
+	hdr = hunk;
+
+	io_fprintf(stdout, "header : 0x%8x\tver : %d\t type : 0x%02x\n",
+			hdr->magic, hdr->version, hdr->type);
+
+	for (i = 0; i < MOLTLUMP_TOTAL; i++) {
+		io_fprintf(stdout,
+				"lump[%d] off : 0x%08lx\tlumpsz : 0x%08lx\telemsz : 0x%08lx\n",
+				i, hdr->lump[i].offset,
+				hdr->lump[i].lumpsize, hdr->lump[i].elemsize);
+	}
+}
 

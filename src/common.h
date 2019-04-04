@@ -96,7 +96,7 @@ typedef pvec_t pvec6_t[6];
 #define MOLTCURRVERSION 1
 
 enum { /* type values */
-	MOLTLUMP_TYPEBIO, /* biological */
+	MOLTLUMP_TYPEBIO = 1 /* biological */
 };
 
 enum {
