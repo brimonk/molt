@@ -6,9 +6,9 @@
  *
  * TODO (Brian)
  * 2. Setup Simulation Data
- * 2b. runtime data
  * 2c. wweight
  * 2d. program state
+ * 2e. nu-lumps
  * 3. time looping
  * 3a. first_timestep
  * 3b. d and c operators
@@ -35,10 +35,16 @@
 #define DEFAULTFILE "data.dat"
 #define DBL_MACRO_SIZE(x) sizeof(x) / sizeof(double)
 
+/* lump setup functions */
 void setup_simulation(void **base, u64 *size, int fd);
 u64 setup_lumps(void *base);
 void setuplump_cfg(struct moltcfg_t *cfg);
 void setuplump_run(struct lump_runinfo_t *run);
+void setuplump_efield(struct lump_header_t *hdr, struct lump_efield_t *efield);
+void setuplump_pfield(struct lump_header_t *hdr, struct lump_pfield_t *pfield);
+void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw);
+void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww);
+void setuplump_pstate(struct lump_header_t *hdr, struct lump_pstate_t *state);
 
 void applied_funcf(void *base);
 void applied_funcg(void *base);
@@ -64,6 +70,10 @@ int main(int argc, char **argv)
 		printf("lump %d size : %ld\n",
 				i, ((struct lump_header_t *)hunk)->lump[i].elemsize);
 	}
+
+	printf("total steps : %d\n",
+	((struct lump_runinfo_t *)io_lumpgetbase(hunk, MOLTLUMP_RUNINFO))->total_steps);
+
 
 	/* sync the file, then clean up */
 	io_mssync(hunk, hunk, hunksize);
@@ -98,6 +108,12 @@ void setup_simulation(void **base, u64 *size, int fd)
 	io_fprintf(stdout, "file size %ld\n", *size);
 
 	setuplump_cfg(io_lumpgetbase(*base, MOLTLUMP_CONFIG));
+	setuplump_run(io_lumpgetbase(*base, MOLTLUMP_RUNINFO));
+	setuplump_efield(*base, io_lumpgetbase(*base, MOLTLUMP_EFIELD));
+	setuplump_pfield(*base, io_lumpgetbase(*base, MOLTLUMP_PFIELD));
+	setuplump_vweight(*base, io_lumpgetbase(*base, MOLTLUMP_VWEIGHT));
+	setuplump_wweight(*base, io_lumpgetbase(*base, MOLTLUMP_WWEIGHT));
+	setuplump_pstate(*base, io_lumpgetbase(*base, MOLTLUMP_PSTATE));
 }
 
 /* setup_lumps : returns size of file after lumpsystem setup */
@@ -207,7 +223,37 @@ void setuplump_cfg(struct moltcfg_t *cfg)
 }
 
 /* simsetup_run : setup run information */
-void simsetup_run(struct lump_runinfo_t *run)
+void setuplump_run(struct lump_runinfo_t *run)
+{
+	run->time_start = 0;
+	run->time_step = .5;
+	run->time_stop = 10;
+	run->curr_idx = 0;
+	run->total_steps = (run->time_stop - run->time_start) / run->time_step;
+}
+
+/* setuplump_efield : setup the efield lump */
+void setuplump_efield(struct lump_header_t *hdr, struct lump_efield_t *efield)
+{
+}
+
+/* setuplump_pfield : setup the pfield lump */
+void setuplump_pfield(struct lump_header_t *hdr, struct lump_pfield_t *pfield)
+{
+}
+
+/* setuplump_vweight : setup the vweight lump */
+void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw)
+{
+}
+
+/* setuplump_wweight : setup the wweight lump */
+void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww)
+{
+}
+
+/* setuplump_pstate : setup the "problem state" lump */
+void setuplump_pstate(struct lump_header_t *hdr, struct lump_pstate_t *state)
 {
 }
 
