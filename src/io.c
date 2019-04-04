@@ -12,20 +12,23 @@
  * io_msync  : msync wrapper. flushes changes made.
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 
+#include <unistd.h>
 #include <errno.h>
-#include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <unistd.h>
+#include <sys/mman.h>
 
 #include "io.h"
 #include "common.h"
+
+#define MMAP_FLAGS MAP_SHARED
 
 static size_t mapping_len;
 char io_filename[256];
@@ -59,6 +62,19 @@ void *io_mmap(int fd, size_t size)
 	mapping_len = size;
 
 	return ptr;
+}
+
+void *io_mremap(void *oldaddr, size_t oldsize, size_t newsize)
+{
+	void *ret;
+
+	ret = mremap(oldaddr, oldsize, newsize, MMAP_FLAGS);
+
+	if (ret == MAP_FAILED) {
+		io_errnohandle();
+	}
+
+	return ret;
 }
 
 /* io_mssync : synchronous msync */

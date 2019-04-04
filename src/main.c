@@ -37,31 +37,34 @@
 #define DEFAULTFILE "data.dat"
 #define DBL_MACRO_SIZE(x) sizeof(x) / sizeof(double)
 
-void setup_simulation(void *base);
-void simsetup_cfg(struct moltcfg_t *cfg);
+void setup_simulation(void **base, u64 *size, int fd);
+u64 setup_lumps(void *base);
+void setuplump_cfg(struct moltcfg_t *cfg);
+void setuplump_run(struct lump_runinfo_t *run);
+
 void applied_funcf(void *base);
 void applied_funcg(void *base);
 
 int main(int argc, char **argv)
 {
 	void *hunk;
+	u64 hunksize;
 	int fd, i;
+
+	hunksize = sizeof(struct lump_header_t);
 
 	fd = io_open(DEFAULTFILE);
 
-	io_resize(fd, 1024 * 16);
+	io_resize(fd, hunksize);
 
 	hunk = io_mmap(fd, 1024 * 16);
 	memset(hunk, 0, 1024 * 16);
 
-	setup_simulation(hunk);
-
-	io_mssync(hunk, hunk, 1024 * 16);
+	setup_simulation(&hunk, &hunksize, fd);
 
 	for (i = 0; i < MOLTLUMP_TOTAL; i++) {
 		printf("lump %d size : %ld\n",
-				i,
-				((struct lump_header_t *)hunk)->lump[i].elemsize);
+				i, ((struct lump_header_t *)hunk)->lump[i].elemsize);
 	}
 
 	printf("steps\tx : %d y : %d z : %d\n",
@@ -74,7 +77,32 @@ int main(int argc, char **argv)
 }
 
 /* setup_simulation : sets up simulation based on config.h */
-void setup_simulation(void *base)
+void setup_simulation(void **base, u64 *size, int fd)
+{
+	void *newblk;
+	u64 oldsize;
+
+	oldsize = *size;
+	*size = setup_lumps(*base);
+
+	/* resize the file to get enough simulation space */
+	if (io_resize(fd, *size) < 0) {
+		fprintf(stderr, "Couldn't get space. Quitting\n");
+		exit(1);
+	}
+
+	/* remmap it */
+	if ((newblk = io_mremap(*base, oldsize, *size)) == ((void *)-1)) {
+		io_fprintf(stderr, "Couldn't remap the file!\n");
+	} else {
+		*base = newblk;
+	}
+
+	printf("file size %ld\n", *size);
+}
+
+/* setup_lumps : returns size of file after lumpsystem setup */
+u64 setup_lumps(void *base)
 {
 	struct lump_header_t *hdr;
 	u64 curr_offset;
@@ -139,12 +167,21 @@ void setup_simulation(void *base)
 	hdr->lump[6].lumpsize = MOLT_TOTALSTEPS * hdr->lump[6].elemsize;
 
 	curr_offset += hdr->lump[6].lumpsize;
+
+	return curr_offset;
 }
 
-void simsetup_cfg(struct moltcfg_t *cfg)
+/* simsetup_cfg : setup the config lump */
+void setuplump_cfg(struct moltcfg_t *cfg)
 {
 }
 
+/* simsetup_run : setup run information */
+void simsetup_run(struct lump_runinfo_t *run)
+{
+}
+
+#if 0
 /* misc math functions */
 
 /* applied_func : applies function "f" from the original source to data */
@@ -156,4 +193,5 @@ void applied_funcf(void *base)
 void applied_funcg(void *base)
 {
 }
+#endif
 

@@ -5,9 +5,10 @@
 
 /* memory mapping wrappers */
 void *io_mmap(int fd, size_t size);
-int io_munmap(void *ptr);
+void *io_mremap(void *oldaddr, size_t oldsize, size_t newsize);
 int io_mssync(void *base, void *ptr, size_t len);
 int io_masync(void *base, void *ptr, size_t len);
+int io_munmap(void *ptr);
 
 /* file wrapped operations */
 int io_open(char *name);
