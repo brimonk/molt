@@ -6,9 +6,6 @@
  *
  * TODO (Brian)
  * 2. Setup Simulation Data
- * 2c. wweight
- * 2d. program state
- * 2e. nu-lumps
  * 3. time looping
  * 3a. first_timestep
  * 3b. d and c operators
@@ -36,7 +33,6 @@
 #include "gfquad.h"
 
 #define DEFAULTFILE "data.dat"
-#define DBL_MACRO_SIZE(x) sizeof(x) / sizeof(double)
 
 /* lump setup functions */
 void setup_simulation(void **base, u64 *size, int fd);
@@ -365,6 +361,14 @@ void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww)
 /* setuplump_pstate : setup the "problem state" lump */
 void setuplump_pstate(struct lump_header_t *hdr, struct lump_pstate_t *state)
 {
+	// write zeroes to the pstate
+	struct lump_t *lump;
+	char *ptr;
+
+	ptr = (char *)hdr;
+	lump = &hdr->lump[MOLTLUMP_PSTATE];
+
+	memset(ptr + lump->offset, 0, lump->lumpsize);
 }
 
 #if 0
