@@ -15,6 +15,9 @@
  * 3c. 3d array reorg
  * 3d. do_sweep
  * 3e. gf_quad
+ *
+ * WISHLIST:
+ * 1. Remapping Procedure should be rethought out (setup_simulation)
  */
 
 #include <stdio.h>
@@ -42,6 +45,7 @@ void setuplump_cfg(struct moltcfg_t *cfg);
 void setuplump_run(struct lump_runinfo_t *run);
 void setuplump_efield(struct lump_header_t *hdr, struct lump_efield_t *efield);
 void setuplump_pfield(struct lump_header_t *hdr, struct lump_pfield_t *pfield);
+void setuplump_nu(struct lump_header_t *hdr, struct lump_nu_t *nu);
 void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw);
 void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww);
 void setuplump_pstate(struct lump_header_t *hdr, struct lump_pstate_t *state);
@@ -64,9 +68,7 @@ int main(int argc, char **argv)
 	fd = io_open(DEFAULTFILE);
 
 	io_resize(fd, hunksize);
-
 	hunk = io_mmap(fd, hunksize);
-	memset(hunk, 0, hunksize);
 
 	setup_simulation(&hunk, &hunksize, fd);
 
@@ -93,16 +95,27 @@ void setup_simulation(void **base, u64 *size, int fd)
 	void *newblk;
 	u64 oldsize;
 
+	// if we have a valid file, we won't set it up again
+	// just run the simulation
+#if 0
+	// setup the file every time for debugging
+	if (!io_lumpcheck(*base)) { return; }
+#else
+	io_lumpcheck(*base);
+#endif
+
 	oldsize = *size;
 	*size = setup_lumps(*base);
 
-	/* resize the file to get enough simulation space */
-	if (io_resize(fd, *size) < 0) {
-		fprintf(stderr, "Couldn't get space. Quitting\n");
-		exit(1);
+	/* resize the file (if needed) to get enough simulation space */
+	if (io_getsize() < *size) {
+		if (io_resize(fd, *size) < 0) {
+			fprintf(stderr, "Couldn't get space. Quitting\n");
+			exit(1);
+		}
 	}
 
-	/* remmap it */
+	/* remmap it to the correct size */
 	if ((newblk = io_mremap(*base, oldsize, *size)) == ((void *)-1)) {
 		io_fprintf(stderr, "Couldn't remap the file!\n");
 	} else {
@@ -115,6 +128,7 @@ void setup_simulation(void **base, u64 *size, int fd)
 	setuplump_run(io_lumpgetbase(*base, MOLTLUMP_RUNINFO));
 	setuplump_efield(*base, io_lumpgetbase(*base, MOLTLUMP_EFIELD));
 	setuplump_pfield(*base, io_lumpgetbase(*base, MOLTLUMP_PFIELD));
+	setuplump_nu(*base, io_lumpgetbase(*base, MOLTLUMP_NU));
 	setuplump_vweight(*base, io_lumpgetbase(*base, MOLTLUMP_VWEIGHT));
 	setuplump_wweight(*base, io_lumpgetbase(*base, MOLTLUMP_WWEIGHT));
 	setuplump_pstate(*base, io_lumpgetbase(*base, MOLTLUMP_PSTATE));
@@ -125,11 +139,6 @@ u64 setup_lumps(void *base)
 {
 	struct lump_header_t *hdr;
 	u64 curr_offset;
-
-	// ensure we have a valid memory mapped file
-	if (io_lumpcheck(base)) {
-		io_fprintf(stdout, "Setting Up New File %s\n", io_getfilename());
-	}
 
 	/*
 	 * begin the setup by setting up our lump header and our lump directory
@@ -166,26 +175,33 @@ u64 setup_lumps(void *base)
 
 	curr_offset += hdr->lump[3].lumpsize;
 
-	/* setup our vweight information */
+	/* setup our nu information */
 	hdr->lump[4].offset = curr_offset;
-	hdr->lump[4].elemsize = sizeof(struct lump_vweight_t);
-	hdr->lump[4].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[4].elemsize;
+	hdr->lump[4].elemsize = sizeof(struct lump_nu_t);
+	hdr->lump[4].lumpsize = 1 * hdr->lump[4].elemsize;
 
 	curr_offset += hdr->lump[4].lumpsize;
 
-	/* setup our wweight information */
+	/* setup our vweight information */
 	hdr->lump[5].offset = curr_offset;
-	hdr->lump[5].elemsize = sizeof(struct lump_wweight_t);
+	hdr->lump[5].elemsize = sizeof(struct lump_vweight_t);
 	hdr->lump[5].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[5].elemsize;
 
 	curr_offset += hdr->lump[5].lumpsize;
 
-	/* setup our problem state */
+	/* setup our wweight information */
 	hdr->lump[6].offset = curr_offset;
-	hdr->lump[6].elemsize = sizeof(struct lump_pstate_t);
+	hdr->lump[6].elemsize = sizeof(struct lump_wweight_t);
 	hdr->lump[6].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[6].elemsize;
 
 	curr_offset += hdr->lump[6].lumpsize;
+
+	/* setup our problem state */
+	hdr->lump[7].offset = curr_offset;
+	hdr->lump[7].elemsize = sizeof(struct lump_pstate_t);
+	hdr->lump[7].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[7].elemsize;
+
+	curr_offset += hdr->lump[7].lumpsize;
 
 	return curr_offset;
 }
@@ -205,7 +221,8 @@ void setuplump_cfg(struct moltcfg_t *cfg)
 	cfg->distribasym = MOLT_DISTRIBASYM;
 	cfg->tissuespeed = MOLT_TISSUESPEED;
 	/* mesh parms */
-	cfg->step_in_sec = MOLT_STEPINSEC;
+	cfg->int_scale = MOLT_INTSCALE;
+	cfg->step_in_sec = MOLT_STEPINT;
 	cfg->step_in_x = MOLT_STEPINX;
 	cfg->step_in_y = MOLT_STEPINY;
 	cfg->step_in_z = MOLT_STEPINZ;
@@ -246,6 +263,26 @@ void setuplump_pfield(struct lump_header_t *hdr, struct lump_pfield_t *pfield)
 {
 }
 
+/* setuplump_nu : setup the nu lump */
+void setuplump_nu(struct lump_header_t *hdr, struct lump_nu_t *nu)
+{
+	struct moltcfg_t *cfg;
+	s64 i;
+
+	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
+
+	for (i = 0; i < cfg->sim_x_steps; i++) {
+		nu->nux[i] = cfg->int_scale * cfg->step_in_x * cfg->alpha;
+	}
+
+	for (i = 0; i < cfg->sim_y_steps; i++) {
+		nu->nuy[i] = cfg->int_scale * cfg->step_in_y * cfg->alpha;
+	}
+	for (i = 0; i < cfg->sim_z_steps; i++) {
+		nu->nuz[i] = cfg->int_scale * cfg->step_in_z * cfg->alpha;
+	}
+}
+
 /* setuplump_vweight : setup the vweight lump */
 void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw)
 {
@@ -254,6 +291,24 @@ void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw)
 /* setuplump_wweight : setup the wweight lump */
 void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww)
 {
+	struct moltcfg_t *cfg;
+	struct lump_nu_t *nu;
+	s32 i;
+
+	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
+	nu  = io_lumpgetbase(hdr, MOLTLUMP_NU);
+
+	// perform all of our get_exp_weights
+	get_exp_weights(nu->nux, ww->xr_weight, ww->xl_weight,
+			ARRSIZE(nu->nux), cfg->space_accuracy);
+	get_exp_weights(nu->nuy, ww->yr_weight, ww->yl_weight,
+			ARRSIZE(nu->nuy), cfg->space_accuracy);
+	get_exp_weights(nu->nuz, ww->zr_weight, ww->zl_weight,
+			ARRSIZE(nu->nuz), cfg->space_accuracy); 
+
+	for (i = 0; i < ARRSIZE(ww->xr_weight); i++) {
+		printf("[%5d] %le\n", i, ww->xr_weight[i]);
+	}
 }
 
 /* setuplump_pstate : setup the "problem state" lump */

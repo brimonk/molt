@@ -142,6 +142,15 @@ int io_open(char *name)
 	return rc;
 }
 
+/* io_getsize : returns the size of the file */
+u64 io_getsize()
+{
+	struct stat st;
+	stat(io_getfilename(), &st);
+	return st.st_size;
+}
+
+/* io_getfilename : returns pointer to the file name */
 char *io_getfilename()
 {
 	return &io_filename[0];

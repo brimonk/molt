@@ -12,9 +12,10 @@
 #ifndef MOLT_CALCS
 #define MOLT_CALCS
 
+#include "common.h"
+
 /* get_exp_weights : construct local weights for int up to order M */
-void get_exp_weights(double *nu, double **wl, double **wr,
-		int nulen, int orderm);
+void get_exp_weights(f64 *nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm);
 
 /* get_exp_ind : get indexes of X for get_exp_weights */
 int get_exp_ind(int i, int n, int m);

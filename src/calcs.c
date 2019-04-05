@@ -21,13 +21,11 @@
 #include "calcs.h"
 #include "common.h"
 
-// #define WORKINGSTACKSIZE  144
 #define MINVAL 0.0000000000005
 #define WORKINGSTACKN 12
 
 /* get_exp_weights : construct local weights for int up to order M */
-void get_exp_weights(double *nu, double **wl, double **wr,
-		int nulen, int orderm)
+void get_exp_weights(f64 *nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm)
 {
 	int i, j, k;
 	int rowlen, reallen;
@@ -45,12 +43,7 @@ void get_exp_weights(double *nu, double **wl, double **wr,
 	workmat_r  = calloc(sizeof(double), rowlen * rowlen);
 	workmat_l  = calloc(sizeof(double), rowlen * rowlen);
 
-	/* WARNING : this memory is "returned" to the user */
-	*wl = calloc(sizeof(double), nulen * rowlen);
-	*wr = calloc(sizeof(double), nulen * rowlen);
-
-	if (!x || !*wr || !*wl || !phi ||
-			!workvect_r || !workvect_l || !workmat_r || !workmat_l) {
+	if (!x || !phi || !workvect_r || !workvect_l || !workmat_r || !workmat_l) {
 		PRINT_AND_DIE("Couldn't Get Enough Memory");
 	}
 
@@ -78,8 +71,8 @@ void get_exp_weights(double *nu, double **wl, double **wr,
 		matflip(workmat_r, rowlen);
 
 		/* multiply our phi vector with our working matrix, giving the answer */
-		vm_mult((*wl) + (i * rowlen), phi, workmat_l, rowlen);
-		vm_mult((*wr) + (i * rowlen), phi, workmat_r, rowlen);
+		vm_mult(wl + (i * rowlen), phi, workmat_l, rowlen);
+		vm_mult(wr + (i * rowlen), phi, workmat_r, rowlen);
 	}
 
 	free(x);

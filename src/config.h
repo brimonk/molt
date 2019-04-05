@@ -3,6 +3,17 @@
  * Sun Feb 03, 2019 02:42 
  * 
  * MoLT Static Configuration Header
+ *
+ * NOTE:
+ * Some units in this config file are SCALED! Namely:
+ *
+ * - MOLT_STEPIN*
+ * - MOLT_DOMAIN*
+ * and by association
+ * - MOLT_TOTAL*
+ *
+ * Having a standardized integer "unit" makes size and indexing calculations
+ * effortless, and getting the real value is just a single multiplication away.
  */
 
 #ifndef MOLT_CONFIG
@@ -25,26 +36,27 @@
 #define MOLT_TAU             1
 #define MOLT_DISTRIBTAIL     0.7
 #define MOLT_DISTRIBASYM     0.25
-#define MOLT_TISSUESPEED     (MOLT_LIGHTSPEED / sqrt(MOLT_INFPERM))
+#define MOLT_TISSUESPEED     (MOLT_LIGHTSPEED / (sqrt(MOLT_INFPERM)))
 
 /* mesh parameters */
-#define MOLT_STEPINSEC       1
-#define MOLT_STEPINX         2 /* in cm */
-#define MOLT_STEPINY         2 /* in cm */
-#define MOLT_STEPINZ         2 /* in cm */
+#define MOLT_INTSCALE      0.01
+#define MOLT_STEPINT         1 /* in units */
+#define MOLT_STEPINX         2 /* in units */
+#define MOLT_STEPINY         2 /* in units */
+#define MOLT_STEPINZ         2 /* in units */
 
 #define MOLT_CFL \
-	(MOLT_TISSUESPEED * MOLT_STEPINSEC * \
+	(MOLT_TISSUESPEED * MOLT_STEPINT * \
 	 sqrt(1/pow(MOLT_STEPINX,2) + 1/pow(MOLT_STEPINY,2) \
 		 + 1/pow(MOLT_STEPINZ,2)) * 1E-10)
 
 /* dimension parameters */
-#define MOLT_SIMTIME      100 /* in seconds (steps are in picoseconds) */
-#define MOLT_DOMAINWIDTH  200 /* in centimeters */
-#define MOLT_DOMAINDEPTH  200 /* in centimeters */
-#define MOLT_DOMAINHEIGHT 200 /* in centimeters */
+#define MOLT_SIMTIME      10 /* in units */
+#define MOLT_DOMAINWIDTH  200 /* in units */
+#define MOLT_DOMAINDEPTH  200 /* in units */
+#define MOLT_DOMAINHEIGHT 200 /* in units */
 
-#define MOLT_TOTALSTEPS   (MOLT_SIMTIME / MOLT_STEPINSEC) + 1
+#define MOLT_TOTALSTEPS   (MOLT_SIMTIME / MOLT_STEPINT) + 1
 #define MOLT_TOTALWIDTH   (MOLT_DOMAINWIDTH / MOLT_STEPINX)
 #define MOLT_TOTALDEEP    (MOLT_DOMAINDEPTH / MOLT_STEPINY)
 #define MOLT_TOTALHEIGHT  (MOLT_DOMAINHEIGHT / MOLT_STEPINZ)
@@ -70,6 +82,7 @@
 #define MOLT_BETA 2
 #endif
 
-#define MOLT_ALPHA MOLT_BETA / (MOLT_TISSUESPEED * MOLT_STEPINSEC)
+#define MOLT_ALPHA MOLT_BETA / \
+	(MOLT_TISSUESPEED * MOLT_STEPINT * MOLT_INTSCALE)
 
 #endif

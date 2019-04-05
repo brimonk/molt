@@ -3,6 +3,8 @@
 #ifndef MOLT_IO
 #define MOLT_IO
 
+#include "common.h"
+
 /* memory mapping wrappers */
 void *io_mmap(int fd, size_t size);
 void *io_mremap(void *oldaddr, size_t oldsize, size_t newsize);
@@ -14,6 +16,7 @@ int io_munmap(void *ptr);
 int io_open(char *name);
 int io_resize(int fd, size_t size);
 int io_close(int fd);
+u64 io_getsize();
 char *io_getfilename();
 
 /* lump helper funcs */
