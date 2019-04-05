@@ -185,7 +185,7 @@ u64 setup_lumps(void *base)
 	/* setup our vweight information */
 	hdr->lump[5].offset = curr_offset;
 	hdr->lump[5].elemsize = sizeof(struct lump_vweight_t);
-	hdr->lump[5].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[5].elemsize;
+	hdr->lump[5].lumpsize = 1 * hdr->lump[5].elemsize;
 
 	curr_offset += hdr->lump[5].lumpsize;
 
@@ -229,9 +229,9 @@ void setuplump_cfg(struct moltcfg_t *cfg)
 	cfg->cfl = MOLT_CFL;
 	/* dimension parms */
 	cfg->sim_time = MOLT_SIMTIME;
-	cfg->sim_x = MOLT_DOMAINWIDTH;
-	cfg->sim_y = MOLT_DOMAINDEPTH;
-	cfg->sim_z = MOLT_DOMAINHEIGHT;
+	cfg->sim_x = MOLT_XPOINTS;
+	cfg->sim_y = MOLT_YPOINTS;
+	cfg->sim_z = MOLT_ZPOINTS;
 	cfg->sim_time_steps = MOLT_TOTALSTEPS;
 	cfg->sim_x_steps = MOLT_TOTALWIDTH;
 	cfg->sim_y_steps = MOLT_TOTALDEEP;
@@ -256,11 +256,27 @@ void setuplump_run(struct lump_runinfo_t *run)
 /* setuplump_efield : setup the efield lump */
 void setuplump_efield(struct lump_header_t *hdr, struct lump_efield_t *efield)
 {
+	// write zeroes to the efield
+	struct lump_t *lump;
+	char *ptr;
+
+	ptr = (char *)hdr;
+	lump = &hdr->lump[MOLTLUMP_EFIELD];
+
+	memset(ptr + lump->offset, 0, lump->lumpsize);
 }
 
 /* setuplump_pfield : setup the pfield lump */
 void setuplump_pfield(struct lump_header_t *hdr, struct lump_pfield_t *pfield)
 {
+	// write zeroes to the pfield
+	struct lump_t *lump;
+	char *ptr;
+
+	ptr = (char *)hdr;
+	lump = &hdr->lump[MOLTLUMP_PFIELD];
+
+	memset(ptr + lump->offset, 0, lump->lumpsize);
 }
 
 /* setuplump_nu : setup the nu lump */
@@ -286,6 +302,46 @@ void setuplump_nu(struct lump_header_t *hdr, struct lump_nu_t *nu)
 /* setuplump_vweight : setup the vweight lump */
 void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw)
 {
+	struct moltcfg_t *cfg;
+	f64 alpha;
+	s64 i;
+
+	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
+	alpha = cfg->alpha;
+
+	// first, fill the arrays with our values
+
+	for (i = 0; i < cfg->sim_x; i++) {
+		vw->vrx[i] = cfg->int_scale * i;
+		vw->vlx[i] = cfg->int_scale * i;
+	}
+
+	for (i = 0; i < cfg->sim_y; i++) {
+		vw->vry[i] = cfg->int_scale * i;
+		vw->vly[i] = cfg->int_scale * i;
+	}
+
+	for (i = 0; i < cfg->sim_z; i++) {
+		vw->vrz[i] = cfg->int_scale * i;
+		vw->vlz[i] = cfg->int_scale * i;
+	}
+
+	// now, perform our computation on them
+
+	for (i = 0; i < cfg->sim_x; i++) {
+		vw->vrx[i] = exp((-alpha) * vw->vrx[i]);
+		vw->vlx[i] = exp((-alpha) * vw->vlx[i]);
+	}
+
+	for (i = 0; i < cfg->sim_y; i++) {
+		vw->vry[i] = exp((-alpha) * vw->vry[i]);
+		vw->vly[i] = exp((-alpha) * vw->vly[i]);
+	}
+
+	for (i = 0; i < cfg->sim_z; i++) {
+		vw->vrz[i] = exp((-alpha) * vw->vrz[i]);
+		vw->vlz[i] = exp((-alpha) * vw->vlz[i]);
+	}
 }
 
 /* setuplump_wweight : setup the wweight lump */
@@ -293,22 +349,17 @@ void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww)
 {
 	struct moltcfg_t *cfg;
 	struct lump_nu_t *nu;
-	s32 i;
 
 	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 	nu  = io_lumpgetbase(hdr, MOLTLUMP_NU);
 
 	// perform all of our get_exp_weights
-	get_exp_weights(nu->nux, ww->xr_weight, ww->xl_weight,
+	get_exp_weights(nu->nux, ww->xl_weight, ww->xr_weight,
 			ARRSIZE(nu->nux), cfg->space_accuracy);
-	get_exp_weights(nu->nuy, ww->yr_weight, ww->yl_weight,
+	get_exp_weights(nu->nuy, ww->yl_weight, ww->yr_weight,
 			ARRSIZE(nu->nuy), cfg->space_accuracy);
-	get_exp_weights(nu->nuz, ww->zr_weight, ww->zl_weight,
+	get_exp_weights(nu->nuz, ww->zl_weight, ww->zr_weight,
 			ARRSIZE(nu->nuz), cfg->space_accuracy); 
-
-	for (i = 0; i < ARRSIZE(ww->xr_weight); i++) {
-		printf("[%5d] %le\n", i, ww->xr_weight[i]);
-	}
 }
 
 /* setuplump_pstate : setup the "problem state" lump */
@@ -333,6 +384,7 @@ void applied_funcg(void *base)
 void debug(void *hunk)
 {
 	struct lump_header_t *hdr;
+	struct lump_vweight_t *vw;
 	int i;
 
 	hdr = hunk;
@@ -340,11 +392,29 @@ void debug(void *hunk)
 	io_fprintf(stdout, "header : 0x%8x\tver : %d\t type : 0x%02x\n",
 			hdr->magic, hdr->version, hdr->type);
 
+#if 1
 	for (i = 0; i < MOLTLUMP_TOTAL; i++) {
 		io_fprintf(stdout,
 				"lump[%d] off : 0x%08lx\tlumpsz : 0x%08lx\telemsz : 0x%08lx\n",
 				i, hdr->lump[i].offset,
 				hdr->lump[i].lumpsize, hdr->lump[i].elemsize);
 	}
+#endif
+
+#if 1
+	vw = io_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
+	for (i = 0; i < MOLT_XPOINTS; i++) {
+		printf("vlx[%03d] : %4e\t vrx[%03d] : %4e\n",
+				i, vw->vlx[i], i, vw->vrx[i]);
+	}
+	for (i = 0; i < MOLT_XPOINTS; i++) {
+		printf("vly[%03d] : %4e\t vry[%03d] : %4e\n",
+				i, vw->vly[i], i, vw->vry[i]);
+	}
+	for (i = 0; i < MOLT_XPOINTS; i++) {
+		printf("vlz[%03d] : %4e\t vrz[%03d] : %4e\n",
+				i, vw->vlz[i], i, vw->vrz[i]);
+	}
+#endif
 }
 
