@@ -6,8 +6,7 @@
 /* macros to help index into our 2d and 3d arrays */
 #define ARRSIZE(x)           ((sizeof(x)) / sizeof(*(x)))
 #define IDX2D(x, y, ylen)    ((x) + ((ylen) * (y)))
-#define IDX3D(x, y, z, ylen, zlen) \
-	((x) + ((y) * (ylen)) + ((z) * (ylen) * (zlen)))
+#define IDX3D(x, y, z, ylen, zlen) ((x) + (ylen) * ((y) + (zlen) * (z)))
 
 #define SWAP(x, y, T) do { T SWAP = x; x = y; y = SWAP; } while (0)
 

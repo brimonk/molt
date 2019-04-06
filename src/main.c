@@ -305,6 +305,7 @@ void setuplump_nu(struct lump_header_t *hdr, struct lump_nu_t *nu)
 
 	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 
+	nu->magic = MOLTLUMP_MAGIC;
 	for (i = 0; i < cfg->x_points; i++) {
 		nu->nux[i] = cfg->int_scale * cfg->x_step * cfg->alpha;
 	}
@@ -316,8 +317,6 @@ void setuplump_nu(struct lump_header_t *hdr, struct lump_nu_t *nu)
 	for (i = 0; i < cfg->z_points; i++) {
 		nu->nuz[i] = cfg->int_scale * cfg->z_step * cfg->alpha;
 	}
-
-	nu->magic = MOLTLUMP_MAGIC;
 }
 
 /* setuplump_vweight : setup the vweight lump */
@@ -330,6 +329,7 @@ void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw)
 	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 	alpha = cfg->alpha;
 
+	vw->magic = MOLTLUMP_MAGIC;
 	// first, fill the arrays with our values
 
 	for (i = 0; i < cfg->x_points_inc; i++) {
@@ -347,7 +347,6 @@ void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw)
 		vw->vlz[i] = exp((-alpha) * cfg->int_scale * i);
 	}
 
-	vw->magic = MOLTLUMP_MAGIC;
 }
 
 /* setuplump_wweight : setup the wweight lump */
@@ -360,20 +359,20 @@ void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww)
 	nu  = io_lumpgetbase(hdr, MOLTLUMP_NU);
 
 	// perform all of our get_exp_weights
+	ww->magic = MOLTLUMP_MAGIC;
 	get_exp_weights(nu->nux, ww->xl_weight, ww->xr_weight,
 			ARRSIZE(nu->nux), cfg->space_accuracy);
 	get_exp_weights(nu->nuy, ww->yl_weight, ww->yr_weight,
 			ARRSIZE(nu->nuy), cfg->space_accuracy);
 	get_exp_weights(nu->nuz, ww->zl_weight, ww->zr_weight,
 			ARRSIZE(nu->nuz), cfg->space_accuracy); 
-	ww->magic = MOLTLUMP_MAGIC;
 }
 
 /* setuplump_mesh : setup the "problem state" lump */
 void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 {
 	// write zeroes to the mesh
-	s32 x, y, z;
+	s32 x, y, z, i;
 	struct moltcfg_t *cfg;
 	struct lump_t *lump;
 	struct lump_mesh_t *mesh;
@@ -388,15 +387,17 @@ void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 	memset(((char *)hdr) + lump->offset, 0, lump->lumpsize);
 
 	// we only want to setup the first (0th) umesh applies function f
-	for (x = 0; x < cfg->x_points_inc; x++) {
+	for (z = 0; z < cfg->z_points_inc; z++) {
 		for (y = 0; y < cfg->y_points_inc; y++) {
-			for (z = 0; z < cfg->z_points_inc; z++) {
+			for (x = 0; x < cfg->x_points_inc; x++) {
+				i = IDX3D(x, y, z, cfg->y_points_inc, cfg->z_points_inc);
+
 				fx = pow((x * cfg->int_scale - 1), 2);
 				fy = pow((y * cfg->int_scale - 1), 2);
 				fz = pow((z * cfg->int_scale - 1), 2);
 
-				mesh->umesh[IDX3D(x, y, z, cfg->y_points, cfg->z_points)] =
-					exp(-fx - fy - fz);
+				mesh->umesh[i] = exp(-fx - fy - fz);
+
 			}
 		}
 	}
@@ -447,11 +448,11 @@ void debug(void *hunk)
 #if 1
 	mesh = io_lumpgetbase(hunk, MOLTLUMP_MESH);
 	printf("Magic : 0x%x\n", mesh->magic);
-	for (x = 0; x < cfg->x_points_inc; x++) {
+	for (z = 0; z < cfg->z_points_inc; z++) {
 		for (y = 0; y < cfg->y_points_inc; y++) {
-			for (z = 0; z < cfg->z_points_inc; z++) {
+			for (x = 0; x < cfg->x_points_inc; x++) {
 				i = IDX3D(x, y, z, cfg->y_points_inc, cfg->z_points_inc);
-				printf("umesh[%d,%d,%d] : %e\n", x, y, z, mesh->umesh[i]);
+				printf("[%d] umesh[%d,%d,%d] : %6.16lf\n", i, x, y, z, mesh->umesh[i]);
 			}
 		}
 	}

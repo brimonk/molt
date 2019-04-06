@@ -47,7 +47,7 @@
  * will, when needed, be scaled according to the MOLT_INTSCALE value.
  */
 
-#define MOLT_INTSCALE      0.01
+#define MOLT_INTSCALE      0.02
 
 /*
  * There are 3 pieces of information to know about the dimensionality of the
