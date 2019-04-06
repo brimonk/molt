@@ -4,7 +4,6 @@
 #include <stdint.h>
 
 /* macros to help index into our 2d and 3d arrays */
-#define ARRSIZE(x)           ((sizeof(x)) / sizeof(*(x)))
 #define IDX2D(x, y, ylen)    ((x) + ((ylen) * (y)))
 #define IDX3D(x, y, z, ylen, zlen) ((x) + (ylen) * ((y) + (zlen) * (z)))
 
@@ -169,8 +168,8 @@ struct moltcfg_t {
 	s32 z_points_inc;
 
 	/* MOLT parameters */
-	f64 space_accuracy;
-	f64 time_accuracy;
+	f64 space_acc;
+	f64 time_acc;
 	f64 beta;
 	f64 alpha;
 };

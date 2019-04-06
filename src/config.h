@@ -63,26 +63,26 @@
  */
 
 #define MOLT_T_START         0
-#define MOLT_T_STOP          100
+#define MOLT_T_STOP          20
 #define MOLT_T_STEP          1
 #define MOLT_T_POINTS        ((MOLT_T_STOP - MOLT_T_START) / MOLT_T_STEP)
 #define MOLT_T_POINTS_INC    (MOLT_T_POINTS + 1)
 
 #define MOLT_X_START         0
-#define MOLT_X_STOP          100
-#define MOLT_X_STEP          1
+#define MOLT_X_STOP          200
+#define MOLT_X_STEP          2
 #define MOLT_X_POINTS        ((MOLT_X_STOP - MOLT_X_START) / MOLT_X_STEP)
 #define MOLT_X_POINTS_INC    (MOLT_X_POINTS + 1)
 
 #define MOLT_Y_START         0
-#define MOLT_Y_STOP          100
-#define MOLT_Y_STEP          1
+#define MOLT_Y_STOP          200
+#define MOLT_Y_STEP          2
 #define MOLT_Y_POINTS        ((MOLT_Y_STOP - MOLT_Y_START) / MOLT_Y_STEP)
 #define MOLT_Y_POINTS_INC    (MOLT_Y_POINTS + 1)
 
 #define MOLT_Z_START         0
-#define MOLT_Z_STOP          100
-#define MOLT_Z_STEP          1
+#define MOLT_Z_STOP          200
+#define MOLT_Z_STEP          2
 #define MOLT_Z_POINTS        ((MOLT_Z_STOP - MOLT_Z_START) / MOLT_Z_STEP)
 #define MOLT_Z_POINTS_INC    (MOLT_Z_POINTS + 1)
 
