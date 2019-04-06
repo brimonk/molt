@@ -27,7 +27,7 @@
 /* freespace parameters */
 #define MOLT_LIGHTSPEED      299792458
 #define MOLT_HENRYPERMETER   4 * PI * 1E-7
-#define MOLT_FARADSPERMETER  \
+#define MOLT_FARADSPERMETER \
 	1 / (((long)MOLT_LIGHTSPEED * (long)MOLT_LIGHTSPEED) * MOLT_HENRYPERMETER)
 
 /* tissue parameters */
@@ -38,38 +38,60 @@
 #define MOLT_DISTRIBASYM     0.25
 #define MOLT_TISSUESPEED     (MOLT_LIGHTSPEED / (sqrt(MOLT_INFPERM)))
 
-/* mesh parameters */
+/* 
+ * mesh parameters 
+ */
+
+/* 
+ * Values are normalized to integers (u64s) for computation. Their values
+ * will, when needed, be scaled according to the MOLT_INTSCALE value.
+ */
+
 #define MOLT_INTSCALE      0.01
-#define MOLT_STEPINT         1 /* in units */
-#define MOLT_STEPINX         2 /* in units */
-#define MOLT_STEPINY         2 /* in units */
-#define MOLT_STEPINZ         2 /* in units */
+
+/*
+ * There are 3 pieces of information to know about the dimensionality of the
+ * problem.
+ *
+ * * start
+ * * stop
+ * * length
+ *
+ * That is, to define a dimension, we need to know what (remember the normalized
+ * units from up above) integer it starts at, stops at, and how big of a step we
+ * can take within the simulation grid.
+ */
+
+#define MOLT_T_START         0
+#define MOLT_T_STOP          100
+#define MOLT_T_STEP          1
+#define MOLT_T_POINTS        ((MOLT_T_STOP - MOLT_T_START) / MOLT_T_STEP)
+#define MOLT_T_POINTS_INC    (MOLT_T_POINTS + 1)
+
+#define MOLT_X_START         0
+#define MOLT_X_STOP          100
+#define MOLT_X_STEP          1
+#define MOLT_X_POINTS        ((MOLT_X_STOP - MOLT_X_START) / MOLT_X_STEP)
+#define MOLT_X_POINTS_INC    (MOLT_X_POINTS + 1)
+
+#define MOLT_Y_START         0
+#define MOLT_Y_STOP          100
+#define MOLT_Y_STEP          1
+#define MOLT_Y_POINTS        ((MOLT_Y_STOP - MOLT_Y_START) / MOLT_Y_STEP)
+#define MOLT_Y_POINTS_INC    (MOLT_Y_POINTS + 1)
+
+#define MOLT_Z_START         0
+#define MOLT_Z_STOP          100
+#define MOLT_Z_STEP          1
+#define MOLT_Z_POINTS        ((MOLT_Z_STOP - MOLT_Z_START) / MOLT_Z_STEP)
+#define MOLT_Z_POINTS_INC    (MOLT_Z_POINTS + 1)
 
 #define MOLT_CFL \
-	(MOLT_TISSUESPEED * MOLT_STEPINT * \
-	 sqrt(1/pow(MOLT_STEPINX,2) + 1/pow(MOLT_STEPINY,2) \
-		 + 1/pow(MOLT_STEPINZ,2)) * 1E-10)
-
-/* dimension parameters */
-#define MOLT_SIMTIME      10 /* in units */
-#define MOLT_DOMAINWIDTH  200 /* in units */
-#define MOLT_DOMAINDEPTH  200 /* in units */
-#define MOLT_DOMAINHEIGHT 200 /* in units */
-
-#define MOLT_TOTALSTEPS   (MOLT_SIMTIME / MOLT_STEPINT) + 1
-#define MOLT_TOTALWIDTH   (MOLT_DOMAINWIDTH / MOLT_STEPINX)
-#define MOLT_TOTALDEEP    (MOLT_DOMAINDEPTH / MOLT_STEPINY)
-#define MOLT_TOTALHEIGHT  (MOLT_DOMAINHEIGHT / MOLT_STEPINZ)
-
-#if 0
-#define MOLT_XPOINTS      ((long)((0 + MOLT_TOTALWIDTH) / MOLT_DOMAINWIDTH))
-#define MOLT_YPOINTS      ((long)((0 + MOLT_TOTALDEEP) / MOLT_DOMAINDEPTH))
-#define MOLT_ZPOINTS      ((long)((0 + MOLT_TOTALHEIGHT) / MOLT_DOMAINHEIGHT))
-#else
-#define MOLT_XPOINTS      (MOLT_TOTALWIDTH + 1)
-#define MOLT_YPOINTS      (MOLT_TOTALDEEP + 1)
-#define MOLT_ZPOINTS      (MOLT_TOTALHEIGHT + 1)
-#endif
+	(MOLT_TISSUESPEED * (MOLT_T_STEP * MOLT_INTSCALE) *\
+	 sqrt(\
+		 1 / pow((MOLT_X_STEP * MOLT_INTSCALE), 2) + \
+		 1 / pow((MOLT_Y_STEP * MOLT_INTSCALE), 2) + \
+		 1 / pow((MOLT_Z_STEP * MOLT_INTSCALE), 2)) * 1e-10)
 
 #define MOLT_SPACEACC     6
 #define MOLT_TIMEACC      3
@@ -82,7 +104,6 @@
 #define MOLT_BETA 2
 #endif
 
-#define MOLT_ALPHA MOLT_BETA / \
-	(MOLT_TISSUESPEED * MOLT_STEPINT * MOLT_INTSCALE)
+#define MOLT_ALPHA MOLT_BETA / (MOLT_TISSUESPEED * MOLT_T_STEP * MOLT_INTSCALE)
 
 #endif

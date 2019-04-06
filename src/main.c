@@ -13,6 +13,8 @@
  * 3d. do_sweep
  * 3e. gf_quad
  *
+ * * Use Print And Die Macro Instead of fprintf ... exit
+ *
  * WISHLIST:
  * 1. Remapping Procedure should be rethought out (setup_simulation)
  */
@@ -44,7 +46,7 @@ void setuplump_pfield(struct lump_header_t *hdr, struct lump_pfield_t *pfield);
 void setuplump_nu(struct lump_header_t *hdr, struct lump_nu_t *nu);
 void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw);
 void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww);
-void setuplump_pstate(struct lump_header_t *hdr, struct lump_pstate_t *state);
+void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state);
 
 void do_simulation(void *hunk, u64 hunksize);
 
@@ -68,12 +70,14 @@ int main(int argc, char **argv)
 
 	setup_simulation(&hunk, &hunksize, fd);
 
-	debug(hunk);
 
 	do_simulation(hunk, hunksize);
 
 	/* sync the file, then clean up */
 	io_mssync(hunk, hunk, hunksize);
+
+	debug(hunk);
+
 	io_munmap(hunk);
 	io_close(fd);
 
@@ -127,7 +131,7 @@ void setup_simulation(void **base, u64 *size, int fd)
 	setuplump_nu(*base, io_lumpgetbase(*base, MOLTLUMP_NU));
 	setuplump_vweight(*base, io_lumpgetbase(*base, MOLTLUMP_VWEIGHT));
 	setuplump_wweight(*base, io_lumpgetbase(*base, MOLTLUMP_WWEIGHT));
-	setuplump_pstate(*base, io_lumpgetbase(*base, MOLTLUMP_PSTATE));
+	setuplump_mesh(*base, io_lumpgetbase(*base, MOLTLUMP_MESH));
 }
 
 /* setup_lumps : returns size of file after lumpsystem setup */
@@ -160,14 +164,14 @@ u64 setup_lumps(void *base)
 	/* setup our efield information */
 	hdr->lump[2].offset = curr_offset;
 	hdr->lump[2].elemsize = sizeof(struct lump_efield_t);
-	hdr->lump[2].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[2].elemsize;
+	hdr->lump[2].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[2].elemsize;
 
 	curr_offset += hdr->lump[2].lumpsize;
 
 	/* setup our pfield information */
 	hdr->lump[3].offset = curr_offset;
 	hdr->lump[3].elemsize = sizeof(struct lump_pfield_t);
-	hdr->lump[3].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[3].elemsize;
+	hdr->lump[3].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[3].elemsize;
 
 	curr_offset += hdr->lump[3].lumpsize;
 
@@ -188,14 +192,14 @@ u64 setup_lumps(void *base)
 	/* setup our wweight information */
 	hdr->lump[6].offset = curr_offset;
 	hdr->lump[6].elemsize = sizeof(struct lump_wweight_t);
-	hdr->lump[6].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[6].elemsize;
+	hdr->lump[6].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[6].elemsize;
 
 	curr_offset += hdr->lump[6].lumpsize;
 
 	/* setup our problem state */
 	hdr->lump[7].offset = curr_offset;
-	hdr->lump[7].elemsize = sizeof(struct lump_pstate_t);
-	hdr->lump[7].lumpsize = ((u64)MOLT_TOTALSTEPS) * hdr->lump[7].elemsize;
+	hdr->lump[7].elemsize = sizeof(struct lump_mesh_t);
+	hdr->lump[7].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[7].elemsize;
 
 	curr_offset += hdr->lump[7].lumpsize;
 
@@ -205,6 +209,7 @@ u64 setup_lumps(void *base)
 /* simsetup_cfg : setup the config lump */
 void setuplump_cfg(struct moltcfg_t *cfg)
 {
+	cfg->magic = MOLTLUMP_MAGIC;
 	/* free space parms */
 	cfg->lightspeed = MOLT_LIGHTSPEED;
 	cfg->henrymeter = MOLT_HENRYPERMETER;
@@ -217,21 +222,35 @@ void setuplump_cfg(struct moltcfg_t *cfg)
 	cfg->distribasym = MOLT_DISTRIBASYM;
 	cfg->tissuespeed = MOLT_TISSUESPEED;
 	/* mesh parms */
-	cfg->int_scale = MOLT_INTSCALE;
-	cfg->step_in_sec = MOLT_STEPINT;
-	cfg->step_in_x = MOLT_STEPINX;
-	cfg->step_in_y = MOLT_STEPINY;
-	cfg->step_in_z = MOLT_STEPINZ;
 	cfg->cfl = MOLT_CFL;
+
+	cfg->int_scale = MOLT_INTSCALE;
+
 	/* dimension parms */
-	cfg->sim_time = MOLT_SIMTIME;
-	cfg->sim_x = MOLT_XPOINTS;
-	cfg->sim_y = MOLT_YPOINTS;
-	cfg->sim_z = MOLT_ZPOINTS;
-	cfg->sim_time_steps = MOLT_TOTALSTEPS;
-	cfg->sim_x_steps = MOLT_TOTALWIDTH;
-	cfg->sim_y_steps = MOLT_TOTALDEEP;
-	cfg->sim_z_steps = MOLT_TOTALHEIGHT;
+	cfg->t_start      = MOLT_T_START;
+	cfg->t_stop       = MOLT_T_STOP;
+	cfg->t_step       = MOLT_T_STEP;
+	cfg->t_points     = MOLT_T_POINTS;
+	cfg->t_points_inc = MOLT_T_POINTS_INC;
+
+	cfg->x_start      = MOLT_X_START;
+	cfg->x_stop       = MOLT_X_STOP;
+	cfg->x_step       = MOLT_X_STEP;
+	cfg->x_points     = MOLT_X_POINTS;
+	cfg->x_points_inc = MOLT_X_POINTS_INC;
+
+	cfg->y_start      = MOLT_Y_START;
+	cfg->y_stop       = MOLT_Y_STOP;
+	cfg->y_step       = MOLT_Y_STEP;
+	cfg->y_points     = MOLT_Y_POINTS;
+	cfg->y_points_inc = MOLT_Y_POINTS_INC;
+
+	cfg->z_start      = MOLT_Z_START;
+	cfg->z_stop       = MOLT_Z_STOP;
+	cfg->z_step       = MOLT_Z_STEP;
+	cfg->z_points     = MOLT_Z_POINTS;
+	cfg->z_points_inc = MOLT_Z_POINTS_INC;
+
 	/* MOLT parameters */
 	cfg->space_accuracy = MOLT_SPACEACC;
 	cfg->time_accuracy = MOLT_TIMEACC;
@@ -242,6 +261,7 @@ void setuplump_cfg(struct moltcfg_t *cfg)
 /* simsetup_run : setup run information */
 void setuplump_run(struct lump_runinfo_t *run)
 {
+	run->magic = MOLTLUMP_MAGIC;
 	run->time_start = 0;
 	run->time_step = .5;
 	run->time_stop = 10;
@@ -260,6 +280,7 @@ void setuplump_efield(struct lump_header_t *hdr, struct lump_efield_t *efield)
 	lump = &hdr->lump[MOLTLUMP_EFIELD];
 
 	memset(ptr + lump->offset, 0, lump->lumpsize);
+	efield->magic = MOLTLUMP_MAGIC;
 }
 
 /* setuplump_pfield : setup the pfield lump */
@@ -273,6 +294,7 @@ void setuplump_pfield(struct lump_header_t *hdr, struct lump_pfield_t *pfield)
 	lump = &hdr->lump[MOLTLUMP_PFIELD];
 
 	memset(ptr + lump->offset, 0, lump->lumpsize);
+	pfield->magic = MOLTLUMP_MAGIC;
 }
 
 /* setuplump_nu : setup the nu lump */
@@ -283,16 +305,19 @@ void setuplump_nu(struct lump_header_t *hdr, struct lump_nu_t *nu)
 
 	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 
-	for (i = 0; i < cfg->sim_x_steps; i++) {
-		nu->nux[i] = cfg->int_scale * cfg->step_in_x * cfg->alpha;
+	for (i = 0; i < cfg->x_points; i++) {
+		nu->nux[i] = cfg->int_scale * cfg->x_step * cfg->alpha;
 	}
 
-	for (i = 0; i < cfg->sim_y_steps; i++) {
-		nu->nuy[i] = cfg->int_scale * cfg->step_in_y * cfg->alpha;
+	for (i = 0; i < cfg->y_points; i++) {
+		nu->nuy[i] = cfg->int_scale * cfg->y_step * cfg->alpha;
 	}
-	for (i = 0; i < cfg->sim_z_steps; i++) {
-		nu->nuz[i] = cfg->int_scale * cfg->step_in_z * cfg->alpha;
+
+	for (i = 0; i < cfg->z_points; i++) {
+		nu->nuz[i] = cfg->int_scale * cfg->z_step * cfg->alpha;
 	}
+
+	nu->magic = MOLTLUMP_MAGIC;
 }
 
 /* setuplump_vweight : setup the vweight lump */
@@ -307,37 +332,22 @@ void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw)
 
 	// first, fill the arrays with our values
 
-	for (i = 0; i < cfg->sim_x; i++) {
-		vw->vrx[i] = cfg->int_scale * i;
-		vw->vlx[i] = cfg->int_scale * i;
+	for (i = 0; i < cfg->x_points_inc; i++) {
+		vw->vrx[i] = exp((-alpha) * cfg->int_scale * i);
+		vw->vlx[i] = exp((-alpha) * cfg->int_scale * i);
 	}
 
-	for (i = 0; i < cfg->sim_y; i++) {
-		vw->vry[i] = cfg->int_scale * i;
-		vw->vly[i] = cfg->int_scale * i;
+	for (i = 0; i < cfg->y_points_inc; i++) {
+		vw->vry[i] = exp((-alpha) * cfg->int_scale * i);
+		vw->vly[i] = exp((-alpha) * cfg->int_scale * i);
 	}
 
-	for (i = 0; i < cfg->sim_z; i++) {
-		vw->vrz[i] = cfg->int_scale * i;
-		vw->vlz[i] = cfg->int_scale * i;
+	for (i = 0; i < cfg->z_points_inc; i++) {
+		vw->vrz[i] = exp((-alpha) * cfg->int_scale * i);
+		vw->vlz[i] = exp((-alpha) * cfg->int_scale * i);
 	}
 
-	// now, perform our computation on them
-
-	for (i = 0; i < cfg->sim_x; i++) {
-		vw->vrx[i] = exp((-alpha) * vw->vrx[i]);
-		vw->vlx[i] = exp((-alpha) * vw->vlx[i]);
-	}
-
-	for (i = 0; i < cfg->sim_y; i++) {
-		vw->vry[i] = exp((-alpha) * vw->vry[i]);
-		vw->vly[i] = exp((-alpha) * vw->vly[i]);
-	}
-
-	for (i = 0; i < cfg->sim_z; i++) {
-		vw->vrz[i] = exp((-alpha) * vw->vrz[i]);
-		vw->vlz[i] = exp((-alpha) * vw->vlz[i]);
-	}
+	vw->magic = MOLTLUMP_MAGIC;
 }
 
 /* setuplump_wweight : setup the wweight lump */
@@ -356,42 +366,53 @@ void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww)
 			ARRSIZE(nu->nuy), cfg->space_accuracy);
 	get_exp_weights(nu->nuz, ww->zl_weight, ww->zr_weight,
 			ARRSIZE(nu->nuz), cfg->space_accuracy); 
+	ww->magic = MOLTLUMP_MAGIC;
 }
 
-/* setuplump_pstate : setup the "problem state" lump */
-void setuplump_pstate(struct lump_header_t *hdr, struct lump_pstate_t *state)
+/* setuplump_mesh : setup the "problem state" lump */
+void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 {
-	// write zeroes to the pstate
+	// write zeroes to the mesh
+	s32 x, y, z;
+	struct moltcfg_t *cfg;
 	struct lump_t *lump;
-	char *ptr;
+	struct lump_mesh_t *mesh;
+	f64 fx, fy, fz;
 
-	ptr = (char *)hdr;
-	lump = &hdr->lump[MOLTLUMP_PSTATE];
+	lump = &hdr->lump[MOLTLUMP_MESH];
+	mesh = io_lumpgetbase(hdr, MOLTLUMP_MESH);
+	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 
-	memset(ptr + lump->offset, 0, lump->lumpsize);
+	mesh->magic = MOLTLUMP_MAGIC;
+
+	memset(((char *)hdr) + lump->offset, 0, lump->lumpsize);
+
+	// we only want to setup the first (0th) umesh applies function f
+	for (x = 0; x < cfg->x_points_inc; x++) {
+		for (y = 0; y < cfg->y_points_inc; y++) {
+			for (z = 0; z < cfg->z_points_inc; z++) {
+				fx = pow((x * cfg->int_scale - 1), 2);
+				fy = pow((y * cfg->int_scale - 1), 2);
+				fz = pow((z * cfg->int_scale - 1), 2);
+
+				mesh->umesh[IDX3D(x, y, z, cfg->y_points, cfg->z_points)] =
+					exp(-fx - fy - fz);
+			}
+		}
+	}
 }
-
-#if 0
-/* misc math functions */
-
-/* applied_func : applies function "f" from the original source to data */
-void applied_funcf(void *base)
-{
-}
-
-/* applied_func : applies function "g" from the original source to data */
-void applied_funcg(void *base)
-{
-}
-#endif
 
 void debug(void *hunk)
 {
 	struct lump_header_t *hdr;
+	struct moltcfg_t *cfg;
 	struct lump_vweight_t *vw;
-	int i;
+	struct lump_mesh_t *mesh;
+	s32 i, x, y, z;
 
 	hdr = hunk;
+
+	cfg = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
 
 	io_fprintf(stdout, "header : 0x%8x\tver : %d\t type : 0x%02x\n",
 			hdr->magic, hdr->version, hdr->type);
@@ -407,17 +428,32 @@ void debug(void *hunk)
 
 #if 1
 	vw = io_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
-	for (i = 0; i < MOLT_XPOINTS; i++) {
+	for (i = 0; i < cfg->x_points_inc; i++) {
 		printf("vlx[%03d] : %4e\t vrx[%03d] : %4e\n",
 				i, vw->vlx[i], i, vw->vrx[i]);
 	}
-	for (i = 0; i < MOLT_XPOINTS; i++) {
+
+	for (i = 0; i < cfg->y_points_inc; i++) {
 		printf("vly[%03d] : %4e\t vry[%03d] : %4e\n",
 				i, vw->vly[i], i, vw->vry[i]);
 	}
-	for (i = 0; i < MOLT_XPOINTS; i++) {
+
+	for (i = 0; i < cfg->z_points_inc; i++) {
 		printf("vlz[%03d] : %4e\t vrz[%03d] : %4e\n",
 				i, vw->vlz[i], i, vw->vrz[i]);
+	}
+#endif
+
+#if 1
+	mesh = io_lumpgetbase(hunk, MOLTLUMP_MESH);
+	printf("Magic : 0x%x\n", mesh->magic);
+	for (x = 0; x < cfg->x_points_inc; x++) {
+		for (y = 0; y < cfg->y_points_inc; y++) {
+			for (z = 0; z < cfg->z_points_inc; z++) {
+				i = IDX3D(x, y, z, cfg->y_points_inc, cfg->z_points_inc);
+				printf("umesh[%d,%d,%d] : %e\n", x, y, z, mesh->umesh[i]);
+			}
+		}
 	}
 #endif
 }

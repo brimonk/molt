@@ -108,7 +108,7 @@ enum {
 	MOLTLUMP_NU,
 	MOLTLUMP_VWEIGHT,
 	MOLTLUMP_WWEIGHT,
-	MOLTLUMP_PSTATE
+	MOLTLUMP_MESH
 };
 
 struct lump_t {
@@ -125,10 +125,12 @@ struct lump_header_t {
 };
 
 struct moltcfg_t {
+	u32 magic;
 	/* free space parms */
 	f64 lightspeed;
 	f64 henrymeter;
 	f64 faradmeter;
+
 	/* tissue space parms */
 	f64 staticperm;
 	f64 infiniteperm;
@@ -136,22 +138,37 @@ struct moltcfg_t {
 	f64 distribtail;
 	f64 distribasym;
 	f64 tissuespeed;
+
 	/* mesh parms */
-	f64 int_scale;
-	f64 step_in_sec;
-	f64 step_in_x;
-	f64 step_in_y;
-	f64 step_in_z;
 	f64 cfl;
-	/* dimension parms */
-	f64 sim_time;
-	f64 sim_x;
-	f64 sim_y;
-	f64 sim_z;
-	s64 sim_time_steps;
-	s64 sim_x_steps;
-	s64 sim_y_steps;
-	s64 sim_z_steps;
+
+	f64 int_scale; // mesh values are normalized into units
+                        // and scaled by mesh_int_scale when desired
+
+	s32 t_start;
+	s32 t_stop;
+	s32 t_step;
+	s32 t_points;
+	s32 t_points_inc;
+
+	s32 x_start;
+	s32 x_stop;
+	s32 x_step;
+	s32 x_points;
+	s32 x_points_inc;
+
+	s32 y_start;
+	s32 y_stop;
+	s32 y_step;
+	s32 y_points;
+	s32 y_points_inc;
+
+	s32 z_start;
+	s32 z_stop;
+	s32 z_step;
+	s32 z_points;
+	s32 z_points_inc;
+
 	/* MOLT parameters */
 	f64 space_accuracy;
 	f64 time_accuracy;
@@ -160,6 +177,7 @@ struct moltcfg_t {
 };
 
 struct lump_runinfo_t {
+	u32 magic;
 	f64 time_start;
 	f64 time_step;
 	f64 time_stop;
@@ -168,39 +186,48 @@ struct lump_runinfo_t {
 };
 
 struct lump_efield_t {
-	f64 data[MOLT_XPOINTS * MOLT_YPOINTS * MOLT_ZPOINTS];
+	u32 magic;
+	u32 padding;
+	f64 data[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 };
 
 struct lump_pfield_t {
-	f64 data[MOLT_XPOINTS * MOLT_YPOINTS * MOLT_ZPOINTS];
+	u32 magic;
+	u32 padding;
+	f64 data[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 };
 
 struct lump_nu_t {
-	f64 nux[MOLT_TOTALWIDTH];
-	f64 nuy[MOLT_TOTALDEEP];
-	f64 nuz[MOLT_TOTALHEIGHT];
+	u32 magic;
+	f64 nux[MOLT_X_POINTS];
+	f64 nuy[MOLT_Y_POINTS];
+	f64 nuz[MOLT_Z_POINTS];
 };
 
 struct lump_vweight_t {
-	f64 vrx[MOLT_XPOINTS];
-	f64 vlx[MOLT_XPOINTS];
-	f64 vry[MOLT_YPOINTS];
-	f64 vly[MOLT_YPOINTS];
-	f64 vrz[MOLT_ZPOINTS];
-	f64 vlz[MOLT_ZPOINTS];
+	u32 magic;
+	f64 vrx[MOLT_X_POINTS_INC];
+	f64 vlx[MOLT_X_POINTS_INC];
+	f64 vry[MOLT_Y_POINTS_INC];
+	f64 vly[MOLT_Y_POINTS_INC];
+	f64 vrz[MOLT_Z_POINTS_INC];
+	f64 vlz[MOLT_Z_POINTS_INC];
 };
 
 struct lump_wweight_t {
-	f64 xr_weight[MOLT_TOTALWIDTH * (MOLT_SPACEACC + 1)];
-	f64 xl_weight[MOLT_TOTALWIDTH * (MOLT_SPACEACC + 1)];
-	f64 yr_weight[MOLT_TOTALDEEP * (MOLT_SPACEACC + 1)];
-	f64 yl_weight[MOLT_TOTALDEEP * (MOLT_SPACEACC + 1)];
-	f64 zr_weight[MOLT_TOTALHEIGHT * (MOLT_SPACEACC + 1)];
-	f64 zl_weight[MOLT_TOTALHEIGHT * (MOLT_SPACEACC + 1)];
+	u32 magic;
+	f64 xr_weight[MOLT_X_POINTS * (MOLT_SPACEACC + 1)];
+	f64 xl_weight[MOLT_X_POINTS * (MOLT_SPACEACC + 1)];
+	f64 yr_weight[MOLT_Y_POINTS * (MOLT_SPACEACC + 1)];
+	f64 yl_weight[MOLT_Y_POINTS * (MOLT_SPACEACC + 1)];
+	f64 zr_weight[MOLT_Z_POINTS * (MOLT_SPACEACC + 1)];
+	f64 zl_weight[MOLT_Z_POINTS * (MOLT_SPACEACC + 1)];
 };
 
-struct lump_pstate_t { // problem state (the thing we simulate)
-	f64 data[MOLT_XPOINTS * MOLT_YPOINTS * MOLT_ZPOINTS];
+struct lump_mesh_t { // problem state (the thing we simulate)
+	u32 magic;
+	f64 umesh[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
+	f64 vmesh[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 };
 
 #endif
