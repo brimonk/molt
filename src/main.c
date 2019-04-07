@@ -5,7 +5,6 @@
  * Method Of Lines Transpose - Implicit Wave Solver with Pluggable Modules
  *
  * TODO (Brian)
- * 2. Setup Simulation Data
  * 3. time looping
  * 3a. first_timestep
  * 3b. d and c operators
@@ -32,7 +31,7 @@
 #include "io.h"
 #include "calcs.h"
 #include "config.h"
-#include "gfquad.h"
+#include "molt.h"
 
 #define DEFAULTFILE "data.dat"
 
@@ -49,6 +48,12 @@ void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww);
 void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state);
 
 void do_simulation(void *hunk, u64 hunksize);
+
+void timestep_first(lcfg_t *cfg, lrun_t *run, lnu_t *nu, lvweight_t *vw,
+					lwweight_t *ww, lmesh_t *mesh);
+void timestep(
+		lcfg_t *cfg, lrun_t *run, lnu_t *nu, lvweight_t *vw,
+		lwweight_t *ww, lmesh_t *mesh);
 
 void applied_funcf(void *base);
 void applied_funcg(void *base);
@@ -87,6 +92,26 @@ int main(int argc, char **argv)
 /* do_simulation : actually does the simulating */
 void do_simulation(void *hunk, u64 hunksize)
 {
+	struct moltcfg_t *cfg;
+	struct lump_runinfo_t *run;
+	struct lump_nu_t *nu;
+	struct lump_vweight_t *vw;
+	struct lump_wweight_t *ww;
+	struct lump_mesh_t *mesh;
+
+	cfg   = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
+	run   = io_lumpgetbase(hunk, MOLTLUMP_RUNINFO);
+	nu    = io_lumpgetbase(hunk, MOLTLUMP_NU);
+	vw    = io_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
+	ww    = io_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
+	mesh  = io_lumpgetbase(hunk, MOLTLUMP_MESH);
+
+	molt_firststep(cfg, run, nu, vw, ww, mesh);
+
+	for (run->t_idx++; run->t_idx < run->t_total; run->t_idx++) {
+		molt_step(cfg, run, nu, vw, ww, mesh);
+		/* save off some fields as required */
+	}
 }
 
 /* setup_simulation : sets up simulation based on config.h */
@@ -255,6 +280,9 @@ void setuplump_cfg(struct moltcfg_t *cfg)
 	cfg->space_acc = MOLT_SPACEACC;
 	cfg->time_acc = MOLT_TIMEACC;
 	cfg->beta = MOLT_BETA;
+	cfg->beta_sq = pow(MOLT_BETA, 2);
+	cfg->beta_fo = pow(MOLT_BETA, 4) / 6;
+	cfg->beta_si = pow(MOLT_BETA, 6) / 360;
 	cfg->alpha = MOLT_ALPHA;
 }
 
@@ -262,11 +290,11 @@ void setuplump_cfg(struct moltcfg_t *cfg)
 void setuplump_run(struct lump_runinfo_t *run)
 {
 	run->magic = MOLTLUMP_MAGIC;
-	run->time_start = 0;
-	run->time_step = .5;
-	run->time_stop = 10;
-	run->curr_idx = 0;
-	run->total_steps = (run->time_stop - run->time_start) / run->time_step;
+	run->t_start = 0;
+	run->t_step  = .5;
+	run->t_stop  = 10;
+	run->t_idx   = 0;
+	run->t_total = (run->t_stop - run->t_start) / run->t_step;
 }
 
 /* setuplump_efield : setup the efield lump */
@@ -308,14 +336,17 @@ void setuplump_nu(struct lump_header_t *hdr, struct lump_nu_t *nu)
 	nu->magic = MOLTLUMP_MAGIC;
 	for (i = 0; i < cfg->x_points; i++) {
 		nu->nux[i] = cfg->int_scale * cfg->x_step * cfg->alpha;
+		nu->dnux[i] = exp(-nu->nux[i]);
 	}
 
 	for (i = 0; i < cfg->y_points; i++) {
 		nu->nuy[i] = cfg->int_scale * cfg->y_step * cfg->alpha;
+		nu->dnuy[i] = exp(-nu->nuy[i]);
 	}
 
 	for (i = 0; i < cfg->z_points; i++) {
 		nu->nuz[i] = cfg->int_scale * cfg->z_step * cfg->alpha;
+		nu->dnuz[i] = exp(-nu->nuz[i]);
 	}
 }
 
@@ -397,7 +428,6 @@ void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 				fz = pow((z * cfg->int_scale - 1), 2);
 
 				mesh->umesh[i] = exp(-fx - fy - fz);
-
 			}
 		}
 	}

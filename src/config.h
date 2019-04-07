@@ -64,7 +64,7 @@
 
 #define MOLT_T_START         0
 #define MOLT_T_STOP          20
-#define MOLT_T_STEP          1
+#define MOLT_T_STEP          2
 #define MOLT_T_POINTS        ((MOLT_T_STOP - MOLT_T_START) / MOLT_T_STEP)
 #define MOLT_T_POINTS_INC    (MOLT_T_POINTS + 1)
 

@@ -5,7 +5,7 @@
 
 /* macros to help index into our 2d and 3d arrays */
 #define IDX2D(x, y, ylen)    ((x) + ((ylen) * (y)))
-#define IDX3D(x, y, z, ylen, zlen) ((x) + (ylen) * ((y) + (zlen) * (z)))
+#define IDX3D(x, y, z, ylen, zlen) ((x) + (y) * (ylen) + (z) * (zlen) * (ylen))
 
 #define SWAP(x, y, T) do { T SWAP = x; x = y; y = SWAP; } while (0)
 
@@ -26,12 +26,12 @@ typedef float    f32;
 typedef double   f64;
 
 /* begin by defining vectors of multiple dimensionality */
-typedef double vec_t;
-typedef vec_t vec2_t[2];
-typedef vec_t vec3_t[3];
-typedef vec_t vec4_t[4];
-typedef vec_t vec5_t[5];
-typedef vec_t vec6_t[6];
+typedef s32 ivec_t;
+typedef ivec_t ivec2_t[2];
+typedef ivec_t ivec3_t[3];
+typedef ivec_t ivec4_t[4];
+typedef ivec_t ivec5_t[5];
+typedef ivec_t ivec6_t[6];
 
 /* now define vectors of double pointers */
 typedef double * pvec_t;
@@ -40,6 +40,15 @@ typedef pvec_t pvec3_t[3];
 typedef pvec_t pvec4_t[4];
 typedef pvec_t pvec5_t[5];
 typedef pvec_t pvec6_t[6];
+
+/* some less useful character vectors */
+typedef char cvec_t;
+typedef cvec_t cvec2_t[2];
+typedef cvec_t cvec3_t[3];
+typedef cvec_t cvec4_t[4];
+typedef cvec_t cvec5_t[5];
+typedef cvec_t cvec6_t[6];
+
 
 /* 
  * we can actually define inline vector operations
@@ -71,10 +80,10 @@ typedef pvec_t pvec6_t[6];
 #define VectorAdd(a,b,c) ((c)[0]=(a)[0]+(b)[0],\
 		(c)[1]=(a)[1]+(b)[1],(c)[2]=(a)[2]+(b)[2])
 #define VectorCopy(a,b)  ((b)[0]=(a)[0],(b)[1]=(a)[1],(b)[2]=(a)[2])
-#define VectorScale(v,s,o) ((o)[0]=(v)[0]*(s),\
-		(o)[1]=(v)[1]*(s),(o)[2]=(v)[2]*(s))
-#define VectorMA(v,s,b,o) ((o)[0]=(v)[0]+(b)[0]*(s),\
-		(o)[1]=(v)[1]+(b)[1]*(s),(o)[2]=(v)[2]+(b)[2]*(s))
+#define VectorScale(v,s,o) \
+	((o)[0]=(v)[0]*(s), (o)[1]=(v)[1]*(s), (o)[2]=(v)[2]*(s))
+#define VectorMA(v,s,b,o) \
+	((o)[0]=(v)[0]+(b)[0]*(s),(o)[1]=(v)[1]+(b)[1]*(s),(o)[2]=(v)[2]+(b)[2]*(s))
 #define VectorCrossProduct(a,b,c) \
 	((c)[0]=(a)[1]*(b)[2]-(a)[2]*(b)[1],\
 	 (c)[1]=(a)[2]*(b)[0]-(a)[0]*(b)[2],\
@@ -171,16 +180,19 @@ struct moltcfg_t {
 	f64 space_acc;
 	f64 time_acc;
 	f64 beta;
+	f64 beta_sq; // b^2 term in molt (for precomputation)
+	f64 beta_fo; // b^4 term in molt
+	f64 beta_si; // b^6 term in molt
 	f64 alpha;
 };
 
 struct lump_runinfo_t {
 	u32 magic;
-	f64 time_start;
-	f64 time_step;
-	f64 time_stop;
-	s32 curr_idx;
-	s32 total_steps;
+	f64 t_start;
+	f64 t_step;
+	f64 t_stop;
+	s32 t_idx;
+	s32 t_total;
 };
 
 struct lump_efield_t {
@@ -200,6 +212,9 @@ struct lump_nu_t {
 	f64 nux[MOLT_X_POINTS];
 	f64 nuy[MOLT_Y_POINTS];
 	f64 nuz[MOLT_Z_POINTS];
+	f64 dnux[MOLT_X_POINTS];
+	f64 dnuy[MOLT_Y_POINTS];
+	f64 dnuz[MOLT_Z_POINTS];
 };
 
 struct lump_vweight_t {
@@ -227,5 +242,15 @@ struct lump_mesh_t { // problem state (the thing we simulate)
 	f64 umesh[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 	f64 vmesh[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 };
+
+/* typedefs for all of the structures */
+typedef struct moltcfg_t      lcfg_t;
+typedef struct lump_runinfo_t lrun_t;
+typedef struct lump_efield_t  lefield_t;
+typedef struct lump_pfield_t  lpfield_t;
+typedef struct lump_nu_t      lnu_t;
+typedef struct lump_vweight_t lvweight_t;
+typedef struct lump_wweight_t lwweight_t;
+typedef struct lump_mesh_t    lmesh_t;
 
 #endif

@@ -71,8 +71,8 @@ void get_exp_weights(f64 *nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm)
 		matflip(workmat_r, rowlen);
 
 		/* multiply our phi vector with our working matrix, giving the answer */
-		vm_mult(wl + (i * rowlen), phi, workmat_l, rowlen);
-		vm_mult(wr + (i * rowlen), phi, workmat_r, rowlen);
+		mat_mv_mult(wl + (i * rowlen), workmat_l, phi, rowlen);
+		mat_mv_mult(wr + (i * rowlen), workmat_r, phi, rowlen);
 	}
 
 	free(x);
@@ -134,18 +134,6 @@ int get_exp_ind(int i, int n, int m)
 		rc = n - m;
 
 	return rc;
-}
-
-/* matprint : function to print out an NxN matrix */
-void matprint(double *mat, int n)
-{
-	int i, j;
-
-	for (i = 0; i < n; i++) {
-		for (j = 0; j < n; j++) {
-			printf("%.3e%c", mat[i * n + j], j == n-1 ?'\n':'\t');
-		}
-	}
 }
 
 /* invvan : create an inverted Vandermonde matrix */
@@ -301,8 +289,38 @@ double exp_int(double nu, int sizem)
 	return phi;
 }
 
-/* vm_mult : perform vector matrix multiplication */
-void vm_mult(double *out, double *invect, double *inmat, int singledim)
+/* vec_add_s : add a scalar to a vector */
+void vec_add_s(f64 *outvec, f64 *invec, f64 scalar, s32 len)
+{
+	s32 i;
+
+	for (i = 0; i < len; i++) {
+		outvec[i] = invec[i] + scalar;
+	}
+}
+
+/* vec_add_v : adds two vector's elements together */
+void vec_add_v(f64 *outvec, f64 *veca, f64 *vecb, s32 len)
+{
+	s32 i;
+
+	for (i = 0; i < len; i++) {
+		outvec[i] = veca[i] + vecb[i];
+	}
+}
+
+/* vec_mul_s : multiply a vector by a scalar */
+void vec_mul_s(f64 *outvec, f64 *invec, f64 scalar, s32 len)
+{
+	s32 i;
+
+	for (i = 0; i < len; i++) {
+		outvec[i] = invec[i] * scalar;
+	}
+}
+
+/* mat_mv_mult : perform vector matrix multiply */
+void mat_mv_mult(f64 *out, f64 *inmat, f64 *invec, s32 singledim)
 {
 	/* inmatn is the side length of our hopefully square matrix */
 	int i, j;
@@ -311,9 +329,20 @@ void vm_mult(double *out, double *invect, double *inmat, int singledim)
 
 	for (i = 0; i < singledim; i++) {
 		for (j = 0; j < singledim; j++) {
-			out[i] = out[i] + invect[j] * inmat[j * singledim + i];
-			// out[i] = out[i] + invect[j] * inmat[i * singledim + j];
+			out[i] = out[i] + invec[j] * inmat[j * singledim + i];
 		}
 	}
 }
- 
+
+/* matprint : function to print out an NxN matrix */
+void matprint(double *mat, int n)
+{
+	int i, j;
+
+	for (i = 0; i < n; i++) {
+		for (j = 0; j < n; j++) {
+			printf("%.3e%c", mat[i * n + j], j == n-1 ?'\n':'\t');
+		}
+	}
+}
+

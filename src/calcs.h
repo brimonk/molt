@@ -50,7 +50,13 @@ void exp_coeff(double *phi, int philen, double nu);
 /* exp_int : perform an exponentially recursive integral (???) */
 double exp_int(double nu, int sizem);
 
-/* vm_mult : perform vector matrix multiplication */
-void vm_mult(double *out, double *invect, double *inmat, int singledim);
+/* mat_mv_mult : perform vector matrix multiplication */
+void mat_mv_mult(f64 *out, f64 *inmat, f64 *invec, s32 singledim);
+
+/* vec_mul_s : multiply a vector by a scalar */
+void vec_mul_s(f64 *outvec, f64 *invec, f64 scalar, s32 len);
+
+/* vec_add_v : adds two vector's elements together */
+void vec_add_v(f64 *outvec, f64 *veca, f64 *vecb, s32 len);
 
 #endif
