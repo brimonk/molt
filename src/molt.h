@@ -11,7 +11,7 @@
  */
 
 /* molt_init and free : allocates and frees our working memory */
-void molt_init();
+void *molt_init();
 void molt_free();
 
 /* molt_firststep : specific routines required for the "first" timestep */

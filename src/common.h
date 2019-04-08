@@ -234,16 +234,18 @@ struct lump_vweight_t {
 
 struct lump_wweight_t {
 	u32 magic;
-	f64 xr_weight[MOLT_X_POINTS * (MOLT_SPACEACC + 1)];
+	u32 pad;
 	f64 xl_weight[MOLT_X_POINTS * (MOLT_SPACEACC + 1)];
-	f64 yr_weight[MOLT_Y_POINTS * (MOLT_SPACEACC + 1)];
+	f64 xr_weight[MOLT_X_POINTS * (MOLT_SPACEACC + 1)];
 	f64 yl_weight[MOLT_Y_POINTS * (MOLT_SPACEACC + 1)];
-	f64 zr_weight[MOLT_Z_POINTS * (MOLT_SPACEACC + 1)];
+	f64 yr_weight[MOLT_Y_POINTS * (MOLT_SPACEACC + 1)];
 	f64 zl_weight[MOLT_Z_POINTS * (MOLT_SPACEACC + 1)];
+	f64 zr_weight[MOLT_Z_POINTS * (MOLT_SPACEACC + 1)];
 };
 
 struct lump_mesh_t { // problem state (the thing we simulate)
 	u32 magic;
+	u32 pad;
 	f64 umesh[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 	f64 vmesh[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 };

@@ -23,6 +23,7 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
+#include <assert.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -106,12 +107,16 @@ void do_simulation(void *hunk, u64 hunksize)
 	ww    = io_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
 	mesh  = io_lumpgetbase(hunk, MOLTLUMP_MESH);
 
+	assert(molt_init());
+
 	molt_firststep(cfg, nu, vw, ww, mesh);
 
 	for (run->t_idx++; run->t_idx < run->t_total; run->t_idx++) {
 		molt_step(cfg, nu, vw, ww, mesh);
 		/* save off some fields as required */
 	}
+
+	molt_free();
 }
 
 /* setup_simulation : sets up simulation based on config.h */
