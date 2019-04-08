@@ -299,6 +299,16 @@ void vec_add_s(f64 *outvec, f64 *invec, f64 scalar, s32 len)
 	}
 }
 
+/* vec_sub_s : subtracts a scalar from an input vector */
+void vec_sub_s(f64 *outvec, f64 *invec, f64 scalar, s32 len)
+{
+	s32 i;
+
+	for (i = 0; i < len; i++) {
+		outvec[i] = invec[i] - scalar;
+	}
+}
+
 /* vec_add_v : adds two vector's elements together */
 void vec_add_v(f64 *outvec, f64 *veca, f64 *vecb, s32 len)
 {
@@ -306,6 +316,16 @@ void vec_add_v(f64 *outvec, f64 *veca, f64 *vecb, s32 len)
 
 	for (i = 0; i < len; i++) {
 		outvec[i] = veca[i] + vecb[i];
+	}
+}
+
+/* vec_sub_v : subtracts two vector's elements from each other */
+void vec_sub_v(f64 *outvec, f64 *veca, f64 *vecb, s32 len)
+{
+	s32 i;
+
+	for (i = 0; i < len; i++) {
+		outvec[i] = veca[i] - vecb[i];
 	}
 }
 

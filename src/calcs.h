@@ -53,11 +53,20 @@ double exp_int(double nu, int sizem);
 /* mat_mv_mult : perform vector matrix multiplication */
 void mat_mv_mult(f64 *out, f64 *inmat, f64 *invec, s32 singledim);
 
+/* vec_add_s : add a scalar to a vector */
+void vec_add_s(f64 *outvec, f64 *invec, f64 scalar, s32 len);
+
+/* vec_sub_s : subtracts a scalar from an input vector */
+void vec_sub_s(f64 *outvec, f64 *invec, f64 scalar, s32 len);
+
 /* vec_mul_s : multiply a vector by a scalar */
 void vec_mul_s(f64 *outvec, f64 *invec, f64 scalar, s32 len);
 
 /* vec_add_v : adds two vector's elements together */
 void vec_add_v(f64 *outvec, f64 *veca, f64 *vecb, s32 len);
+
+/* vec_sub_v : subtracts two vector's elements from each other */
+void vec_sub_v(f64 *outvec, f64 *veca, f64 *vecb, s32 len);
 
 /* vec_negate : negates an entire vector */
 void vec_negate(f64 *outvec, f64 *invec, s32 len);
