@@ -59,4 +59,7 @@ void vec_mul_s(f64 *outvec, f64 *invec, f64 scalar, s32 len);
 /* vec_add_v : adds two vector's elements together */
 void vec_add_v(f64 *outvec, f64 *veca, f64 *vecb, s32 len);
 
+/* vec_negate : negates an entire vector */
+void vec_negate(f64 *outvec, f64 *invec, s32 len);
+
 #endif

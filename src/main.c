@@ -106,10 +106,10 @@ void do_simulation(void *hunk, u64 hunksize)
 	ww    = io_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
 	mesh  = io_lumpgetbase(hunk, MOLTLUMP_MESH);
 
-	molt_firststep(cfg, run, nu, vw, ww, mesh);
+	molt_firststep(cfg, nu, vw, ww, mesh);
 
 	for (run->t_idx++; run->t_idx < run->t_total; run->t_idx++) {
-		molt_step(cfg, run, nu, vw, ww, mesh);
+		molt_step(cfg, nu, vw, ww, mesh);
 		/* save off some fields as required */
 	}
 }

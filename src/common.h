@@ -33,16 +33,21 @@ typedef ivec_t ivec4_t[4];
 typedef ivec_t ivec5_t[5];
 typedef ivec_t ivec6_t[6];
 
-/* now define vectors of double pointers */
-typedef double * pvec_t;
+typedef void * pvec_t;
 typedef pvec_t pvec2_t[2];
 typedef pvec_t pvec3_t[3];
 typedef pvec_t pvec4_t[4];
 typedef pvec_t pvec5_t[5];
 typedef pvec_t pvec6_t[6];
 
-/* some less useful character vectors */
-typedef char cvec_t;
+typedef f64 dvec_t; /* floating point vectors */
+typedef dvec_t dvec2_t[2];
+typedef dvec_t dvec3_t[3];
+typedef dvec_t dvec4_t[4];
+typedef dvec_t dvec5_t[5];
+typedef dvec_t dvec6_t[6];
+
+typedef char cvec_t; /* some less useful character vectors */
 typedef cvec_t cvec2_t[2];
 typedef cvec_t cvec3_t[3];
 typedef cvec_t cvec4_t[4];

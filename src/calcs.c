@@ -319,6 +319,16 @@ void vec_mul_s(f64 *outvec, f64 *invec, f64 scalar, s32 len)
 	}
 }
 
+/* vec_negate : negates an entire vector */
+void vec_negate(f64 *outvec, f64 *invec, s32 len)
+{
+	s32 i;
+
+	for (i = 0; i < len; i++) {
+		outvec[i] = -invec[i];
+	}
+}
+
 /* mat_mv_mult : perform vector matrix multiply */
 void mat_mv_mult(f64 *out, f64 *inmat, f64 *invec, s32 singledim)
 {
