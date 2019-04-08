@@ -82,8 +82,10 @@ typedef cvec_t cvec6_t[6];
 #define VectorDotProduct(a,b) ((a)[0]*(b)[0]+(a)[1]*(b)[1]+(a)[2]*(b)[2])
 #define VectorSubtract(a,b,c) ((c)[0]=(a)[0]-(b)[0],\
 		(c)[1]=(a)[1]-(b)[1],(c)[2]=(a)[2]-(b)[2])
-#define VectorAdd(a,b,c) ((c)[0]=(a)[0]+(b)[0],\
-		(c)[1]=(a)[1]+(b)[1],(c)[2]=(a)[2]+(b)[2])
+#define VectorAdd(a,b,c) \
+		((c)[0]=(a)[0]+(b)[0],\
+		 (c)[1]=(a)[1]+(b)[1],\
+		 (c)[2]=(a)[2]+(b)[2])
 #define VectorCopy(a,b)  ((b)[0]=(a)[0],(b)[1]=(a)[1],(b)[2]=(a)[2])
 #define VectorScale(v,s,o) \
 	((o)[0]=(v)[0]*(s), (o)[1]=(v)[1]*(s), (o)[2]=(v)[2]*(s))
@@ -94,8 +96,7 @@ typedef cvec_t cvec6_t[6];
 	 (c)[1]=(a)[2]*(b)[0]-(a)[0]*(b)[2],\
 	 (c)[2]=(a)[0]*(b)[1]-(a)[1]*(b)[0])
 #define VectorClear(a) ((a)[0]=0,(a)[1]=0,(a)[2]=0)
-#define VectorPrint(a) \
-	(printf("%lf, %lf, %lf\n", (a)[0], (a)[1], (a)[2]))
+#define VectorPrint(a) (printf("%lf, %lf, %lf\n", (a)[0], (a)[1], (a)[2]))
 
 /*
  * define simulation information

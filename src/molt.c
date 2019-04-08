@@ -35,11 +35,11 @@
  * IT IS REQUIRED THAT THESE ROUTINES ARE CALLED BEFORE TIMESTEPPING OCCURRS
  *
  * TODO (Brian)
- * 1. Skeleton C and D Operators
- * 2. Skeleton Sweep Function
- * 3. Skeleton / Translate (Again) GF_QUAD
- * 4. Skeleton Weights Calculation
- * 5. Finish Writing the functions for time sweeping
+ * 6. Debug/Test
+ *
+ * Ensure that c and d operators can have the same src and dst pointers passed
+ * to them. I think they can because we copy everything to working storage,
+ * but I'm not entirely certain.
  *
  * TODO CLEANUP:
  * 1. Remove stdlib headers and depencency
@@ -47,6 +47,7 @@
  * 3. Make our generic index functions the same one
  * 4. Make function declaration not look like trash
  * 5. Make Working Space Into a Union
+ * 6. Figure out if we actually need swap_sub
  *
  * QUESTIONS:
  * 1. Should we use something other than vL for our weights all the time?
@@ -73,7 +74,7 @@ struct work_t {
 	f64 d3  [MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 	/* working swap space */
 	f64 swap[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
-	f64 swapsub[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
+	f64 temp[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 	// swap_sub is swapping space for the subtraction to occur in the c operator
 
 	/* working space for gfquad */
@@ -105,18 +106,21 @@ static cvec3_t swap_z_y_x = {'z', 'y', 'x'};
  * both of the C and D operators as noted from above. they serve as the
  * bread and butter for molt's exponential recursive properties
  */
-
-static void
-do_c_op(lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww, lmesh_t *mesh);
+/* do_c_op : The MOLT C Operator */
+static void do_c_op(
+f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
 
 /* do_d_op : The MOLT D Operator */
-static void
-do_d_op(lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww, lmesh_t *mesh);
+static void do_d_op(
+f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
 
 static
 void mesh3_swap(f64 *out, f64* in, ivec3_t dim, cvec3_t from, cvec3_t to);
+
 static inline u64 mk_genericidx(ivec3_t inpts, ivec3_t dim, cvec3_t order);
+
 static void mk_genericdim(ivec3_t *out, ivec3_t dim, cvec3_t to);
+
 static s32 get_genericrowlen(ivec3_t dim, cvec3_t to);
 
 static
@@ -124,46 +128,132 @@ void matrix_subtract(f64 *out, f64 *ina, f64 *inb, ivec3_t dim);
 static f64 minarr(f64 *arr, s32 arrlen);
 static f64 vect_mul(f64 *veca, f64 *vecb, s32 veclen);
 
+/*
+ *
+ */
 static void
 do_sweep
 (f64 *mesh, f64 *work, f64 *dvec, f64 *vl_r, f64 *vr_r,
  f64 *vl_w, f64 *vr_w, f64 *wl, f64 *wr, s32 rowlen, s32 iters,
  s32 vw_len, s32 wx_len, s32 wy_len, s32 orderm);
+
+
 static void
 gfquad(f64 *out, f64 *in, f64 *d, f64 *wl, f64 *wr,
 		s32 veclen, s32 orderm, s32 wxlen, s32 wylen);
+
 static void
 make_l(f64 *vec, f64 *vl_r, f64 *vr_r, f64 *vl_w, f64 *vr_w,
 		f64 wa, f64 wb, f64 dn, s32 vlen);
+
+/* BEGIN PUBLIC MOLT ROUTINES */
 
 /* molt_init and free : allocates and frees our working memory */
 void *molt_init() { workp = malloc(sizeof(struct work_t)); return workp; }
 void molt_free() { if (workp) free(workp); }
 
 /* molt_firststep : specific routines required for the "first" timestep */
-void molt_firststep(
-		lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww, lmesh_t *mesh)
+void molt_firststep(lmesh_t *dst, lmesh_t *src,
+					lcfg_t *cfg, lnu_t *nu,
+					lvweight_t *vw, lwweight_t *ww)
 {
-	s32 i;
+	s64 totalelem;
+
+	totalelem = cfg->x_points_inc * cfg->y_points_inc * cfg->z_points_inc;
 
 	// u1 = 2 * (u0 + dt * v0)
-	vec_mul_s(mesh->vmesh, mesh->vmesh, cfg->t_step, sizeof(mesh->vmesh));
-	vec_add_v(mesh->umesh, mesh->umesh, mesh->vmesh, sizeof(mesh->vmesh));
-	vec_mul_s(mesh->umesh, mesh->umesh, 2.0, sizeof(mesh->umesh));
+	vec_mul_s(workp->swap, src->vmesh, cfg->t_step, totalelem);
+	vec_add_v(workp->swap, workp->swap, src->umesh, totalelem);
+	vec_mul_s(workp->swap, workp->swap,        2.0, totalelem);
+	memcpy(dst->umesh, workp->swap, sizeof(workp->swap));
 
-	do_c_op(cfg, nu, vw, ww, mesh);
+	do_c_op(workp->d1, cfg, nu, vw, ww, dst);
+
+	// u1 = u1 + beta ^ 2 * d1
+	vec_mul_s(mesh->swap, mesh->d1, cfg->betasq, totalelem);
+	vec_add_v(dst->umesh, mesh->swap, dst->umesh, totalelem);
+
+	if (cfg->time_acc >= 2) {
+		do_d_op(workp->d2, workp->d1, cfg, nu, vw, ww);
+		do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
+
+		// u1 = u1 - beta ^ 2 * d2 + beta ^ 4 / 12 * d1
+		vec_mul_s(mesh->swap, mesh->d2, cfg->beta_sq, totalelem);
+		vec_mul_s(mesh->temp, mesh->d1, cfg->beta_fo, totalelem);
+		vec_add_v(mesh->swap, mesh->swap, mesh->temp, totalelem);
+		vec_sub_v(dst->umesh, dst->umesh, mesh->swap, totalelem);
+	}
+
+	if (cfg->time_acc >= 3) {
+		do_d_op(workp->d3, workp->d2, cfg, nu, vw, ww);
+		do_d_op(workp->d2, workp->d1, cfg, nu, vw, ww);
+		do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
+
+		// u1 = u1 + (beta^2 * d3 - 2 * beta^4/12 * d2 + beta^6/360 * d1)
+		vec_mul_s(mesh->swap, workp->d3, cfg->beta_sq, totalelem);
+		vec_mul_s(mesh->temp, workp->d2, cfg->beta_fo, totalelem);
+		vec_sub_v(mesh->swap, mesh->swap, mesh->temp, totalelem);
+		vec_mul_s(mesh->temp, workp->d1, cfg->beta_si, totalelem);
+		vec_add_v(mesh->swap, mesh->swap, mesh->temp, totalelem);
+		vec_add_v(dst->umesh, dst->umesh, mesh->swap, totalelem);
+	}
+
+	vec_mul_s(dst->umesh, dst->umesh, 1 / 2, totalelem);
 }
 
 /* molt_step : regular timestepping routine */
 void
-molt_step(lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww, lmesh_t *mesh)
+molt_step(
+		lmesh_t *dst, lmesh_t *src,
+		lcfg_t *cfg, lnu_t *nu, lvweight_t *vw,
+		lwweight_t *ww, lmesh_t *mesh)
 {
+	s64 totalelem;
+
+	totalelem = cfg->x_points_inc * cfg->y_points_inc * cfg->z_points_inc;
+
+	memset(dst->umesh, 0, sizeof(dst->umesh));
+
+	do_c_op(workp->d1, src->umesh, cfg, nu, vw, ww);
+
+	// u = u + beta^2 * d1
+	vec_mul_s(workp->swap, workp->d1, cfg->beta_sq, totalelem);
+	vec_add_v(dst->umesh, dst->umesh, workp->swap, totalelem);
+
+	if (cfg->time_acc >= 2) {
+		do_d_op(workp->d2, workp->d1, cfg, nu, vw, ww);
+		do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
+
+		// u = u - beta^2 * d2 + beta^4/12 * d1
+		vec_mul_s(mesh->swap, mesh->d2, cfg->beta_sq, totalelem);
+		vec_mul_s(mesh->temp, mesh->d1, cfg->beta_fo, totalelem);
+		vec_add_v(mesh->swap, mesh->swap, mesh->temp, totalelem);
+		vec_sub_v(dst->umesh, dst->umesh, mesh->swap, totalelem);
+	}
+
+	if (cfg->time_acc >= 3) {
+		do_d_op(workp->d3, workp->d2, cfg, nu, vw, ww);
+		do_d_op(workp->d2, workp->d1, cfg, nu, vw, ww);
+		do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
+
+		// u1 = u1 + (beta^2 * d3 - 2 * beta^4/12 * d2 + beta^6/360 * d1)
+		vec_mul_s(mesh->swap, workp->d3, cfg->beta_sq, totalelem);
+		vec_mul_s(mesh->temp, workp->d2, cfg->beta_fo, totalelem);
+		vec_sub_v(mesh->swap, mesh->swap, mesh->temp, totalelem);
+		vec_mul_s(mesh->temp, workp->d1, cfg->beta_si, totalelem);
+		vec_add_v(mesh->swap, mesh->swap, mesh->temp, totalelem);
+		vec_add_v(dst->umesh, dst->umesh, mesh->swap, totalelem);
+	}
+
+	// u = u + 2 * u1 - u0 (u0 is our vmesh from src)
+	vec_mul_s(workp->swap, src->umesh, 2, totalelem);
+	vec_sub_v(workp->swap, workp->swap, src->vmesh, totalelem);
+	vec_add_v(dst->umesh, dst->umesh, workp->swap, totalelem);
 }
 
 /* do_c_op : The MOLT C Operator */
-static void
-do_c_op(f64 *dest, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw,
-		lwweight_t *ww, lmesh_t *mesh)
+static void do_c_op(
+f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 {
 	s64 totalelem;
 	ivec3_t dim, iterinrow;
@@ -182,13 +272,13 @@ do_c_op(f64 *dest, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw,
 	wy = cfg->space_acc + 1;
 
 	// SWEEP IN X, Y, Z --> BEGIN
-	memcpy(workp->ix, mesh->umesh, sizeof(mesh->umesh));
+	memcpy(workp->ix, src, sizeof(workp->ix));
 	do_sweep(workp->ix, workp->quad_x, nu->dnux, 
 			vw->vlx, vw->vrx, workp->vlx_w, workp->vrx_w,
 			ww->xl_weight, ww->xr_weight, dim[0], iterinrow[0],
 			dim[0], cfg->x_points, wy, cfg->space_acc);
 
-	matrix_subtract(workp->ix, workp->ix, mesh->umesh, dim);
+	matrix_subtract(workp->ix, workp->ix, src, dim);
 	mesh3_swap(workp->swap, workp->ix, dim, swap_x_y_z, swap_y_x_z);
 	memcpy(workp->ix, workp->swap, sizeof(workp->ix));
 
@@ -208,15 +298,16 @@ do_c_op(f64 *dest, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw,
 	memcpy(workp->ix, workp->swap, sizeof(workp->ix));
 	// SWEEP IN X, Y, Z --> END
 
-
 	// SWEEP IN Y, Z, X --> BEGIN
-	mesh3_swap(workp->iy, mesh->umesh, dim, swap_x_y_z, swap_y_x_z);
+	mesh3_swap(workp->iy, src, dim, swap_x_y_z, swap_y_x_z);
+
 	do_sweep(workp->iy, workp->quad_y, nu->dnuy, 
 			vw->vly, vw->vry, workp->vly_w, workp->vry_w,
 			ww->yl_weight, ww->yr_weight, dim[1], iterinrow[1],
 			dim[1], cfg->y_points, wy, cfg->space_acc);
+
 	mesh3_swap(workp->swap, workp->iy, dim, swap_y_x_z, swap_x_y_z);
-	matrix_subtract(workp->iy, workp->swap, mesh->umesh, dim);
+	matrix_subtract(workp->iy, workp->swap, src, dim);
 
 	mesh3_swap(workp->swap, workp->iy, dim, swap_x_y_z, swap_z_x_y);
 	memcpy(workp->iy, workp->swap, sizeof(workp->iy));
@@ -236,12 +327,12 @@ do_c_op(f64 *dest, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw,
 	// SWEEP IN Y, Z, X --> END
 
 	// SWEEP IN Z, X, Y --> END
-	mesh3_swap(workp->iz, mesh->umesh, dim, swap_x_y_z, swap_z_x_y);
+	mesh3_swap(workp->iz, src, dim, swap_x_y_z, swap_z_x_y);
 	do_sweep(workp->iz, workp->quad_z, nu->dnuz, 
 			vw->vlz, vw->vrz, workp->vlz_w, workp->vrz_w,
 			ww->zl_weight, ww->zr_weight, dim[2], iterinrow[2],
 			dim[2], cfg->z_points, wy, cfg->space_acc);
-	matrix_subtract(workp->iz, workp->iz, mesh->umesh, dim);
+	matrix_subtract(workp->iz, workp->iz, src, dim);
 
 	mesh3_swap(workp->swap, workp->iz, dim, swap_z_x_y, swap_x_z_y);
 	memcpy(workp->iz, workp->swap, sizeof(workp->iz));
@@ -261,16 +352,15 @@ do_c_op(f64 *dest, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw,
 	mesh3_swap(workp->swap, workp->iy, dim, swap_y_z_x, swap_x_y_z);
 	memcpy(workp->iz, workp->swap, sizeof(workp->iz));
 
-	memset(dest, 0, sizeof(workp->ix));
-	vec_add_v(dest, dest, workp->ix, totalelem);
-	vec_add_v(dest, dest, workp->iy, totalelem);
-	vec_add_v(dest, dest, workp->iz, totalelem);
+	memset(dst, 0, sizeof(workp->ix));
+	vec_add_v(dst, dst, workp->ix, totalelem);
+	vec_add_v(dst, dst, workp->iy, totalelem);
+	vec_add_v(dst, dst, workp->iz, totalelem);
 }
 
 /* do_d_op : The MOLT D Operator */
-static void
-do_d_op(f64 *dest, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw,
-		lwweight_t *ww, lmesh_t *mesh)
+static void do_d_op(
+f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 {
 	s64 totalelem;
 	ivec3_t dim, iterinrow;
@@ -289,7 +379,7 @@ do_d_op(f64 *dest, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw,
 	wy = cfg->space_acc + 1;
 
 	// SWEEP IN X, Y, Z --> BEGIN
-	memcpy(workp->ix, mesh->umesh, sizeof(mesh->umesh));
+	memcpy(workp->ix, src, sizeof(workp->ix));
 	do_sweep(workp->ix, workp->quad_x, nu->dnux, 
 			vw->vlx, vw->vrx, workp->vlx_w, workp->vrx_w,
 			ww->xl_weight, ww->xr_weight, dim[0], iterinrow[0],
@@ -315,7 +405,7 @@ do_d_op(f64 *dest, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw,
 	// SWEEP IN X, Y, Z --> END
 
 	// SWEEP IN Y, Z, X --> BEGIN
-	mesh3_swap(workp->iy, mesh->umesh, dim, swap_x_y_z, swap_y_x_z);
+	mesh3_swap(workp->iy, src, dim, swap_x_y_z, swap_y_x_z);
 	do_sweep(workp->iy, workp->quad_y, nu->dnuy, 
 			vw->vly, vw->vry, workp->vly_w, workp->vry_w,
 			ww->yl_weight, ww->yr_weight, dim[1], iterinrow[1],
@@ -339,7 +429,7 @@ do_d_op(f64 *dest, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw,
 	// SWEEP IN Y, Z, X --> END
 
 	// SWEEP IN Z, X, Y --> END
-	mesh3_swap(workp->iz, mesh->umesh, dim, swap_x_y_z, swap_z_x_y);
+	mesh3_swap(workp->iz, src, dim, swap_x_y_z, swap_z_x_y);
 
 	do_sweep(workp->iz, workp->quad_z, nu->dnuz, 
 			vw->vlz, vw->vrz, workp->vlz_w, workp->vrz_w,
@@ -365,13 +455,13 @@ do_d_op(f64 *dest, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw,
 	mesh3_swap(workp->swap, workp->iy, dim, swap_y_z_x, swap_x_y_z);
 	memcpy(workp->iz, workp->swap, sizeof(workp->iz));
 
-	memset(dest, 0, sizeof(workp->ix));
-	vec_add_v(dest, dest, workp->ix, totalelem);
-	vec_add_v(dest, dest, workp->iy, totalelem);
-	vec_add_v(dest, dest, workp->iz, totalelem);
+	memset(dst, 0, sizeof(workp->ix));
+	vec_add_v(dst, dst, workp->ix, totalelem);
+	vec_add_v(dst, dst, workp->iy, totalelem);
+	vec_add_v(dst, dst, workp->iz, totalelem);
 
-	vec_mul_s(dest, dest, 1 / 3, totalelem);
-	vec_sub_v(dest, dest, mesh->umesh, totalelem);
+	vec_mul_s(dst, dst, 1 / 3, totalelem);
+	vec_sub_v(dst, dst, src, totalelem);
 }
 
 /* do_sweep : sweeps iters times over rowlen strides of mesh data */

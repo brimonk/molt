@@ -286,7 +286,7 @@ void setuplump_cfg(struct moltcfg_t *cfg)
 	cfg->time_acc = MOLT_TIMEACC;
 	cfg->beta = MOLT_BETA;
 	cfg->beta_sq = pow(MOLT_BETA, 2);
-	cfg->beta_fo = pow(MOLT_BETA, 4) / 6;
+	cfg->beta_fo = pow(MOLT_BETA, 4) / 12;
 	cfg->beta_si = pow(MOLT_BETA, 6) / 360;
 	cfg->alpha = MOLT_ALPHA;
 }
