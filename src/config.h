@@ -47,7 +47,7 @@
  * will, when needed, be scaled according to the MOLT_INTSCALE value.
  */
 
-#define MOLT_INTSCALE      0.02
+#define MOLT_INTSCALE      0.01
 
 /*
  * There are 3 pieces of information to know about the dimensionality of the
@@ -63,8 +63,8 @@
  */
 
 #define MOLT_T_START         0
-#define MOLT_T_STOP          20
-#define MOLT_T_STEP          2
+#define MOLT_T_STOP          10
+#define MOLT_T_STEP          1
 #define MOLT_T_POINTS        ((MOLT_T_STOP - MOLT_T_START) / MOLT_T_STEP)
 #define MOLT_T_POINTS_INC    (MOLT_T_POINTS + 1)
 

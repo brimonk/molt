@@ -154,8 +154,7 @@ void molt_free() { if (workp) free(workp); }
 
 /* molt_firststep : specific routines required for the "first" timestep */
 void molt_firststep(lmesh_t *dst, lmesh_t *src,
-					lcfg_t *cfg, lnu_t *nu,
-					lvweight_t *vw, lwweight_t *ww)
+				lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 {
 	s64 totalelem;
 
@@ -167,21 +166,21 @@ void molt_firststep(lmesh_t *dst, lmesh_t *src,
 	vec_mul_s(workp->swap, workp->swap,        2.0, totalelem);
 	memcpy(dst->umesh, workp->swap, sizeof(workp->swap));
 
-	do_c_op(workp->d1, cfg, nu, vw, ww, dst);
+	do_c_op(workp->d1, dst->umesh, cfg, nu, vw, ww);
 
 	// u1 = u1 + beta ^ 2 * d1
-	vec_mul_s(mesh->swap, mesh->d1, cfg->betasq, totalelem);
-	vec_add_v(dst->umesh, mesh->swap, dst->umesh, totalelem);
+	vec_mul_s(workp->swap, workp->d1, cfg->beta_sq, totalelem);
+	vec_add_v(dst->umesh, workp->swap, dst->umesh, totalelem);
 
 	if (cfg->time_acc >= 2) {
 		do_d_op(workp->d2, workp->d1, cfg, nu, vw, ww);
 		do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
 
 		// u1 = u1 - beta ^ 2 * d2 + beta ^ 4 / 12 * d1
-		vec_mul_s(mesh->swap, mesh->d2, cfg->beta_sq, totalelem);
-		vec_mul_s(mesh->temp, mesh->d1, cfg->beta_fo, totalelem);
-		vec_add_v(mesh->swap, mesh->swap, mesh->temp, totalelem);
-		vec_sub_v(dst->umesh, dst->umesh, mesh->swap, totalelem);
+		vec_mul_s(workp->swap, workp->d2, cfg->beta_sq, totalelem);
+		vec_mul_s(workp->temp, workp->d1, cfg->beta_fo, totalelem);
+		vec_add_v(workp->swap, workp->swap, workp->temp, totalelem);
+		vec_sub_v(dst->umesh, dst->umesh, workp->swap, totalelem);
 	}
 
 	if (cfg->time_acc >= 3) {
@@ -190,23 +189,20 @@ void molt_firststep(lmesh_t *dst, lmesh_t *src,
 		do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
 
 		// u1 = u1 + (beta^2 * d3 - 2 * beta^4/12 * d2 + beta^6/360 * d1)
-		vec_mul_s(mesh->swap, workp->d3, cfg->beta_sq, totalelem);
-		vec_mul_s(mesh->temp, workp->d2, cfg->beta_fo, totalelem);
-		vec_sub_v(mesh->swap, mesh->swap, mesh->temp, totalelem);
-		vec_mul_s(mesh->temp, workp->d1, cfg->beta_si, totalelem);
-		vec_add_v(mesh->swap, mesh->swap, mesh->temp, totalelem);
-		vec_add_v(dst->umesh, dst->umesh, mesh->swap, totalelem);
+		vec_mul_s(workp->swap, workp->d3, cfg->beta_sq, totalelem);
+		vec_mul_s(workp->temp, workp->d2, cfg->beta_fo, totalelem);
+		vec_sub_v(workp->swap, workp->swap, workp->temp, totalelem);
+		vec_mul_s(workp->temp, workp->d1, cfg->beta_si, totalelem);
+		vec_add_v(workp->swap, workp->swap, workp->temp, totalelem);
+		vec_add_v(dst->umesh, dst->umesh, workp->swap, totalelem);
 	}
 
 	vec_mul_s(dst->umesh, dst->umesh, 1 / 2, totalelem);
 }
 
 /* molt_step : regular timestepping routine */
-void
-molt_step(
-		lmesh_t *dst, lmesh_t *src,
-		lcfg_t *cfg, lnu_t *nu, lvweight_t *vw,
-		lwweight_t *ww, lmesh_t *mesh)
+void molt_step(lmesh_t *dst, lmesh_t *src,
+		lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 {
 	s64 totalelem;
 
@@ -225,10 +221,10 @@ molt_step(
 		do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
 
 		// u = u - beta^2 * d2 + beta^4/12 * d1
-		vec_mul_s(mesh->swap, mesh->d2, cfg->beta_sq, totalelem);
-		vec_mul_s(mesh->temp, mesh->d1, cfg->beta_fo, totalelem);
-		vec_add_v(mesh->swap, mesh->swap, mesh->temp, totalelem);
-		vec_sub_v(dst->umesh, dst->umesh, mesh->swap, totalelem);
+		vec_mul_s(workp->swap, workp->d2, cfg->beta_sq, totalelem);
+		vec_mul_s(workp->temp, workp->d1, cfg->beta_fo, totalelem);
+		vec_add_v(workp->swap, workp->swap, workp->temp, totalelem);
+		vec_sub_v(dst->umesh, dst->umesh, workp->swap, totalelem);
 	}
 
 	if (cfg->time_acc >= 3) {
@@ -237,12 +233,12 @@ molt_step(
 		do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
 
 		// u1 = u1 + (beta^2 * d3 - 2 * beta^4/12 * d2 + beta^6/360 * d1)
-		vec_mul_s(mesh->swap, workp->d3, cfg->beta_sq, totalelem);
-		vec_mul_s(mesh->temp, workp->d2, cfg->beta_fo, totalelem);
-		vec_sub_v(mesh->swap, mesh->swap, mesh->temp, totalelem);
-		vec_mul_s(mesh->temp, workp->d1, cfg->beta_si, totalelem);
-		vec_add_v(mesh->swap, mesh->swap, mesh->temp, totalelem);
-		vec_add_v(dst->umesh, dst->umesh, mesh->swap, totalelem);
+		vec_mul_s(workp->swap, workp->d3, cfg->beta_sq, totalelem);
+		vec_mul_s(workp->temp, workp->d2, cfg->beta_fo, totalelem);
+		vec_sub_v(workp->swap, workp->swap, workp->temp, totalelem);
+		vec_mul_s(workp->temp, workp->d1, cfg->beta_si, totalelem);
+		vec_add_v(workp->swap, workp->swap, workp->temp, totalelem);
+		vec_add_v(dst->umesh, dst->umesh, workp->swap, totalelem);
 	}
 
 	// u = u + 2 * u1 - u0 (u0 is our vmesh from src)
@@ -257,7 +253,7 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 {
 	s64 totalelem;
 	ivec3_t dim, iterinrow;
-	s32 orderm, wy; // ww in the "y" dimension is always the same
+	s32 wy; // ww in the "y" dimension is always the same
 
 	dim[0] = cfg->x_points_inc;
 	dim[1] = cfg->y_points_inc;
@@ -511,33 +507,33 @@ gfquad(f64 *out, f64 *in, f64 *d, f64 *wl, f64 *wr,
 
 	/* left sweep */
 	for (i = 0; i < M2; i++) {
-		IL = d[i] * IL + vect_mul(&wl[i * wxlen], &in[iL], orderm);
+		IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[iL], orderm);
 		out[i + 1] = out[i + 1] + iL;
 	}
 
 	for (; i < veclen - M2; i++) {
-		IL = d[i] * IL + vect_mul(&wl[i * wxlen], &in[i + iC], orderm);
+		IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[i + iC], orderm);
 		out[i + 1] = out[i + 1] + IL;
 	}
 
 	for (; i < veclen; i++) {
-		IL = d[i] * IL + vect_mul(&wl[i * wxlen], &in[iR], orderm);
+		IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[iR], orderm);
 		out[i + 1] = out[i + 1] + IL;
 	}
 
 	/* right sweep */
 	for (i = veclen - 1; i > veclen - 1 - M2; i--) {
-		IR = d[i] * IR + vect_mul(&wr[i * wxlen], &in[iR], orderm);
+		IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[iR], orderm);
 		out[i] = out[i] + IR;
 	}
 
 	for (; i > M2; i--) {
-		IR = d[i] * IR + vect_mul(&wr[i * wxlen], &in[i + iC], orderm);
+		IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[i + iC], orderm);
 		out[i] = out[i] + IR;
 	}
 
 	for (; i >= 0; i--) {
-		IR = d[i] * IR + vect_mul(&wr[i * wxlen], &in[iL], orderm);
+		IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[iL], orderm);
 		out[i] = out[i] + IR;
 	}
 }

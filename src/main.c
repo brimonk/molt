@@ -77,7 +77,7 @@ int main(int argc, char **argv)
 	setup_simulation(&hunk, &hunksize, fd);
 
 
-	do_simulation(hunk, hunksize);
+	// do_simulation(hunk, hunksize);
 
 	/* sync the file, then clean up */
 	io_mssync(hunk, hunk, hunksize);
@@ -109,10 +109,10 @@ void do_simulation(void *hunk, u64 hunksize)
 
 	assert(molt_init());
 
-	molt_firststep(cfg, nu, vw, ww, mesh);
+	molt_firststep(mesh + 1, mesh, cfg, nu, vw, ww);
 
 	for (run->t_idx++; run->t_idx < run->t_total; run->t_idx++) {
-		molt_step(cfg, nu, vw, ww, mesh);
+		molt_step(mesh + run->t_idx + 1, mesh + run->t_idx, cfg, nu, vw, ww);
 		/* save off some fields as required */
 	}
 
@@ -229,7 +229,7 @@ u64 setup_lumps(void *base)
 	/* setup our problem state */
 	hdr->lump[7].offset = curr_offset;
 	hdr->lump[7].elemsize = sizeof(struct lump_mesh_t);
-	hdr->lump[7].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[7].elemsize;
+	hdr->lump[7].lumpsize = ((u64)MOLT_T_POINTS_INC) * hdr->lump[7].elemsize;
 
 	curr_offset += hdr->lump[7].lumpsize;
 
