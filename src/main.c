@@ -76,8 +76,9 @@ int main(int argc, char **argv)
 
 	setup_simulation(&hunk, &hunksize, fd);
 
+	io_masync(hunk, hunk, hunksize);
 
-	// do_simulation(hunk, hunksize);
+	do_simulation(hunk, hunksize);
 
 	/* sync the file, then clean up */
 	io_mssync(hunk, hunk, hunksize);
@@ -111,8 +112,8 @@ void do_simulation(void *hunk, u64 hunksize)
 
 	molt_firststep(mesh + 1, mesh, cfg, nu, vw, ww);
 
-	for (run->t_idx++; run->t_idx < run->t_total; run->t_idx++) {
-		molt_step(mesh + run->t_idx + 1, mesh + run->t_idx, cfg, nu, vw, ww);
+	for (run->t_idx = 0; run->t_idx < run->t_total; run->t_idx++) {
+		molt_step(mesh + run->t_idx, mesh + run->t_idx, cfg, nu, vw, ww);
 		/* save off some fields as required */
 	}
 
@@ -299,7 +300,7 @@ void setuplump_run(struct lump_runinfo_t *run)
 	run->t_step  = .5;
 	run->t_stop  = 10;
 	run->t_idx   = 0;
-	run->t_total = (run->t_stop - run->t_start) / run->t_step;
+	run->t_total = MOLT_T_POINTS_INC;
 }
 
 /* setuplump_efield : setup the efield lump */
