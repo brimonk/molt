@@ -128,9 +128,6 @@ void matrix_subtract(f64 *out, f64 *ina, f64 *inb, ivec3_t dim);
 static f64 minarr(f64 *arr, s32 arrlen);
 static f64 vect_mul(f64 *veca, f64 *vecb, s32 veclen);
 
-/*
- *
- */
 static void
 do_sweep
 (f64 *mesh, f64 *work, f64 *dvec, f64 *vl_r, f64 *vr_r,
@@ -156,9 +153,9 @@ void molt_free() { if (workp) free(workp); }
 void molt_firststep(lmesh_t *dst, lmesh_t *src,
 				lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 {
-	s64 totalelem;
+	u64 totalelem;
 
-	totalelem = cfg->x_points_inc * cfg->y_points_inc * cfg->z_points_inc;
+	totalelem = (u64)cfg->x_points_inc * cfg->y_points_inc * cfg->z_points_inc;
 
 	// u1 = 2 * (u0 + dt * v0)
 	vec_mul_s(workp->swap, src->vmesh, cfg->t_step, totalelem);
@@ -493,11 +490,14 @@ gfquad(f64 *out, f64 *in, f64 *d, f64 *wl, f64 *wr,
 		s32 veclen, s32 orderm, s32 wxlen, s32 wylen)
 {
 	/* out and in's length is defined by hunklen */
-	f64 IL, IR, M2;
-	s32 iL, iR, iC;
+	f64 IL, IR;
+	s32 iL, iR, iC, M2;
 	s32 i;
 
-	IL = 0, IR = 0;
+	// TODO (brian) remove branching ifs when this function is correct
+
+	IL = 0;
+	IR = 0;
 	M2 = orderm / 2;
 
 	orderm++;
@@ -505,35 +505,27 @@ gfquad(f64 *out, f64 *in, f64 *d, f64 *wl, f64 *wr,
 	iC = -M2;
 	iR = veclen - orderm;
 
-	/* left sweep */
-	for (i = 0; i < M2; i++) {
-		IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[iL], orderm);
-		out[i + 1] = out[i + 1] + iL;
-	}
+	for (i = 0; i < veclen; i++) { /* left */
+		if (i < M2) { // check left bound
+			IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[iL], orderm);
+		} else if (i < veclen - M2) {
+			IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[i + 1 + iC], orderm);
+		} else if (i < veclen) {
+			IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[iR], orderm);
+		}
 
-	for (; i < veclen - M2; i++) {
-		IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[i + iC], orderm);
 		out[i + 1] = out[i + 1] + IL;
 	}
 
-	for (; i < veclen; i++) {
-		IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[iR], orderm);
-		out[i + 1] = out[i + 1] + IL;
-	}
+	for (i = veclen - 1; i >= 0; i--) {
+		if (i > veclen - 1 - M2) {
+			IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[iR], orderm);
+		} else if (i > M2) {
+			IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[i + 1 + iC], orderm);
+		} else if (i >= 0) {
+			IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[iL], orderm);
+		}
 
-	/* right sweep */
-	for (i = veclen - 1; i > veclen - 1 - M2; i--) {
-		IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[iR], orderm);
-		out[i] = out[i] + IR;
-	}
-
-	for (; i > M2; i--) {
-		IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[i + iC], orderm);
-		out[i] = out[i] + IR;
-	}
-
-	for (; i >= 0; i--) {
-		IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[iL], orderm);
 		out[i] = out[i] + IR;
 	}
 }

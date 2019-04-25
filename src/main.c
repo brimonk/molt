@@ -99,7 +99,7 @@ void do_simulation(void *hunk, u64 hunksize)
 	struct lump_nu_t *nu;
 	struct lump_vweight_t *vw;
 	struct lump_wweight_t *ww;
-	struct lump_mesh_t *mesh;
+	struct lump_mesh_t *mesh, *curr, *next;
 
 	cfg   = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
 	run   = io_lumpgetbase(hunk, MOLTLUMP_RUNINFO);
@@ -112,8 +112,10 @@ void do_simulation(void *hunk, u64 hunksize)
 
 	molt_firststep(mesh + 1, mesh, cfg, nu, vw, ww);
 
-	for (run->t_idx = 0; run->t_idx < run->t_total; run->t_idx++) {
-		molt_step(mesh + run->t_idx, mesh + run->t_idx, cfg, nu, vw, ww);
+	for (run->t_idx = 1; run->t_idx < run->t_total; run->t_idx++) {
+		curr = mesh + run->t_idx;
+		next = curr + 1;
+		molt_step(next, curr, cfg, nu, vw, ww);
 		/* save off some fields as required */
 	}
 
@@ -419,7 +421,9 @@ void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 	mesh = io_lumpgetbase(hdr, MOLTLUMP_MESH);
 	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 
-	mesh->magic = MOLTLUMP_MAGIC;
+	for (i = 0; i < lump->lumpsize / lump->elemsize; i++) {
+		mesh[i].magic = MOLTLUMP_MAGIC;
+	}
 
 	memset(((char *)hdr) + lump->offset, 0, lump->lumpsize);
 
@@ -429,9 +433,9 @@ void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 			for (x = 0; x < cfg->x_points_inc; x++) {
 				i = IDX3D(x, y, z, cfg->y_points_inc, cfg->z_points_inc);
 
-				fx = pow((x * cfg->int_scale - 1), 2);
-				fy = pow((y * cfg->int_scale - 1), 2);
-				fz = pow((z * cfg->int_scale - 1), 2);
+				fx = pow((x * MOLT_X_STEP * cfg->int_scale - 1), 2);
+				fy = pow((y * MOLT_Y_STEP * cfg->int_scale - 1), 2);
+				fz = pow((z * MOLT_Z_STEP * cfg->int_scale - 1), 2);
 
 				mesh->umesh[i] = exp(-fx - fy - fz);
 			}
