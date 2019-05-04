@@ -25,16 +25,29 @@
  *
  * While hemming and hawing about how to do everything in place, it honestly
  * gets SO much easier using some extra space for these calculations. And
- * because it's 2019, memory is kinda cheap.
+ * because it's 2019, memory is kinda cheap. My attitude towards this
+ * might change when/if the size of the problem changes, but I'm guessing
+ * that if I really had to, I could allocate working storage on the disk
+ * as well. If this were needed, molt_init would change to be
+ *
+ *   workp = io_mmap(io_open("tmp_file"), sizeof(struct work_t));
+ *   return workp;
+ *
+ * and molt_free becomes
+ *
+ *   if (workp) { io_munmap(workp); }
+ *
+ * If you do this, you also probably want to create a dictionary of
+ * file descriptors, names, and their mapped sizes. Currently, the IO routines
+ * somewhat assume there's only one disk allocation.
  *
  * While most of the initialization code back in main.c is written with the
  * idea to do most things in place (wweights violate this, but that's it),
  * everything within this program gets RIDICULOUSLY harder if you don't.
  * Working memory is allocated with molt_init() and freed with molt_free.
  *
- * IT IS REQUIRED THAT THESE ROUTINES ARE CALLED BEFORE TIMESTEPPING OCCURRS
- *
  * TODO (Brian)
+ * 1. swap around dimensionality ivec3_t to swap the dimensionality metadata
  * 6. Debug/Test
  *
  * Ensure that c and d operators can have the same src and dst pointers passed
@@ -42,12 +55,9 @@
  * but I'm not entirely certain.
  *
  * TODO CLEANUP:
- * 1. Remove stdlib headers and depencency
- * 2. In Place Mesh Reorganize (HARD)
- * 3. Make our generic index functions the same one
- * 4. Make function declaration not look like trash
- * 5. Make Working Space Into a Union
- * 6. Figure out if we actually need swap_sub
+ * 1. In Place Mesh Reorganize (HARD)
+ * 2. Make function declaration not look like trash
+ * 3. Figure out if we actually need swap_sub
  *
  * QUESTIONS:
  * 1. Should we use something other than vL for our weights all the time?
@@ -267,13 +277,14 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 
 	wy = cfg->space_acc + 1;
 
-	// SWEEP IN X, Y, Z --> BEGIN
+	// FIRST SWEEP IN X, Y, Z --> BEGIN
 	memcpy(workp->ix, src, sizeof(workp->ix));
 	do_sweep(workp->ix, workp->quad_x, nu->dnux, 
 			vw->vlx, vw->vrx, workp->vlx_w, workp->vrx_w,
 			ww->xl_weight, ww->xr_weight, dim[0], iterinrow[0],
 			dim[0], cfg->x_points, wy, cfg->space_acc);
 
+	// subtract u from the resultant matrix
 	matrix_subtract(workp->ix, workp->ix, src, dim);
 	mesh3_swap(workp->swap, workp->ix, dim, swap_x_y_z, swap_y_x_z);
 	memcpy(workp->ix, workp->swap, sizeof(workp->ix));
@@ -635,6 +646,28 @@ void mesh3_swap(f64 *out, f64* in, ivec3_t dim, cvec3_t from, cvec3_t to)
 	}
 }
 
+/* meshdim_swap : swaps the dim values in dim from 'from' to 'to' */
+static void meshdim_swap(ivec3_t *dim, cvec3_t from, cvec3_t to)
+{
+	s32 i, xlen, ylen, zlen;
+
+	xlen = ylen = zlen = -1;
+
+	// retrieve the dimensions into specific, known vars
+	for (i = 0; i < 3; i++) {
+		if (from[i] == 'x') { xlen = (*dim)[i]; }
+		if (from[i] == 'y') { ylen = (*dim)[i]; }
+		if (from[i] == 'z') { zlen = (*dim)[i]; }
+	}
+
+	// now put them back, with a similar technique to above
+	for (i = 0; i < 3; i++) {
+		if (to[i] == 'x') { (*dim)[i] = xlen; }
+		if (to[i] == 'y') { (*dim)[i] = ylen; }
+		if (to[i] == 'z') { (*dim)[i] = zlen; }
+	}
+}
+
 /* mk_genericidx : retrieves a generic index from input dimensionality */
 static inline
 u64 mk_genericidx(ivec3_t inpts, ivec3_t dim, cvec3_t order)
@@ -670,11 +703,6 @@ u64 mk_genericidx(ivec3_t inpts, ivec3_t dim, cvec3_t order)
 			break;
 		}
 	}
-
-#if 0
-	printf("(%3d, %3d, %3d) -> (%3d, %3d, %3d)\n",
-			inpts[0], inpts[1], inpts[2], outpts[0], outpts[1], outpts[2]);
-#endif
 
 	return IDX3D(outpts[0], outpts[1], outpts[2], tmp[1], tmp[2]);
 }
