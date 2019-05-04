@@ -125,13 +125,14 @@ static void do_d_op(
 f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
 
 static
-void mesh3_swap(f64 *out, f64* in, ivec3_t dim, cvec3_t from, cvec3_t to);
+void mesh3_swap(f64 *out, f64* in, ivec3_t *dim, cvec3_t from, cvec3_t to);
 
 static inline u64 mk_genericidx(ivec3_t inpts, ivec3_t dim, cvec3_t order);
 
-static void mk_genericdim(ivec3_t *out, ivec3_t dim, cvec3_t to);
+/* meshdim_swap : swaps the dim values in dim from 'from' to 'to' */
+static void meshdim_swap(ivec3_t *dim, cvec3_t from, cvec3_t to);
 
-static s32 get_genericrowlen(ivec3_t dim, cvec3_t to);
+static void mk_genericdim(ivec3_t *out, ivec3_t dim, cvec3_t to);
 
 static
 void matrix_subtract(f64 *out, f64 *ina, f64 *inb, ivec3_t dim);
@@ -286,7 +287,7 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 
 	// subtract u from the resultant matrix
 	matrix_subtract(workp->ix, workp->ix, src, dim);
-	mesh3_swap(workp->swap, workp->ix, dim, swap_x_y_z, swap_y_x_z);
+	mesh3_swap(workp->swap, workp->ix, &dim, swap_x_y_z, swap_y_x_z);
 	memcpy(workp->ix, workp->swap, sizeof(workp->ix));
 
 	do_sweep(workp->ix, workp->quad_y, nu->dnuy, 
@@ -294,29 +295,29 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 			ww->yl_weight, ww->yr_weight, dim[1], iterinrow[1],
 			dim[1], cfg->y_points, wy, cfg->space_acc);
 
-	mesh3_swap(workp->swap, workp->ix, dim, swap_y_x_z, swap_z_x_y);
+	mesh3_swap(workp->swap, workp->ix, &dim, swap_y_x_z, swap_z_x_y);
 	memcpy(workp->ix, workp->swap, sizeof(workp->ix));
 
 	do_sweep(workp->ix, workp->quad_z, nu->dnuz, 
 			vw->vlz, vw->vrz, workp->vlz_w, workp->vrz_w,
 			ww->zl_weight, ww->yr_weight, dim[2], iterinrow[2],
 			dim[2], cfg->z_points, wy, cfg->space_acc);
-	mesh3_swap(workp->swap, workp->ix, dim, swap_z_x_y, swap_x_y_z);
+	mesh3_swap(workp->swap, workp->ix, &dim, swap_z_x_y, swap_x_y_z);
 	memcpy(workp->ix, workp->swap, sizeof(workp->ix));
 	// SWEEP IN X, Y, Z --> END
 
 	// SWEEP IN Y, Z, X --> BEGIN
-	mesh3_swap(workp->iy, src, dim, swap_x_y_z, swap_y_x_z);
+	mesh3_swap(workp->iy, src, &dim, swap_x_y_z, swap_y_x_z);
 
 	do_sweep(workp->iy, workp->quad_y, nu->dnuy, 
 			vw->vly, vw->vry, workp->vly_w, workp->vry_w,
 			ww->yl_weight, ww->yr_weight, dim[1], iterinrow[1],
 			dim[1], cfg->y_points, wy, cfg->space_acc);
 
-	mesh3_swap(workp->swap, workp->iy, dim, swap_y_x_z, swap_x_y_z);
+	mesh3_swap(workp->swap, workp->iy, &dim, swap_y_x_z, swap_x_y_z);
 	matrix_subtract(workp->iy, workp->swap, src, dim);
 
-	mesh3_swap(workp->swap, workp->iy, dim, swap_x_y_z, swap_z_x_y);
+	mesh3_swap(workp->swap, workp->iy, &dim, swap_x_y_z, swap_z_x_y);
 	memcpy(workp->iy, workp->swap, sizeof(workp->iy));
 
 	do_sweep(workp->iz, workp->quad_z, nu->dnuz, 
@@ -324,7 +325,7 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 			ww->zl_weight, ww->yr_weight, dim[2], iterinrow[2],
 			dim[2], cfg->z_points, wy, cfg->space_acc);
 
-	mesh3_swap(workp->swap, workp->iy, dim, swap_z_x_y, swap_x_y_z);
+	mesh3_swap(workp->swap, workp->iy, &dim, swap_z_x_y, swap_x_y_z);
 	memcpy(workp->iy, workp->swap, sizeof(workp->ix));
 
 	do_sweep(workp->iz, workp->quad_x, nu->dnux, 
@@ -334,14 +335,14 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 	// SWEEP IN Y, Z, X --> END
 
 	// SWEEP IN Z, X, Y --> END
-	mesh3_swap(workp->iz, src, dim, swap_x_y_z, swap_z_x_y);
+	mesh3_swap(workp->iz, src, &dim, swap_x_y_z, swap_z_x_y);
 	do_sweep(workp->iz, workp->quad_z, nu->dnuz, 
 			vw->vlz, vw->vrz, workp->vlz_w, workp->vrz_w,
 			ww->zl_weight, ww->zr_weight, dim[2], iterinrow[2],
 			dim[2], cfg->z_points, wy, cfg->space_acc);
 	matrix_subtract(workp->iz, workp->iz, src, dim);
 
-	mesh3_swap(workp->swap, workp->iz, dim, swap_z_x_y, swap_x_z_y);
+	mesh3_swap(workp->swap, workp->iz, &dim, swap_z_x_y, swap_x_z_y);
 	memcpy(workp->iz, workp->swap, sizeof(workp->iz));
 
 	do_sweep(workp->iz, workp->quad_x, nu->dnux, 
@@ -349,14 +350,14 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 			ww->xl_weight, ww->xr_weight, dim[0], iterinrow[0],
 			dim[0], cfg->x_points, wy, cfg->space_acc);
 
-	mesh3_swap(workp->swap, workp->iy, dim, swap_x_z_y, swap_y_z_x);
+	mesh3_swap(workp->swap, workp->iy, &dim, swap_x_z_y, swap_y_z_x);
 	memcpy(workp->iz, workp->swap, sizeof(workp->iz));
 
 	do_sweep(workp->iz, workp->quad_x, nu->dnux, 
 			vw->vlx, vw->vrx, workp->vlx_w, workp->vrx_w,
 			ww->xl_weight, ww->xr_weight, dim[0], iterinrow[0],
 			dim[0], cfg->z_points, wy, cfg->space_acc);
-	mesh3_swap(workp->swap, workp->iy, dim, swap_y_z_x, swap_x_y_z);
+	mesh3_swap(workp->swap, workp->iy, &dim, swap_y_z_x, swap_x_y_z);
 	memcpy(workp->iz, workp->swap, sizeof(workp->iz));
 
 	memset(dst, 0, sizeof(workp->ix));
@@ -392,7 +393,7 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 			ww->xl_weight, ww->xr_weight, dim[0], iterinrow[0],
 			dim[0], cfg->x_points, wy, cfg->space_acc);
 
-	mesh3_swap(workp->swap, workp->ix, dim, swap_x_y_z, swap_y_x_z);
+	mesh3_swap(workp->swap, workp->ix, &dim, swap_x_y_z, swap_y_x_z);
 	memcpy(workp->ix, workp->swap, sizeof(workp->ix));
 
 	do_sweep(workp->ix, workp->quad_y, nu->dnuy, 
@@ -400,25 +401,25 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 			ww->yl_weight, ww->yr_weight, dim[1], iterinrow[1],
 			dim[1], cfg->y_points, wy, cfg->space_acc);
 
-	mesh3_swap(workp->swap, workp->ix, dim, swap_y_x_z, swap_z_x_y);
+	mesh3_swap(workp->swap, workp->ix, &dim, swap_y_x_z, swap_z_x_y);
 	memcpy(workp->ix, workp->swap, sizeof(workp->ix));
 
 	do_sweep(workp->ix, workp->quad_z, nu->dnuz, 
 			vw->vlz, vw->vrz, workp->vlz_w, workp->vrz_w,
 			ww->zl_weight, ww->zr_weight, dim[2], iterinrow[2],
 			dim[2], cfg->z_points, wy, cfg->space_acc);
-	mesh3_swap(workp->swap, workp->ix, dim, swap_z_x_y, swap_x_y_z);
+	mesh3_swap(workp->swap, workp->ix, &dim, swap_z_x_y, swap_x_y_z);
 	memcpy(workp->ix, workp->swap, sizeof(workp->ix));
 	// SWEEP IN X, Y, Z --> END
 
 	// SWEEP IN Y, Z, X --> BEGIN
-	mesh3_swap(workp->iy, src, dim, swap_x_y_z, swap_y_x_z);
+	mesh3_swap(workp->iy, src, &dim, swap_x_y_z, swap_y_x_z);
 	do_sweep(workp->iy, workp->quad_y, nu->dnuy, 
 			vw->vly, vw->vry, workp->vly_w, workp->vry_w,
 			ww->yl_weight, ww->yr_weight, dim[1], iterinrow[1],
 			dim[1], cfg->y_points, wy, cfg->space_acc);
 
-	mesh3_swap(workp->swap, workp->iy, dim, swap_x_y_z, swap_z_x_y);
+	mesh3_swap(workp->swap, workp->iy, &dim, swap_x_y_z, swap_z_x_y);
 	memcpy(workp->iy, workp->swap, sizeof(workp->iy));
 
 	do_sweep(workp->iy, workp->quad_z, nu->dnuz, 
@@ -426,7 +427,7 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 			ww->zl_weight, ww->zr_weight, dim[2], iterinrow[2],
 			dim[2], cfg->z_points, wy, cfg->space_acc);
 
-	mesh3_swap(workp->swap, workp->iy, dim, swap_z_x_y, swap_x_y_z);
+	mesh3_swap(workp->swap, workp->iy, &dim, swap_z_x_y, swap_x_y_z);
 	memcpy(workp->iy, workp->swap, sizeof(workp->iy));
 
 	do_sweep(workp->iy, workp->quad_x, nu->dnux, 
@@ -436,14 +437,14 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 	// SWEEP IN Y, Z, X --> END
 
 	// SWEEP IN Z, X, Y --> END
-	mesh3_swap(workp->iz, src, dim, swap_x_y_z, swap_z_x_y);
+	mesh3_swap(workp->iz, src, &dim, swap_x_y_z, swap_z_x_y);
 
 	do_sweep(workp->iz, workp->quad_z, nu->dnuz, 
 			vw->vlz, vw->vrz, workp->vlz_w, workp->vrz_w,
 			ww->zl_weight, ww->zr_weight, dim[2], iterinrow[2],
 			dim[2], cfg->z_points, wy, cfg->space_acc);
 
-	mesh3_swap(workp->swap, workp->iz, dim, swap_z_x_y, swap_x_z_y);
+	mesh3_swap(workp->swap, workp->iz, &dim, swap_z_x_y, swap_x_z_y);
 	memcpy(workp->iz, workp->swap, sizeof(workp->iz));
 
 	do_sweep(workp->iz, workp->quad_x, nu->dnux, 
@@ -451,7 +452,7 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 			ww->xl_weight, ww->xr_weight, dim[0], iterinrow[0],
 			dim[0], cfg->x_points, wy, cfg->space_acc);
 
-	mesh3_swap(workp->swap, workp->iz, dim, swap_x_z_y, swap_y_z_x);
+	mesh3_swap(workp->swap, workp->iz, &dim, swap_x_z_y, swap_y_z_x);
 	memcpy(workp->iz, workp->swap, sizeof(workp->iz));
 
 	do_sweep(workp->iz, workp->quad_y, nu->dnuy, 
@@ -459,7 +460,7 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 			ww->yl_weight, ww->yr_weight, dim[0], iterinrow[0],
 			dim[0], cfg->y_points, wy, cfg->space_acc);
 
-	mesh3_swap(workp->swap, workp->iy, dim, swap_y_z_x, swap_x_y_z);
+	mesh3_swap(workp->swap, workp->iy, &dim, swap_y_z_x, swap_x_y_z);
 	memcpy(workp->iz, workp->swap, sizeof(workp->iz));
 
 	memset(dst, 0, sizeof(workp->ix));
@@ -608,7 +609,7 @@ make_l(f64 *vec, f64 *vl_r, f64 *vr_r, f64 *vl_w, f64 *vr_w,
 
 /* mesh3_swap : reorganizes a 3d mesh */
 static
-void mesh3_swap(f64 *out, f64* in, ivec3_t dim, cvec3_t from, cvec3_t to)
+void mesh3_swap(f64 *out, f64* in, ivec3_t *dim, cvec3_t from, cvec3_t to)
 {
 	/*
 	 * mesh - pointer to the base mesh hunk
@@ -633,17 +634,27 @@ void mesh3_swap(f64 *out, f64* in, ivec3_t dim, cvec3_t from, cvec3_t to)
 	 */
 
 	u64 from_idx, to_idx;
-	ivec3_t idx;
+	ivec3_t idx, ldim;
 
-	for (idx[2] = 0; idx[2] < dim[2]; idx[2]++) {
-		for (idx[1] = 0; idx[1] < dim[1]; idx[1]++) {
-			for (idx[0] = 0; idx[0] < dim[0]; idx[0]++) { // for all of our things
-				from_idx = mk_genericidx(idx, dim, from);
-				to_idx   = mk_genericidx(idx, dim, to);
+	// copy from our external dimensionality to our local one
+	ldim[0] = (*dim)[0];
+	ldim[1] = (*dim)[1];
+	ldim[2] = (*dim)[2];
+
+	// first, perform the matrix swaps that are required
+	for (idx[2] = 0; idx[2] < ldim[2]; idx[2]++) {
+		for (idx[1] = 0; idx[1] < ldim[1]; idx[1]++) {
+			for (idx[0] = 0; idx[0] < ldim[0]; idx[0]++) { // for all of our things
+				from_idx = mk_genericidx(idx, ldim, from);
+				to_idx   = mk_genericidx(idx, ldim, to);
 				out[to_idx] = in[from_idx];
 			}
 		}
 	}
+
+	// now ensure that our external dimensionality matches with
+	// what we just swapped around
+	meshdim_swap(dim, from, to);
 }
 
 /* meshdim_swap : swaps the dim values in dim from 'from' to 'to' */
@@ -724,23 +735,6 @@ static void mk_genericdim(ivec3_t *out, ivec3_t dim, cvec3_t to)
 			(*out)[i] = dim[2];
 			break;
 		}
-	}
-}
-
-static s32 get_genericrowlen(ivec3_t dim, cvec3_t to)
-{
-	switch (to[0]) {
-	case 'x':
-		return dim[0];
-		break;
-	case 'y':
-		return dim[1];
-		break;
-	case 'z':
-		return dim[2];
-		break;
-	default:
-		assert(0); // incorrect usage
 	}
 }
 
