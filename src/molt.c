@@ -169,7 +169,7 @@ void molt_firststep(lmesh_t *dst, lmesh_t *src,
 	totalelem = (u64)cfg->x_points_inc * cfg->y_points_inc * cfg->z_points_inc;
 
 	// u1 = 2 * (u0 + dt * v0)
-	vec_mul_s(workp->swap, src->vmesh, cfg->t_step, totalelem);
+	vec_mul_s(workp->swap, src->vmesh, cfg->t_step * cfg->int_scale, totalelem);
 	vec_add_v(workp->swap, workp->swap, src->umesh, totalelem);
 	vec_mul_s(workp->swap, workp->swap,        2.0, totalelem);
 	memcpy(dst->umesh, workp->swap, sizeof(workp->swap));

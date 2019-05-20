@@ -433,9 +433,15 @@ void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 			for (x = 0; x < cfg->x_points_inc; x++) {
 				i = IDX3D(x, y, z, cfg->y_points_inc, cfg->z_points_inc);
 
-				fx = pow((x * MOLT_X_STEP * cfg->int_scale - 1), 2);
-				fy = pow((y * MOLT_Y_STEP * cfg->int_scale - 1), 2);
-				fz = pow((z * MOLT_Z_STEP * cfg->int_scale - 1), 2);
+				fx = pow((cfg->int_scale * (x - MOLT_X_POINTS / 2)), 2);
+				fy = pow((cfg->int_scale * (y - MOLT_Y_POINTS / 2)), 2);
+				fz = pow((cfg->int_scale * (z - MOLT_Z_POINTS / 2)), 2);
+
+#if 0
+				fx = pow((x * MOLT_X_POINTS * cfg->int_scale - 1), 2);
+				fy = pow((y * MOLT_Y_POINTS * cfg->int_scale - 1), 2);
+				fz = pow((z * MOLT_Z_POINTS * cfg->int_scale - 1), 2);
+#endif
 
 				mesh->umesh[i] = exp(-fx - fy - fz);
 			}
