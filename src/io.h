@@ -29,6 +29,8 @@ int io_lumprecnum(void *base, int lumpid);
 void *io_lumpgetbase(void *base, int lumpid);
 /* io_lumpgetidx : gets a pointer to an array in the lump */
 void *io_lumpgetidx(void *base, int lumpid, int idx);
+/* io_lumpgetmeta : returns a pointer to a lumpmeta_t for a given lumpid */
+struct lumpmeta_t *io_lumpgetmeta(void *base, int lumpid);
 
 /* console message wrappers */
 int io_fprintf(FILE *fp, const char *fmt, ...);

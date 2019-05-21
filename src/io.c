@@ -190,10 +190,10 @@ int io_lumpcheck(void *ptr)
 	struct lump_header_t *hdr;
 
 	hdr = ptr;
-	if (hdr->magic != MOLTLUMP_MAGIC) {
-		hdr->magic = MOLTLUMP_MAGIC;
-		hdr->version = MOLTCURRVERSION;
-		hdr->type = MOLTLUMP_TYPEBIO;
+	if (hdr->meta.magic != MOLTLUMP_MAGIC) {
+		hdr->meta.magic = MOLTLUMP_MAGIC;
+		hdr->meta.version = MOLTCURRVERSION;
+		hdr->meta.type = MOLTLUMP_TYPEBIO;
 
 		return 1;
 	}
@@ -257,3 +257,12 @@ int io_fprintf(FILE *fp, const char *fmt, ...)
 	return ret;
 }
 
+/* io_lumpgetmeta : returns a pointer to a lumpmeta_t for a given lumpid */
+struct lumpmeta_t *io_lumpgetmeta(void *base, int lumpid)
+{
+	struct lump_header_t *hdr;
+
+	hdr = base;
+
+	return (struct lumpmeta_t *)(((char *)base) + hdr->lump[lumpid].offset);
+}

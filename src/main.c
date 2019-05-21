@@ -35,6 +35,7 @@
 #include "molt.h"
 
 #define DEFAULTFILE "data.dat"
+#define DATADUMP 0
 
 /* lump setup functions */
 void setup_simulation(void **base, u64 *size, int fd);
@@ -60,6 +61,7 @@ void applied_funcf(void *base);
 void applied_funcg(void *base);
 
 void debug(void *hunk);
+s32 lump_magiccheck(void *hunk);
 
 int main(int argc, char **argv)
 {
@@ -193,38 +195,38 @@ u64 setup_lumps(void *base)
 
 	curr_offset += hdr->lump[1].lumpsize;
 
-	/* setup our efield information */
+	/* setup our nu information */
 	hdr->lump[2].offset = curr_offset;
-	hdr->lump[2].elemsize = sizeof(struct lump_efield_t);
-	hdr->lump[2].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[2].elemsize;
+	hdr->lump[2].elemsize = sizeof(struct lump_nu_t);
+	hdr->lump[2].lumpsize = hdr->lump[2].elemsize;
 
 	curr_offset += hdr->lump[2].lumpsize;
 
-	/* setup our pfield information */
+	/* setup our vweight information */
 	hdr->lump[3].offset = curr_offset;
-	hdr->lump[3].elemsize = sizeof(struct lump_pfield_t);
-	hdr->lump[3].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[3].elemsize;
+	hdr->lump[3].elemsize = sizeof(struct lump_vweight_t);
+	hdr->lump[3].lumpsize = hdr->lump[3].elemsize;
 
 	curr_offset += hdr->lump[3].lumpsize;
 
-	/* setup our nu information */
+	/* setup our wweight information */
 	hdr->lump[4].offset = curr_offset;
-	hdr->lump[4].elemsize = sizeof(struct lump_nu_t);
+	hdr->lump[4].elemsize = sizeof(struct lump_wweight_t);
 	hdr->lump[4].lumpsize = hdr->lump[4].elemsize;
 
 	curr_offset += hdr->lump[4].lumpsize;
 
-	/* setup our vweight information */
+	/* setup our efield information */
 	hdr->lump[5].offset = curr_offset;
-	hdr->lump[5].elemsize = sizeof(struct lump_vweight_t);
-	hdr->lump[5].lumpsize = hdr->lump[5].elemsize;
+	hdr->lump[5].elemsize = sizeof(struct lump_efield_t);
+	hdr->lump[5].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[5].elemsize;
 
 	curr_offset += hdr->lump[5].lumpsize;
 
-	/* setup our wweight information */
+	/* setup our pfield information */
 	hdr->lump[6].offset = curr_offset;
-	hdr->lump[6].elemsize = sizeof(struct lump_wweight_t);
-	hdr->lump[6].lumpsize = hdr->lump[6].elemsize;
+	hdr->lump[6].elemsize = sizeof(struct lump_pfield_t);
+	hdr->lump[6].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[6].elemsize;
 
 	curr_offset += hdr->lump[6].lumpsize;
 
@@ -241,7 +243,7 @@ u64 setup_lumps(void *base)
 /* simsetup_cfg : setup the config lump */
 void setuplump_cfg(struct moltcfg_t *cfg)
 {
-	cfg->magic = MOLTLUMP_MAGIC;
+	cfg->meta.magic = MOLTLUMP_MAGIC;
 	/* free space parms */
 	cfg->lightspeed = MOLT_LIGHTSPEED;
 	cfg->henrymeter = MOLT_HENRYPERMETER;
@@ -296,7 +298,7 @@ void setuplump_cfg(struct moltcfg_t *cfg)
 /* simsetup_run : setup run information */
 void setuplump_run(struct lump_runinfo_t *run)
 {
-	run->magic = MOLTLUMP_MAGIC;
+	run->meta.magic = MOLTLUMP_MAGIC;
 	run->t_start = 0;
 	run->t_step  = .5;
 	run->t_stop  = 10;
@@ -311,13 +313,18 @@ void setuplump_efield(struct lump_header_t *hdr, struct lump_efield_t *efield)
 {
 	// write zeroes to the efield
 	struct lump_t *lump;
+	s32 i;
 	char *ptr;
 
 	ptr = (char *)hdr;
 	lump = &hdr->lump[MOLTLUMP_EFIELD];
 
 	memset(ptr + lump->offset, 0, lump->lumpsize);
-	efield->magic = MOLTLUMP_MAGIC;
+
+	// make sure we set all of the efield magic values
+	for (i = 0; i < MOLT_T_POINTS; i++) {
+		(efield + i)->meta.magic = MOLTLUMP_MAGIC;
+	}
 }
 
 /* setuplump_pfield : setup the pfield lump */
@@ -325,13 +332,18 @@ void setuplump_pfield(struct lump_header_t *hdr, struct lump_pfield_t *pfield)
 {
 	// write zeroes to the pfield
 	struct lump_t *lump;
+	s32 i;
 	char *ptr;
 
 	ptr = (char *)hdr;
 	lump = &hdr->lump[MOLTLUMP_PFIELD];
 
 	memset(ptr + lump->offset, 0, lump->lumpsize);
-	pfield->magic = MOLTLUMP_MAGIC;
+
+	// make sure we set all of the efield magic values
+	for (i = 0; i < MOLT_T_POINTS; i++) {
+		(pfield + i)->meta.magic = MOLTLUMP_MAGIC;
+	}
 }
 
 /* setuplump_nu : setup the nu lump */
@@ -342,7 +354,7 @@ void setuplump_nu(struct lump_header_t *hdr, struct lump_nu_t *nu)
 
 	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 
-	nu->magic = MOLTLUMP_MAGIC;
+	nu->meta.magic = MOLTLUMP_MAGIC;
 	for (i = 0; i < cfg->x_points; i++) {
 		nu->nux[i] = cfg->int_scale * cfg->x_step * cfg->alpha;
 		nu->dnux[i] = exp(-nu->nux[i]);
@@ -369,7 +381,7 @@ void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw)
 	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 	alpha = cfg->alpha;
 
-	vw->magic = MOLTLUMP_MAGIC;
+	vw->meta.magic = MOLTLUMP_MAGIC;
 	// first, fill the arrays with our values
 
 	for (i = 0; i < cfg->x_points_inc; i++) {
@@ -399,7 +411,7 @@ void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww)
 	nu  = io_lumpgetbase(hdr, MOLTLUMP_NU);
 
 	// perform all of our get_exp_weights
-	ww->magic = MOLTLUMP_MAGIC;
+	ww->meta.magic = MOLTLUMP_MAGIC;
 	get_exp_weights(nu->nux, ww->xl_weight, ww->xr_weight,
 			cfg->x_points, cfg->space_acc);
 	get_exp_weights(nu->nuy, ww->yl_weight, ww->yr_weight,
@@ -423,7 +435,7 @@ void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 
 	for (i = 0; i < lump->lumpsize / lump->elemsize; i++) {
-		mesh[i].magic = MOLTLUMP_MAGIC;
+		mesh[i].meta.magic = MOLTLUMP_MAGIC;
 	}
 
 	memset(((char *)hdr) + lump->offset, 0, lump->lumpsize);
@@ -459,9 +471,12 @@ void debug(void *hunk)
 	cfg = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
 
 	io_fprintf(stdout, "header : 0x%8x\tver : %d\t type : 0x%02x\n",
-			hdr->magic, hdr->version, hdr->type);
+			hdr->meta.magic, hdr->meta.version, hdr->meta.type);
 
-#if 1
+	// check the lump metadata before anything else
+	assert(!lump_magiccheck(hunk));
+
+#if DATADUMP
 	for (i = 0; i < MOLTLUMP_TOTAL; i++) {
 		io_fprintf(stdout,
 				"lump[%d] off : 0x%08lx\tlumpsz : 0x%08lx\telemsz : 0x%08lx\n",
@@ -470,7 +485,7 @@ void debug(void *hunk)
 	}
 #endif
 
-#if 1
+#if DATADUMP
 	nu = io_lumpgetbase(hunk, MOLTLUMP_NU);
 	for (i = 0; i < cfg->x_points; i++) {
 		printf("nux [%03d] : %4.6e\n", i, nu->nux[i]);
@@ -484,7 +499,7 @@ void debug(void *hunk)
 		printf("nuz [%03d] : %4.6e\n", i, nu->nuz[i]);
 	}
 #endif
-#if 1
+#if DATADUMP
 	vw = io_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
 	for (i = 0; i < cfg->x_points_inc; i++) {
 		printf("vlx[%03d] : %4e\t vrx[%03d] : %4e\n",
@@ -502,7 +517,7 @@ void debug(void *hunk)
 	}
 #endif
 
-#if 1
+#if DATADUMP
 	ww = io_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
 	for (i = 0; i < cfg->x_points * (cfg->space_acc + 1); i++) {
 		printf("wxl[%03d] : % 04.6e\twxr[%03d] : % 04.6e\n",
@@ -529,8 +544,8 @@ void debug(void *hunk)
 			memcmp(ww->zl_weight, ww->zr_weight, sizeof(ww->zl_weight)));
 #endif
 
-#if 1
-	// iterate through all of the mesh points
+#if DATADUMP
+	// iterate through all of the mesh points (IT'S A LOT)
 	for (i = 0; i < cfg->t_points_inc; i++) {
 		mesh = io_lumpgetbase(hunk, MOLTLUMP_MESH) + i;
 		printf("Magic : 0x%x\n", mesh->magic);
@@ -544,5 +559,80 @@ void debug(void *hunk)
 		}
 	}
 #endif
+}
+
+/* lump_magiccheck : checks all lumps for the magic number, asserts if wrong */
+s32 lump_magiccheck(void *hunk)
+{
+	// the 'magic number' is MOLTLUMP_MAGIC
+	// the function also returns 0 on success, when > 0, how many magic values
+	// were incorrect
+
+	struct lump_efield_t *efield;
+	struct lump_pfield_t *pfield;
+	struct lump_mesh_t *mesh;
+
+	s32 simplemagic[5], meshmagic[MOLT_T_POINTS_INC];
+	s32 i, rc;
+	char hex1[16], hex2[16];
+
+	rc = 0;
+
+	// get all of the lumps that have only one magic value
+	simplemagic[0] = io_lumpgetmeta(hunk, MOLTLUMP_CONFIG)->magic;
+	simplemagic[1] = io_lumpgetmeta(hunk, MOLTLUMP_RUNINFO)->magic;
+	simplemagic[2] = io_lumpgetmeta(hunk, MOLTLUMP_NU)->magic;
+	simplemagic[3] = io_lumpgetmeta(hunk, MOLTLUMP_VWEIGHT)->magic;
+	simplemagic[4] = io_lumpgetmeta(hunk, MOLTLUMP_WWEIGHT)->magic;
+
+	// spin through and check them all
+	for (i = 0; i < 5; i++) {
+		if (simplemagic[i] != MOLTLUMP_MAGIC) {
+			snprintf(hex1, sizeof(hex1), "0x%04x", simplemagic[i]);
+			snprintf(hex2, sizeof(hex2), "0x%04x", MOLTLUMP_MAGIC);
+			fprintf(stderr, "LUMP %d HAS MAGIC %s, should be %s\n",
+					i, hex1, hex2);
+			rc += 1;
+		}
+	}
+
+	efield = io_lumpgetbase(hunk, MOLTLUMP_EFIELD);
+	pfield = io_lumpgetbase(hunk, MOLTLUMP_PFIELD);
+	mesh   = io_lumpgetbase(hunk, MOLTLUMP_MESH);
+
+	// spin through the efield
+	for (i = 0; i < MOLT_T_POINTS; i++) {
+		if ((efield + i)->meta.magic != MOLTLUMP_MAGIC) {
+			snprintf(hex1, sizeof(hex1), "0x%04x", (efield + i)->meta.magic);
+			snprintf(hex2, sizeof(hex2), "0x%04x", MOLTLUMP_MAGIC);
+			fprintf(stderr, "EFIELD %d HAS MAGIC %s, should be %s\n",
+					i, hex1, hex2);
+			rc += 1;
+		}
+	}
+
+	// spin through the pfield
+	for (i = 0; i < MOLT_T_POINTS; i++) {
+		if ((pfield + i)->meta.magic != MOLTLUMP_MAGIC) {
+			snprintf(hex1, sizeof(hex1), "0x%04x", (pfield + i)->meta.magic);
+			snprintf(hex2, sizeof(hex2), "0x%04x", MOLTLUMP_MAGIC);
+			fprintf(stderr, "PFIELD %d HAS MAGIC %s, should be %s\n",
+					i, hex1, hex2);
+			rc += 1;
+		}
+	}
+
+	// spin through all of the mesh lumps
+	for (i = 0; i < MOLT_T_POINTS_INC; i++) {
+		if ((mesh + i)->meta.magic != MOLTLUMP_MAGIC) {
+			snprintf(hex1, sizeof(hex1), "0x%04x", (mesh + i)->meta.magic);
+			snprintf(hex2, sizeof(hex2), "0x%04x", MOLTLUMP_MAGIC);
+			fprintf(stderr, "MESH %d HAS MAGIC %s, should be %s\n",
+					i, hex1, hex2);
+			rc += 1;
+		}
+	}
+
+	return rc;
 }
 

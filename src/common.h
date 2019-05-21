@@ -105,7 +105,7 @@ typedef cvec_t cvec6_t[6];
 /* include the configuration header for config values */
 #include "config.h"
 
-#define MOLTLUMP_MAGIC *(int *)"MOLT"
+#define MOLTLUMP_MAGIC *(s32 *)"MOLT"
 #define MOLTLUMP_TOTAL 8
 #define MOLTCURRVERSION 1
 
@@ -116,12 +116,21 @@ enum { /* type values */
 enum {
 	MOLTLUMP_CONFIG,
 	MOLTLUMP_RUNINFO,
-	MOLTLUMP_EFIELD,
-	MOLTLUMP_PFIELD,
 	MOLTLUMP_NU,
 	MOLTLUMP_VWEIGHT,
 	MOLTLUMP_WWEIGHT,
+	MOLTLUMP_EFIELD,
+	MOLTLUMP_PFIELD,
 	MOLTLUMP_MESH
+};
+
+// meta data for a single lump
+// the version and type fields are only used in the header, but for debugging
+// purposes, every structure has these fields
+struct lumpmeta_t {
+	u32 magic;
+	u16 version;
+	u16 type;
 };
 
 struct lump_t {
@@ -131,15 +140,13 @@ struct lump_t {
 };
 
 struct lump_header_t {
-	u32 magic;
-	u16 version;
-	u16 type;
+	struct lumpmeta_t meta;
 	struct lump_t lump[MOLTLUMP_TOTAL];
 };
 
 struct moltcfg_t {
-	u32 magic;
-	u32 pad;
+	struct lumpmeta_t meta;
+
 	/* free space parms */
 	f64 lightspeed;
 	f64 henrymeter;
@@ -195,8 +202,7 @@ struct moltcfg_t {
 };
 
 struct lump_runinfo_t {
-	u32 magic;
-	u32 pad;
+	struct lumpmeta_t meta;
 	f64 t_start;
 	f64 t_step;
 	f64 t_stop;
@@ -204,21 +210,8 @@ struct lump_runinfo_t {
 	s32 t_total;
 };
 
-struct lump_efield_t {
-	u32 magic;
-	u32 pad;
-	f64 data[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
-};
-
-struct lump_pfield_t {
-	u32 magic;
-	u32 pad;
-	f64 data[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
-};
-
 struct lump_nu_t {
-	u32 magic;
-	u32 pad;
+	struct lumpmeta_t meta;
 	f64 nux[MOLT_X_POINTS];
 	f64 nuy[MOLT_Y_POINTS];
 	f64 nuz[MOLT_Z_POINTS];
@@ -228,8 +221,7 @@ struct lump_nu_t {
 };
 
 struct lump_vweight_t {
-	u32 magic;
-	u32 pad;
+	struct lumpmeta_t meta;
 	f64 vrx[MOLT_X_POINTS_INC];
 	f64 vlx[MOLT_X_POINTS_INC];
 	f64 vry[MOLT_Y_POINTS_INC];
@@ -239,8 +231,7 @@ struct lump_vweight_t {
 };
 
 struct lump_wweight_t {
-	u32 magic;
-	u32 pad;
+	struct lumpmeta_t meta;
 	f64 xl_weight[MOLT_X_POINTS * (MOLT_SPACEACC + 1)];
 	f64 xr_weight[MOLT_X_POINTS * (MOLT_SPACEACC + 1)];
 	f64 yl_weight[MOLT_Y_POINTS * (MOLT_SPACEACC + 1)];
@@ -249,9 +240,18 @@ struct lump_wweight_t {
 	f64 zr_weight[MOLT_Z_POINTS * (MOLT_SPACEACC + 1)];
 };
 
+struct lump_efield_t {
+	struct lumpmeta_t meta;
+	f64 data[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
+};
+
+struct lump_pfield_t {
+	struct lumpmeta_t meta;
+	f64 data[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
+};
+
 struct lump_mesh_t { // problem state (the thing we simulate)
-	u32 magic;
-	u32 pad;
+	struct lumpmeta_t meta;
 	f64 umesh[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 	f64 vmesh[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 };
