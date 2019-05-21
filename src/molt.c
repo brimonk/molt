@@ -112,6 +112,9 @@ static cvec3_t swap_y_z_x = {'y', 'z', 'x'};
 static cvec3_t swap_z_x_y = {'z', 'x', 'y'};
 static cvec3_t swap_z_y_x = {'z', 'y', 'x'};
 
+// TODO move this
+static inline s32 gfquad_bound(s32 idx, s32 orderm, s32 len);
+
 /*
  * both of the C and D operators as noted from above. they serve as the
  * bread and butter for molt's exponential recursive properties
@@ -503,14 +506,15 @@ gfquad(f64 *out, f64 *in, f64 *d, f64 *wl, f64 *wr,
 {
 	/* out and in's length is defined by hunklen */
 	f64 IL, IR;
-	s32 iL, iR, iC, M2;
-	s32 i;
+	s32 iL, iR, iC, M2, N;
+	s32 i, bound;
 
 	// TODO (brian) remove branching ifs when this function is correct
 
 	IL = 0;
 	IR = 0;
 	M2 = orderm / 2;
+	N = veclen - 1;
 
 	orderm++;
 	iL = 0;
@@ -518,28 +522,59 @@ gfquad(f64 *out, f64 *in, f64 *d, f64 *wl, f64 *wr,
 	iR = veclen - orderm;
 
 	for (i = 0; i < veclen; i++) { /* left */
-		if (i < M2) { // check left bound
+		bound = gfquad_bound(i, M2, N);
+
+		switch (bound) {
+		case -1: // left bound
 			IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[iL], orderm);
-		} else if (i < veclen - M2) {
+			break;
+		case 0: // center
 			IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[i + 1 + iC], orderm);
-		} else if (i < veclen) {
+			break;
+		case 1:
 			IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[iR], orderm);
+			break;
 		}
 
 		out[i + 1] = out[i + 1] + IL;
 	}
 
-	for (i = veclen - 1; i >= 0; i--) {
-		if (i > veclen - 1 - M2) {
-			IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[iR], orderm);
-		} else if (i > M2) {
-			IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[i + 1 + iC], orderm);
-		} else if (i >= 0) {
+	for (i = veclen - 1; i >= 0; i--) { /* right */
+		bound = gfquad_bound(i, M2, N);
+
+		switch (bound) {
+		case -1: // left bound
 			IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[iL], orderm);
+			break;
+		case 0: // center
+			IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[i + iC], orderm);
+			break;
+		case 1: // right
+			IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[iR], orderm);
+			break;
 		}
 
 		out[i] = out[i] + IR;
 	}
+}
+
+/* gfquad_bound : return easy bound parameters for gfquad */
+static inline s32 gfquad_bound(s32 idx, s32 m2, s32 len)
+{
+	if (0 <= idx && idx <= 0 + m2) {
+		return -1;
+	}
+
+	if (m2 + 1 <= idx && idx <= len - m2) {
+		return 0;
+	}
+
+	if (len - m2 + 1 <= idx && idx <= len) {
+		return 1;
+	}
+
+	assert(0);
+	return 0;
 }
 
 /* make_l : applies dirichlet boundary conditions to the line in */

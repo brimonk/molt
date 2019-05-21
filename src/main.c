@@ -99,7 +99,7 @@ void do_simulation(void *hunk, u64 hunksize)
 	struct lump_nu_t *nu;
 	struct lump_vweight_t *vw;
 	struct lump_wweight_t *ww;
-	struct lump_mesh_t *mesh, *curr, *next;
+	struct lump_mesh_t *mesh, *curr;
 
 	cfg   = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
 	run   = io_lumpgetbase(hunk, MOLTLUMP_RUNINFO);
@@ -114,8 +114,7 @@ void do_simulation(void *hunk, u64 hunksize)
 
 	for (run->t_idx = 1; run->t_idx < run->t_total; run->t_idx++) {
 		curr = mesh + run->t_idx;
-		next = curr + 1;
-		molt_step(next, curr, cfg, nu, vw, ww);
+		molt_step(curr + 1, curr, cfg, nu, vw, ww);
 		/* save off some fields as required */
 	}
 
@@ -302,7 +301,9 @@ void setuplump_run(struct lump_runinfo_t *run)
 	run->t_step  = .5;
 	run->t_stop  = 10;
 	run->t_idx   = 0;
-	run->t_total = MOLT_T_POINTS_INC;
+	// We only take T_POINTS steps. That's because we need the extra step from
+	// MOLT_T_POINTS_INC as the "firststep" mesh storage
+	run->t_total = MOLT_T_POINTS;
 }
 
 /* setuplump_efield : setup the efield lump */
@@ -437,12 +438,6 @@ void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 				fy = pow((cfg->int_scale * (y - MOLT_Y_POINTS / 2)), 2);
 				fz = pow((cfg->int_scale * (z - MOLT_Z_POINTS / 2)), 2);
 
-#if 0
-				fx = pow((x * MOLT_X_POINTS * cfg->int_scale - 1), 2);
-				fy = pow((y * MOLT_Y_POINTS * cfg->int_scale - 1), 2);
-				fz = pow((z * MOLT_Z_POINTS * cfg->int_scale - 1), 2);
-#endif
-
 				mesh->umesh[i] = exp(-fx - fy - fz);
 			}
 		}
@@ -457,7 +452,7 @@ void debug(void *hunk)
 	struct lump_vweight_t *vw;
 	struct lump_wweight_t *ww;
 	struct lump_mesh_t *mesh;
-	s32 i, x, y, z;
+	s32 i, x, y, z, j;
 
 	hdr = hunk;
 
@@ -535,13 +530,16 @@ void debug(void *hunk)
 #endif
 
 #if 1
-	mesh = io_lumpgetbase(hunk, MOLTLUMP_MESH);
-	printf("Magic : 0x%x\n", mesh->magic);
-	for (z = 0; z < cfg->z_points_inc; z++) {
-		for (y = 0; y < cfg->y_points_inc; y++) {
-			for (x = 0; x < cfg->x_points_inc; x++) {
-				i = IDX3D(x, y, z, cfg->y_points_inc, cfg->z_points_inc);
-				printf("[%d] umesh[%d,%d,%d] : %6.16lf\n", i, x, y, z, mesh->umesh[i]);
+	// iterate through all of the mesh points
+	for (i = 0; i < cfg->t_points_inc; i++) {
+		mesh = io_lumpgetbase(hunk, MOLTLUMP_MESH) + i;
+		printf("Magic : 0x%x\n", mesh->magic);
+		for (z = 0; z < cfg->z_points_inc; z++) {
+			for (y = 0; y < cfg->y_points_inc; y++) {
+				for (x = 0; x < cfg->x_points_inc; x++) {
+					j = IDX3D(x, y, z, cfg->y_points_inc, cfg->z_points_inc);
+					printf("[%d] umesh[%d,%d,%d,%d] : %6.16lf\n", j, i, x, y, z, mesh->umesh[j]);
+				}
 			}
 		}
 	}

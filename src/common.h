@@ -139,6 +139,7 @@ struct lump_header_t {
 
 struct moltcfg_t {
 	u32 magic;
+	u32 pad;
 	/* free space parms */
 	f64 lightspeed;
 	f64 henrymeter;
@@ -155,8 +156,9 @@ struct moltcfg_t {
 	/* mesh parms */
 	f64 cfl;
 
-	f64 int_scale; // mesh values are normalized into units
-                        // and scaled by mesh_int_scale when desired
+	// simulation values are kept as integers, and are scaled by the
+	// following value
+	f64 int_scale;
 
 	s32 t_start;
 	s32 t_stop;
@@ -194,6 +196,7 @@ struct moltcfg_t {
 
 struct lump_runinfo_t {
 	u32 magic;
+	u32 pad;
 	f64 t_start;
 	f64 t_step;
 	f64 t_stop;
@@ -203,18 +206,19 @@ struct lump_runinfo_t {
 
 struct lump_efield_t {
 	u32 magic;
-	u32 padding;
+	u32 pad;
 	f64 data[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 };
 
 struct lump_pfield_t {
 	u32 magic;
-	u32 padding;
+	u32 pad;
 	f64 data[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 };
 
 struct lump_nu_t {
 	u32 magic;
+	u32 pad;
 	f64 nux[MOLT_X_POINTS];
 	f64 nuy[MOLT_Y_POINTS];
 	f64 nuz[MOLT_Z_POINTS];
@@ -225,6 +229,7 @@ struct lump_nu_t {
 
 struct lump_vweight_t {
 	u32 magic;
+	u32 pad;
 	f64 vrx[MOLT_X_POINTS_INC];
 	f64 vlx[MOLT_X_POINTS_INC];
 	f64 vry[MOLT_Y_POINTS_INC];
@@ -260,5 +265,11 @@ typedef struct lump_nu_t      lnu_t;
 typedef struct lump_vweight_t lvweight_t;
 typedef struct lump_wweight_t lwweight_t;
 typedef struct lump_mesh_t    lmesh_t;
+
+// helper structures
+struct vweight {
+	f64 *read;
+	f64 *write;
+};
 
 #endif
