@@ -240,6 +240,8 @@ struct lump_wweight_t {
 	f64 zr_weight[MOLT_Z_POINTS * (MOLT_SPACEACC + 1)];
 };
 
+// the efield and the pfield are fields for storing more simulation data
+// TODO : get details on this from Causley
 struct lump_efield_t {
 	struct lumpmeta_t meta;
 	f64 data[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];

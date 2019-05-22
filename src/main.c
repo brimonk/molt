@@ -434,11 +434,11 @@ void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 	mesh = io_lumpgetbase(hdr, MOLTLUMP_MESH);
 	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 
+	memset(((char *)hdr) + lump->offset, 0, lump->lumpsize);
+
 	for (i = 0; i < lump->lumpsize / lump->elemsize; i++) {
 		mesh[i].meta.magic = MOLTLUMP_MAGIC;
 	}
-
-	memset(((char *)hdr) + lump->offset, 0, lump->lumpsize);
 
 	// we only want to setup the first (0th) umesh applies function f
 	for (z = 0; z < cfg->z_points_inc; z++) {

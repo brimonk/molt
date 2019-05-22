@@ -208,6 +208,7 @@ void molt_firststep(lmesh_t *dst, lmesh_t *src,
 		vec_add_v(dst->umesh, dst->umesh, workp->swap, totalelem);
 	}
 
+	// u1 = u1 / 2
 	vec_mul_s(dst->umesh, dst->umesh, 1 / 2, totalelem);
 }
 
@@ -508,8 +509,6 @@ gfquad(f64 *out, f64 *in, f64 *d, f64 *wl, f64 *wr,
 	f64 IL, IR;
 	s32 iL, iR, iC, M2, N;
 	s32 i, bound;
-
-	// TODO (brian) remove branching ifs when this function is correct
 
 	IL = 0;
 	IR = 0;
