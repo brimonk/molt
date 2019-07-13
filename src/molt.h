@@ -16,10 +16,10 @@ void molt_free();
 
 /* molt_firststep : specific routines required for the "first" timestep */
 void molt_firststep(lmesh_t *dst, lmesh_t *src,
-				lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
+				struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
 
 /* molt_step : regular timestepping routine */
 void molt_step(lmesh_t *dst, lmesh_t *src,
-		lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
+		struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
 
 #endif

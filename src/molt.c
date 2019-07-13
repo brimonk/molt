@@ -121,11 +121,11 @@ static inline s32 gfquad_bound(s32 idx, s32 orderm, s32 len);
  */
 /* do_c_op : The MOLT C Operator */
 static void do_c_op(
-f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
+f64 *dst, f64 *src, struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
 
 /* do_d_op : The MOLT D Operator */
 static void do_d_op(
-f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
+f64 *dst, f64 *src, struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
 
 static
 void mesh3_swap(f64 *out, f64* in, ivec3_t *dim, cvec3_t from, cvec3_t to);
@@ -137,8 +137,7 @@ static void meshdim_swap(ivec3_t *dim, cvec3_t from, cvec3_t to);
 
 static void mk_genericdim(ivec3_t *out, ivec3_t dim, cvec3_t to);
 
-static
-void matrix_subtract(f64 *out, f64 *ina, f64 *inb, ivec3_t dim);
+static void matrix_subtract(f64 *out, f64 *ina, f64 *inb, ivec3_t dim);
 static f64 minarr(f64 *arr, s32 arrlen);
 static f64 vect_mul(f64 *veca, f64 *vecb, s32 veclen);
 
@@ -165,7 +164,7 @@ void molt_free() { if (workp) free(workp); }
 
 /* molt_firststep : specific routines required for the "first" timestep */
 void molt_firststep(lmesh_t *dst, lmesh_t *src,
-				lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
+				struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 {
 	u64 totalelem;
 
@@ -214,7 +213,7 @@ void molt_firststep(lmesh_t *dst, lmesh_t *src,
 
 /* molt_step : regular timestepping routine */
 void molt_step(lmesh_t *dst, lmesh_t *src,
-		lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
+		struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 {
 	s64 totalelem;
 
@@ -261,7 +260,7 @@ void molt_step(lmesh_t *dst, lmesh_t *src,
 
 /* do_c_op : The MOLT C Operator */
 static void do_c_op(
-f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
+f64 *dst, f64 *src, struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 {
 	s64 totalelem;
 	ivec3_t dim, iterinrow;
@@ -369,7 +368,7 @@ f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 
 /* do_d_op : The MOLT D Operator */
 static void do_d_op(
-f64 *dst, f64 *src, lcfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
+f64 *dst, f64 *src, struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 {
 	s64 totalelem;
 	ivec3_t dim, iterinrow;
@@ -809,3 +808,4 @@ static f64 vect_mul(f64 *veca, f64 *vecb, s32 veclen)
 
 	return val;
 }
+

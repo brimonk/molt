@@ -9,10 +9,6 @@
 
 #define SWAP(x, y, T) do { T SWAP = x; x = y; y = SWAP; } while (0)
 
-void print_err_and_die(char *msg, char *file, int line);
-
-#define PRINT_AND_DIE(x) (print_err_and_die((x), __FILE__, __LINE__))
-
 /* quick and dirty, cleaner typedefs */
 typedef uint8_t  u8;
 typedef uint16_t u16;
@@ -54,6 +50,23 @@ typedef cvec_t cvec4_t[4];
 typedef cvec_t cvec5_t[5];
 typedef cvec_t cvec6_t[6];
 
+#define BUFSMALL 32
+#define BUFLARGE 128
+
+void print_err_and_die(char *msg, char *file, int line);
+#define PRINT_AND_DIE(x) (print_err_and_die((x), __FILE__, __LINE__))
+
+// logging, provide a pointer to some f64 data, the dimensionality of the data,
+// and a short message, and it'll be logged to stdout
+s32 hunklog_1(char *file, int line, char *msg, ivec_t dim, f64 *p);
+s32 hunklog_2(char *file, int line, char *msg, ivec2_t dim, f64 *p);
+s32 hunklog_3(char *file, int line, char *msg, ivec3_t dim, f64 *p);
+
+#define LOG1D(p, d, m) hunklog_1(__FILE__, __LINE__, (m), (d), (p))
+#define LOG2D(p, d, m) hunklog_2(__FILE__, __LINE__, (m), (d), (p))
+#define LOG3D(p, d, m) hunklog_3(__FILE__, __LINE__, (m), (d), (p))
+#define LOG_NEWLINESEP 1
+#define LOG_FLOATFMT "% 4.6e"
 
 /* 
  * we can actually define inline vector operations
@@ -98,9 +111,7 @@ typedef cvec_t cvec6_t[6];
 #define VectorClear(a) ((a)[0]=0,(a)[1]=0,(a)[2]=0)
 #define VectorPrint(a) (printf("%lf, %lf, %lf\n", (a)[0], (a)[1], (a)[2]))
 
-/*
- * define simulation information
- */
+/* simulation information */
 
 /* include the configuration header for config values */
 #include "config.h"
@@ -110,7 +121,9 @@ typedef cvec_t cvec6_t[6];
 #define MOLTCURRVERSION 1
 
 enum { /* type values */
-	MOLTLUMP_TYPEBIO = 1 /* biological */
+	MOLTLUMP_TYPENULL,
+	MOLTLUMP_TYPEBIO,   // bio
+	MOLTLUMP_TYPETOTAL
 };
 
 enum {
@@ -144,7 +157,7 @@ struct lump_header_t {
 	struct lump_t lump[MOLTLUMP_TOTAL];
 };
 
-struct moltcfg_t {
+struct cfg_t {
 	struct lumpmeta_t meta;
 
 	/* free space parms */
@@ -199,6 +212,44 @@ struct moltcfg_t {
 	f64 beta_fo; // b^4 term in molt
 	f64 beta_si; // b^6 term in molt
 	f64 alpha;
+
+	/* 
+	 * store some dimensionality for easier use
+	 * NOTE (brian)
+	 *
+	 * these dimensions are supposed to be used for the ease of printf
+	 * debugging and implementation
+	 */
+
+	// lump_nu_t dimensions
+	ivec_t nux_dim;
+	ivec_t nuy_dim;
+	ivec_t nuz_dim;
+	ivec_t dnux_dim;
+	ivec_t dnuy_dim;
+	ivec_t dnuz_dim;
+
+	// lump_vweight_t dimensions
+	ivec_t vlx_dim;
+	ivec_t vrx_dim;
+	ivec_t vly_dim;
+	ivec_t vry_dim;
+	ivec_t vlz_dim;
+	ivec_t vrz_dim;
+
+	// lump_wweight_t dimensions
+	ivec2_t xl_weight_dim;
+	ivec2_t xr_weight_dim;
+	ivec2_t yl_weight_dim;
+	ivec2_t yr_weight_dim;
+	ivec2_t zl_weight_dim;
+	ivec2_t zr_weight_dim;
+
+	// the large hunk dimensionality
+	ivec3_t efield_data_dim;
+	ivec3_t pfield_data_dim;
+	ivec3_t umesh_dim;
+	ivec3_t vmesh_dim;
 };
 
 struct lump_runinfo_t {
@@ -222,12 +273,12 @@ struct lump_nu_t {
 
 struct lump_vweight_t {
 	struct lumpmeta_t meta;
-	f64 vrx[MOLT_X_POINTS_INC];
 	f64 vlx[MOLT_X_POINTS_INC];
-	f64 vry[MOLT_Y_POINTS_INC];
+	f64 vrx[MOLT_X_POINTS_INC];
 	f64 vly[MOLT_Y_POINTS_INC];
-	f64 vrz[MOLT_Z_POINTS_INC];
+	f64 vry[MOLT_Y_POINTS_INC];
 	f64 vlz[MOLT_Z_POINTS_INC];
+	f64 vrz[MOLT_Z_POINTS_INC];
 };
 
 struct lump_wweight_t {
@@ -241,7 +292,7 @@ struct lump_wweight_t {
 };
 
 // the efield and the pfield are fields for storing more simulation data
-// TODO : get details on this from Causley
+// TODO : get details on this from Causley, we currently don't use this
 struct lump_efield_t {
 	struct lumpmeta_t meta;
 	f64 data[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
@@ -259,7 +310,6 @@ struct lump_mesh_t { // problem state (the thing we simulate)
 };
 
 /* typedefs for all of the structures */
-typedef struct moltcfg_t      lcfg_t;
 typedef struct lump_runinfo_t lrun_t;
 typedef struct lump_efield_t  lefield_t;
 typedef struct lump_pfield_t  lpfield_t;
@@ -275,3 +325,4 @@ struct vweight {
 };
 
 #endif
+
