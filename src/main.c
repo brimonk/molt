@@ -79,15 +79,6 @@ void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state);
 
 void do_simulation(void *hunk, u64 hunksize);
 
-void timestep_first(struct cfg_t *cfg, lrun_t *run, lnu_t *nu, lvweight_t *vw,
-					lwweight_t *ww, lmesh_t *mesh);
-void timestep(
-		struct cfg_t *cfg, lrun_t *run, lnu_t *nu, lvweight_t *vw,
-		lwweight_t *ww, lmesh_t *mesh);
-
-void applied_funcf(void *base);
-void applied_funcg(void *base);
-
 void setupstate_print(void *hunk);
 s32 lump_magiccheck(void *hunk);
 
@@ -195,9 +186,7 @@ u64 setup_lumps(void *base)
 	struct lump_header_t *hdr;
 	u64 curr_offset;
 
-	/*
-	 * begin the setup by setting up our lump header and our lump directory
-	 */
+	/* begin the setup by setting up our lump header and our lump directory */
 
 	hdr = base;
 	curr_offset = sizeof(struct lump_header_t);
@@ -272,6 +261,7 @@ void setuplump_cfg(struct cfg_t *cfg)
 	cfg->lightspeed = MOLT_LIGHTSPEED;
 	cfg->henrymeter = MOLT_HENRYPERMETER;
 	cfg->faradmeter = MOLT_FARADSPERMETER;
+
 	/* tissue space parms */
 	cfg->staticperm = MOLT_STATICPERM;
 	cfg->infiniteperm = MOLT_INFPERM;
@@ -279,6 +269,7 @@ void setuplump_cfg(struct cfg_t *cfg)
 	cfg->distribtail = MOLT_DISTRIBTAIL;
 	cfg->distribasym = MOLT_DISTRIBASYM;
 	cfg->tissuespeed = MOLT_TISSUESPEED;
+
 	/* mesh parms */
 	cfg->cfl = MOLT_CFL;
 
@@ -347,18 +338,12 @@ void setuplump_cfg(struct cfg_t *cfg)
 	cfg->vrz_dim = MOLT_Z_POINTS_INC;
 
 	// wweight
-	cfg->xl_weight_dim[0] = MOLT_X_POINTS;
-		cfg->xl_weight_dim[1] = MOLT_SPACEACC + 1;
-	cfg->xr_weight_dim[0] = MOLT_X_POINTS;
-		cfg->xr_weight_dim[1] = MOLT_SPACEACC + 1;
-	cfg->yl_weight_dim[0] = MOLT_Y_POINTS;
-		cfg->yl_weight_dim[1] = MOLT_SPACEACC + 1;
-	cfg->yr_weight_dim[0] = MOLT_Y_POINTS;
-		cfg->yr_weight_dim[1] = MOLT_SPACEACC + 1;
-	cfg->zl_weight_dim[0] = MOLT_Z_POINTS;
-		cfg->zl_weight_dim[1] = MOLT_SPACEACC + 1;
-	cfg->zr_weight_dim[0] = MOLT_Z_POINTS;
-		cfg->zr_weight_dim[1] = MOLT_SPACEACC + 1;
+	cfg->xl_weight_dim[0] = MOLT_X_POINTS; cfg->xl_weight_dim[1] = MOLT_SPACEACC + 1;
+	cfg->xr_weight_dim[0] = MOLT_X_POINTS; cfg->xr_weight_dim[1] = MOLT_SPACEACC + 1;
+	cfg->yl_weight_dim[0] = MOLT_Y_POINTS; cfg->yl_weight_dim[1] = MOLT_SPACEACC + 1;
+	cfg->yr_weight_dim[0] = MOLT_Y_POINTS; cfg->yr_weight_dim[1] = MOLT_SPACEACC + 1;
+	cfg->zl_weight_dim[0] = MOLT_Z_POINTS; cfg->zl_weight_dim[1] = MOLT_SPACEACC + 1;
+	cfg->zr_weight_dim[0] = MOLT_Z_POINTS; cfg->zr_weight_dim[1] = MOLT_SPACEACC + 1;
 
 	// mesh (umesh and vmesh)
 	cfg->umesh_dim[0] = MOLT_X_POINTS_INC;
@@ -387,7 +372,6 @@ void setuplump_run(struct lump_runinfo_t *run)
 /* setuplump_efield : setup the efield lump */
 void setuplump_efield(struct lump_header_t *hdr, struct lump_efield_t *efield)
 {
-	// write zeroes to the efield
 	struct lump_t *lump;
 	s32 i;
 
@@ -628,8 +612,7 @@ s32 lump_magiccheck(void *hunk)
 		if (simplemagic[i] != MOLTLUMP_MAGIC) {
 			snprintf(hex1, sizeof(hex1), "0x%04x", simplemagic[i]);
 			snprintf(hex2, sizeof(hex2), "0x%04x", MOLTLUMP_MAGIC);
-			fprintf(stderr, "LUMP %d HAS MAGIC %s, should be %s\n",
-					i, hex1, hex2);
+			fprintf(stderr, "LUMP %d HAS MAGIC %s, should be %s\n", i, hex1, hex2);
 			rc += 1;
 		}
 	}
@@ -643,8 +626,7 @@ s32 lump_magiccheck(void *hunk)
 		if ((efield + i)->meta.magic != MOLTLUMP_MAGIC) {
 			snprintf(hex1, sizeof(hex1), "0x%04x", (efield + i)->meta.magic);
 			snprintf(hex2, sizeof(hex2), "0x%04x", MOLTLUMP_MAGIC);
-			fprintf(stderr, "EFIELD %d HAS MAGIC %s, should be %s\n",
-					i, hex1, hex2);
+			fprintf(stderr, "EFIELD %d HAS MAGIC %s, should be %s\n", i, hex1, hex2);
 			rc += 1;
 		}
 	}
@@ -654,8 +636,7 @@ s32 lump_magiccheck(void *hunk)
 		if ((pfield + i)->meta.magic != MOLTLUMP_MAGIC) {
 			snprintf(hex1, sizeof(hex1), "0x%04x", (pfield + i)->meta.magic);
 			snprintf(hex2, sizeof(hex2), "0x%04x", MOLTLUMP_MAGIC);
-			fprintf(stderr, "PFIELD %d HAS MAGIC %s, should be %s\n",
-					i, hex1, hex2);
+			fprintf(stderr, "PFIELD %d HAS MAGIC %s, should be %s\n", i, hex1, hex2);
 			rc += 1;
 		}
 	}
@@ -665,8 +646,7 @@ s32 lump_magiccheck(void *hunk)
 		if ((mesh + i)->meta.magic != MOLTLUMP_MAGIC) {
 			snprintf(hex1, sizeof(hex1), "0x%04x", (mesh + i)->meta.magic);
 			snprintf(hex2, sizeof(hex2), "0x%04x", MOLTLUMP_MAGIC);
-			fprintf(stderr, "MESH %d HAS MAGIC %s, should be %s\n",
-					i, hex1, hex2);
+			fprintf(stderr, "MESH %d HAS MAGIC %s, should be %s\n", i, hex1, hex2);
 			rc += 1;
 		}
 	}

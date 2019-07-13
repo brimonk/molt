@@ -142,7 +142,6 @@ s32 hunklog_3(char *file, int line, char *msg, ivec3_t dim, f64 *p)
 	printf("\n");
 #endif
 
-
 	return lines;
 }
 
