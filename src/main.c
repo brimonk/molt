@@ -563,51 +563,35 @@ void setupstate_print(void *hunk)
 
 	// dump out all of the nu segments
 	nu = io_lumpgetbase(hunk, MOLTLUMP_NU);
-	LOG1D(nu->nux, cfg->nux_dim, "NU - X");
-	LOG1D(nu->nuy, cfg->nuy_dim, "NU - Y");
-	LOG1D(nu->nuz, cfg->nuz_dim, "NU - Z");
-	LOG1D(nu->dnux, cfg->dnux_dim, "DNU - X");
-	LOG1D(nu->dnuy, cfg->dnuy_dim, "DNU - Y");
-	LOG1D(nu->dnuz, cfg->dnuz_dim, "DNU - Z");
+	LOG1D(nu->nux, cfg->nux_dim, "NU-X");
+	LOG1D(nu->nuy, cfg->nuy_dim, "NU-Y");
+	LOG1D(nu->nuz, cfg->nuz_dim, "NU-Z");
+	LOG1D(nu->dnux, cfg->dnux_dim, "DNU-X");
+	LOG1D(nu->dnuy, cfg->dnuy_dim, "DNU-Y");
+	LOG1D(nu->dnuz, cfg->dnuz_dim, "DNU-Z");
 
 	// log all of the vweights
 	vw = io_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
-	LOG1D(vw->vlx, cfg->vlx_dim, "VWEIGHT - VLX");
-	LOG1D(vw->vrx, cfg->vrx_dim, "VWEIGHT - VRX");
-	LOG1D(vw->vly, cfg->vly_dim, "VWEIGHT - VLY");
-	LOG1D(vw->vry, cfg->vry_dim, "VWEIGHT - VRY");
-	LOG1D(vw->vlz, cfg->vlz_dim, "VWEIGHT - VLZ");
-	LOG1D(vw->vrz, cfg->vrz_dim, "VWEIGHT - VRZ");
+	LOG1D(vw->vlx, cfg->vlx_dim, "VWEIGHT-VLX");
+	LOG1D(vw->vrx, cfg->vrx_dim, "VWEIGHT-VRX");
+	LOG1D(vw->vly, cfg->vly_dim, "VWEIGHT-VLY");
+	LOG1D(vw->vry, cfg->vry_dim, "VWEIGHT-VRY");
+	LOG1D(vw->vlz, cfg->vlz_dim, "VWEIGHT-VLZ");
+	LOG1D(vw->vrz, cfg->vrz_dim, "VWEIGHT-VRZ");
 
 	// log all of the wweights
 	ww = io_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
-	LOG2D(ww->xl_weight, cfg->xl_weight_dim, "WWEIGHT - XL");
-	LOG2D(ww->xr_weight, cfg->xr_weight_dim, "WWEIGHT - XR");
-	LOG2D(ww->yl_weight, cfg->yl_weight_dim, "WWEIGHT - YL");
-	LOG2D(ww->yr_weight, cfg->yr_weight_dim, "WWEIGHT - YR");
-	LOG2D(ww->zl_weight, cfg->zl_weight_dim, "WWEIGHT - ZL");
-	LOG2D(ww->zr_weight, cfg->zr_weight_dim, "WWEIGHT - ZR");
+	LOG2D(ww->xl_weight, cfg->xl_weight_dim, "WWEIGHT-XL");
+	LOG2D(ww->xr_weight, cfg->xr_weight_dim, "WWEIGHT-XR");
+	LOG2D(ww->yl_weight, cfg->yl_weight_dim, "WWEIGHT-YL");
+	LOG2D(ww->yr_weight, cfg->yr_weight_dim, "WWEIGHT-YR");
+	LOG2D(ww->zl_weight, cfg->zl_weight_dim, "WWEIGHT-ZL");
+	LOG2D(ww->zr_weight, cfg->zr_weight_dim, "WWEIGHT-ZR");
 
 	// log out the mesh
 	mesh = io_lumpgetbase(hunk, MOLTLUMP_MESH);
 	LOG3D(mesh->umesh, cfg->umesh_dim, "UMESH[0]");
 	LOG3D(mesh->vmesh, cfg->vmesh_dim, "VMESH[0]");
-
-#if 0 // DATADUMP
-	// iterate through all of the mesh points (IT'S A LOT)
-	for (i = 0; i < cfg->t_points_inc; i++) {
-		mesh = io_lumpgetbase(hunk, MOLTLUMP_MESH) + i;
-		printf("Magic : 0x%x\n", mesh->magic);
-		for (z = 0; z < cfg->z_points_inc; z++) {
-			for (y = 0; y < cfg->y_points_inc; y++) {
-				for (x = 0; x < cfg->x_points_inc; x++) {
-					j = IDX3D(x, y, z, cfg->y_points_inc, cfg->z_points_inc);
-					printf("[%d] umesh[%d,%d,%d,%d] : %6.16lf\n", j, i, x, y, z, mesh->umesh[j]);
-				}
-			}
-		}
-	}
-#endif
 }
 
 /* lump_magiccheck : checks all lumps for the magic number, asserts if wrong */

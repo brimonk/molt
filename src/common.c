@@ -41,7 +41,7 @@ s32 hunklog_1(char *file, int line, char *msg, ivec_t dim, f64 *p)
 	// (%xd) : %lf\n
 	snprintf(fmt, sizeof fmt, "%d", dim);
 	tmp = strlen(fmt);
-	snprintf(fmt, sizeof fmt, "(%%%dd) : %s\n", tmp, LOG_FLOATFMT);
+	snprintf(fmt, sizeof fmt, "%s(%%%dd) : %s\n", msg, tmp, LOG_FLOATFMT);
 
 	// print a preamble to stdout
 	printf("%s:%d %s\n", file, line, msg);
@@ -80,7 +80,7 @@ s32 hunklog_2(char *file, int line, char *msg, ivec2_t dim, f64 *p)
 	// (%xd, %yd) : %lf\n
 	snprintf(fmt, sizeof fmt, "%d", tmp);
 	tmp = strlen(fmt);
-	snprintf(fmt, sizeof fmt, "(%%%dd,%%%dd) : %s\n", tmp, tmp, LOG_FLOATFMT);
+	snprintf(fmt, sizeof fmt, "%s(%%%dd,%%%dd) : %s\n", msg, tmp, tmp, LOG_FLOATFMT);
 
 	// print a preamble to stdout
 	printf("%s:%d %s\n", file, line, msg);
@@ -122,7 +122,8 @@ s32 hunklog_3(char *file, int line, char *msg, ivec3_t dim, f64 *p)
 	// (%xd, %yd) : %lf\n
 	snprintf(fmt, sizeof fmt, "%d", tmp);
 	tmp = strlen(fmt);
-	snprintf(fmt, sizeof fmt, "(%%%dd,%%%dd,%%%dd) : %s\n", tmp, tmp, tmp, LOG_FLOATFMT);
+	snprintf(fmt, sizeof fmt, "%s(%%%dd,%%%dd,%%%dd) : %s\n",
+			msg, tmp, tmp, tmp, LOG_FLOATFMT);
 
 	// print a preamble to stdout
 	printf("%s:%d %s\n", file, line, msg);
