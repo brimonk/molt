@@ -2,9 +2,7 @@
  * Brian Chrzanowski
  * Sat Apr 06, 2019 22:21
  *
- * CPU Implementation of MOLT's Timestepping Features
- *
- * NOTE:
+ * CPU Implementation of the Method Of Lines Transpose
  *
  * It is consistently assumed that the dimensionality of multi-dimensional
  * arrays when the data comes in is row ordered by X, then Y, then Z. This means
@@ -37,7 +35,7 @@
  *
  *   if (workp) { io_munmap(workp); }
  *
- * If you do this, you also probably want to create a dictionary of
+ * If you do this, you also probably want to create a lookup table of
  * file descriptors, names, and their mapped sizes. Currently, the IO routines
  * somewhat assume there's only one disk allocation.
  *
@@ -115,17 +113,11 @@ static cvec3_t swap_z_y_x = {'z', 'y', 'x'};
 // TODO move this
 static inline s32 gfquad_bound(s32 idx, s32 orderm, s32 len);
 
-/*
- * both of the C and D operators as noted from above. they serve as the
- * bread and butter for molt's exponential recursive properties
- */
 /* do_c_op : The MOLT C Operator */
-static void do_c_op(
-f64 *dst, f64 *src, struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
+static void do_c_op(f64 *dst, f64 *src, struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
 
 /* do_d_op : The MOLT D Operator */
-static void do_d_op(
-f64 *dst, f64 *src, struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
+static void do_d_op(f64 *dst, f64 *src, struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
 
 static
 void mesh3_swap(f64 *out, f64* in, ivec3_t *dim, cvec3_t from, cvec3_t to);
@@ -163,8 +155,7 @@ void *molt_init() { workp = malloc(sizeof(struct work_t)); return workp; }
 void molt_free() { if (workp) free(workp); }
 
 /* molt_firststep : specific routines required for the "first" timestep */
-void molt_firststep(lmesh_t *dst, lmesh_t *src,
-				struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
+void molt_firststep(lmesh_t *dst, lmesh_t *src, struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww)
 {
 	u64 totalelem;
 
@@ -182,30 +173,30 @@ void molt_firststep(lmesh_t *dst, lmesh_t *src,
 	vec_mul_s(workp->swap, workp->d1, cfg->beta_sq, totalelem);
 	vec_add_v(dst->umesh, workp->swap, dst->umesh, totalelem);
 
-	if (cfg->time_acc >= 2) {
-		do_d_op(workp->d2, workp->d1, cfg, nu, vw, ww);
-		do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
+	// macros for less compiled operations
+#if MOLT_TIMEACC >= 2
+	do_d_op(workp->d2, workp->d1, cfg, nu, vw, ww);
+	do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
 
-		// u1 = u1 - beta ^ 2 * d2 + beta ^ 4 / 12 * d1
-		vec_mul_s(workp->swap, workp->d2, cfg->beta_sq, totalelem);
-		vec_mul_s(workp->temp, workp->d1, cfg->beta_fo, totalelem);
-		vec_add_v(workp->swap, workp->swap, workp->temp, totalelem);
-		vec_sub_v(dst->umesh, dst->umesh, workp->swap, totalelem);
-	}
+	// u1 = u1 - beta ^ 2 * d2 + beta ^ 4 / 12 * d1
+	vec_mul_s(workp->swap, workp->d2, cfg->beta_sq, totalelem);
+	vec_mul_s(workp->temp, workp->d1, cfg->beta_fo, totalelem);
+	vec_add_v(workp->swap, workp->swap, workp->temp, totalelem);
+	vec_sub_v(dst->umesh, dst->umesh, workp->swap, totalelem);
 
-	if (cfg->time_acc >= 3) {
-		do_d_op(workp->d3, workp->d2, cfg, nu, vw, ww);
-		do_d_op(workp->d2, workp->d1, cfg, nu, vw, ww);
-		do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
+#elif MOLT_TIMEACC >= 3
+	do_d_op(workp->d3, workp->d2, cfg, nu, vw, ww);
+	do_d_op(workp->d2, workp->d1, cfg, nu, vw, ww);
+	do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
 
-		// u1 = u1 + (beta^2 * d3 - 2 * beta^4/12 * d2 + beta^6/360 * d1)
-		vec_mul_s(workp->swap, workp->d3, cfg->beta_sq, totalelem);
-		vec_mul_s(workp->temp, workp->d2, cfg->beta_fo, totalelem);
-		vec_sub_v(workp->swap, workp->swap, workp->temp, totalelem);
-		vec_mul_s(workp->temp, workp->d1, cfg->beta_si, totalelem);
-		vec_add_v(workp->swap, workp->swap, workp->temp, totalelem);
-		vec_add_v(dst->umesh, dst->umesh, workp->swap, totalelem);
-	}
+	// u1 = u1 + (beta^2 * d3 - 2 * beta^4/12 * d2 + beta^6/360 * d1)
+	vec_mul_s(workp->swap, workp->d3, cfg->beta_sq, totalelem);
+	vec_mul_s(workp->temp, workp->d2, cfg->beta_fo, totalelem);
+	vec_sub_v(workp->swap, workp->swap, workp->temp, totalelem);
+	vec_mul_s(workp->temp, workp->d1, cfg->beta_si, totalelem);
+	vec_add_v(workp->swap, workp->swap, workp->temp, totalelem);
+	vec_add_v(dst->umesh, dst->umesh, workp->swap, totalelem);
+#endif
 
 	// u1 = u1 / 2
 	vec_mul_s(dst->umesh, dst->umesh, 1 / 2, totalelem);
@@ -227,30 +218,28 @@ void molt_step(lmesh_t *dst, lmesh_t *src,
 	vec_mul_s(workp->swap, workp->d1, cfg->beta_sq, totalelem);
 	vec_add_v(dst->umesh, dst->umesh, workp->swap, totalelem);
 
-	if (cfg->time_acc >= 2) {
-		do_d_op(workp->d2, workp->d1, cfg, nu, vw, ww);
-		do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
+#if MOLT_TIMEACC >= 2
+	do_d_op(workp->d2, workp->d1, cfg, nu, vw, ww);
+	do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
 
-		// u = u - beta^2 * d2 + beta^4/12 * d1
-		vec_mul_s(workp->swap, workp->d2, cfg->beta_sq, totalelem);
-		vec_mul_s(workp->temp, workp->d1, cfg->beta_fo, totalelem);
-		vec_add_v(workp->swap, workp->swap, workp->temp, totalelem);
-		vec_sub_v(dst->umesh, dst->umesh, workp->swap, totalelem);
-	}
+	// u = u - beta^2 * d2 + beta^4/12 * d1
+	vec_mul_s(workp->swap, workp->d2, cfg->beta_sq, totalelem);
+	vec_mul_s(workp->temp, workp->d1, cfg->beta_fo, totalelem);
+	vec_add_v(workp->swap, workp->swap, workp->temp, totalelem);
+	vec_sub_v(dst->umesh, dst->umesh, workp->swap, totalelem);
+#elif MOLT_TIMEACC >= 3
+	do_d_op(workp->d3, workp->d2, cfg, nu, vw, ww);
+	do_d_op(workp->d2, workp->d1, cfg, nu, vw, ww);
+	do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
 
-	if (cfg->time_acc >= 3) {
-		do_d_op(workp->d3, workp->d2, cfg, nu, vw, ww);
-		do_d_op(workp->d2, workp->d1, cfg, nu, vw, ww);
-		do_d_op(workp->d1, workp->d1, cfg, nu, vw, ww);
-
-		// u1 = u1 + (beta^2 * d3 - 2 * beta^4/12 * d2 + beta^6/360 * d1)
-		vec_mul_s(workp->swap, workp->d3, cfg->beta_sq, totalelem);
-		vec_mul_s(workp->temp, workp->d2, cfg->beta_fo, totalelem);
-		vec_sub_v(workp->swap, workp->swap, workp->temp, totalelem);
-		vec_mul_s(workp->temp, workp->d1, cfg->beta_si, totalelem);
-		vec_add_v(workp->swap, workp->swap, workp->temp, totalelem);
-		vec_add_v(dst->umesh, dst->umesh, workp->swap, totalelem);
-	}
+	// u1 = u1 + (beta^2 * d3 - 2 * beta^4/12 * d2 + beta^6/360 * d1)
+	vec_mul_s(workp->swap, workp->d3, cfg->beta_sq, totalelem);
+	vec_mul_s(workp->temp, workp->d2, cfg->beta_fo, totalelem);
+	vec_sub_v(workp->swap, workp->swap, workp->temp, totalelem);
+	vec_mul_s(workp->temp, workp->d1, cfg->beta_si, totalelem);
+	vec_add_v(workp->swap, workp->swap, workp->temp, totalelem);
+	vec_add_v(dst->umesh, dst->umesh, workp->swap, totalelem);
+#endif
 
 	// u = u + 2 * u1 - u0 (u0 is our vmesh from src)
 	vec_mul_s(workp->swap, src->umesh, 2, totalelem);
@@ -484,6 +473,7 @@ do_sweep
 	f64 wa, wb;
 	s32 i;
 
+	// TODO (brian) do these values need to be anything special
 	wa = 0;
 	wb = 0;
 
@@ -655,7 +645,7 @@ void mesh3_swap(f64 *out, f64* in, ivec3_t *dim, cvec3_t from, cvec3_t to)
 	 *
 	 * TL;DR, I really hated writing this function. I think it should be better.
 	 *
-	 * WARNING : this WILL fail if the input and output are the same
+	 * WARNING : this WILL fail if the input and output pointers are the same
 	 */
 
 	u64 from_idx, to_idx;

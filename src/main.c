@@ -15,25 +15,6 @@
  *
  * TODO (Brian)
  *
- * Better Debugging Output (printf)
- *   We need better debugging output. lump_magiccheck isn't really quite good
- *   enough, as we probably actually want some reasonable way to get the output
- *   from Matlab and compare it with the output here.
- *
- *   I think the most reasonable thing to do is probably have a function
- *   that looks like
- *
- *   log_item(char *file, int line, char *name, struct dim3 dim, double *ptr);
- *
- *   Where log_item would output all of the contents of ptr with the
- *   dimensionality as described in the given dim3.
- *
- *   We'd also need to macro it for easier use:
- *
- *	 LOGITEM(x, y, z) ((__FILE__), (__LINE__), (x), (y), (z))
- *
- *   This is probably going to need to be called from within molt.c
- *
  * Cleaner Calling for X, Y, and Z operators
  *
  * Get Information on EField and PField simulation from Causley
@@ -42,8 +23,7 @@
  * Store Dimensionality in cfg structure
  *   Would be stored as an ivec{1,2,3}_t where necessary
  *
- * WISHLIST:
- * 1. Remapping Procedure should be rethought out (setup_simulation)
+ * WISHLIST
  */
 
 #include <stdio.h>
@@ -68,7 +48,7 @@
 /* lump setup functions */
 void setup_simulation(void **base, u64 *size, int fd);
 u64 setup_lumps(void *base);
-void setuplump_cfg(struct cfg_t *cfg);
+void setuplump_cfg(struct lump_header_t *hdr, struct cfg_t *cfg);
 void setuplump_run(struct lump_runinfo_t *run);
 void setuplump_efield(struct lump_header_t *hdr, struct lump_efield_t *efield);
 void setuplump_pfield(struct lump_header_t *hdr, struct lump_pfield_t *pfield);
@@ -100,6 +80,10 @@ int main(int argc, char **argv)
 	io_masync(hunk, hunk, hunksize);
 
 	do_simulation(hunk, hunksize);
+
+	// check our lump magic values after we perform our simulation,
+	// to ensure we don't overwrite blocks
+	lump_magiccheck(hunk);
 
 	/* sync the file, then clean up */
 	io_mssync(hunk, hunk, hunksize);
@@ -163,14 +147,15 @@ void setup_simulation(void **base, u64 *size, int fd)
 
 	/* remmap it to the correct size */
 	if ((newblk = io_mremap(*base, oldsize, *size)) == ((void *)-1)) {
-		fprintf(stderr, "Couldn't remap the file!\n");
+		fprintf(stderr, "ERR: Couldn't remap the file to the correct size!\n");
+		exit(1);
 	} else {
 		*base = newblk;
 	}
 
 	printf("file size %ld\n", *size);
 
-	setuplump_cfg(io_lumpgetbase(*base, MOLTLUMP_CONFIG));
+	setuplump_cfg(*base, io_lumpgetbase(*base, MOLTLUMP_CONFIG));
 	setuplump_run(io_lumpgetbase(*base, MOLTLUMP_RUNINFO));
 	setuplump_efield(*base, io_lumpgetbase(*base, MOLTLUMP_EFIELD));
 	setuplump_pfield(*base, io_lumpgetbase(*base, MOLTLUMP_PFIELD));
@@ -251,7 +236,7 @@ u64 setup_lumps(void *base)
 }
 
 /* simsetup_cfg : setup the config lump */
-void setuplump_cfg(struct cfg_t *cfg)
+void setuplump_cfg(struct lump_header_t *hdr, struct cfg_t *cfg)
 {
 	memset(cfg, 0, sizeof *cfg);
 
@@ -310,6 +295,7 @@ void setuplump_cfg(struct cfg_t *cfg)
 	cfg->alpha = MOLT_ALPHA;
 
 	/* dimensionality setup */
+	cfg->base_hunk = hdr;
 
 	// nu and dnu
 	cfg->nux_dim  = MOLT_X_POINTS;
@@ -527,7 +513,7 @@ void setupstate_print(void *hunk)
 	struct lump_vweight_t *vw;
 	struct lump_wweight_t *ww;
 	struct lump_mesh_t *mesh;
-	s32 i, x, y, z, j;
+	s32 i;
 
 	hdr = hunk;
 
@@ -594,9 +580,8 @@ s32 lump_magiccheck(void *hunk)
 	struct lump_pfield_t *pfield;
 	struct lump_mesh_t *mesh;
 
-	s32 simplemagic[5], meshmagic[MOLT_T_POINTS_INC];
+	s32 simplemagic[5];
 	s32 i, rc;
-	char hex1[16], hex2[16];
 
 	rc = 0;
 
@@ -610,9 +595,8 @@ s32 lump_magiccheck(void *hunk)
 	// spin through and check them all
 	for (i = 0; i < 5; i++) {
 		if (simplemagic[i] != MOLTLUMP_MAGIC) {
-			snprintf(hex1, sizeof(hex1), "0x%04x", simplemagic[i]);
-			snprintf(hex2, sizeof(hex2), "0x%04x", MOLTLUMP_MAGIC);
-			fprintf(stderr, "LUMP %d HAS MAGIC %s, should be %s\n", i, hex1, hex2);
+			fprintf(stderr, "LUMP %d HAS MAGIC %#08X, should be %#08X\n",
+					i, simplemagic[i], MOLTLUMP_MAGIC);
 			rc += 1;
 		}
 	}
@@ -624,9 +608,8 @@ s32 lump_magiccheck(void *hunk)
 	// spin through the efield
 	for (i = 0; i < MOLT_T_POINTS; i++) {
 		if ((efield + i)->meta.magic != MOLTLUMP_MAGIC) {
-			snprintf(hex1, sizeof(hex1), "0x%04x", (efield + i)->meta.magic);
-			snprintf(hex2, sizeof(hex2), "0x%04x", MOLTLUMP_MAGIC);
-			fprintf(stderr, "EFIELD %d HAS MAGIC %s, should be %s\n", i, hex1, hex2);
+			fprintf(stderr, "EFIELD %d HAS MAGIC %#08X, should be %#08X\n",
+					i, (efield + i)->meta.magic, MOLTLUMP_MAGIC);
 			rc += 1;
 		}
 	}
@@ -634,9 +617,8 @@ s32 lump_magiccheck(void *hunk)
 	// spin through the pfield
 	for (i = 0; i < MOLT_T_POINTS; i++) {
 		if ((pfield + i)->meta.magic != MOLTLUMP_MAGIC) {
-			snprintf(hex1, sizeof(hex1), "0x%04x", (pfield + i)->meta.magic);
-			snprintf(hex2, sizeof(hex2), "0x%04x", MOLTLUMP_MAGIC);
-			fprintf(stderr, "PFIELD %d HAS MAGIC %s, should be %s\n", i, hex1, hex2);
+			fprintf(stderr, "PFIELD %d HAS MAGIC %#08X, should be %#08X\n",
+					i, (pfield + i)->meta.magic, MOLTLUMP_MAGIC);
 			rc += 1;
 		}
 	}
@@ -644,9 +626,8 @@ s32 lump_magiccheck(void *hunk)
 	// spin through all of the mesh lumps
 	for (i = 0; i < MOLT_T_POINTS_INC; i++) {
 		if ((mesh + i)->meta.magic != MOLTLUMP_MAGIC) {
-			snprintf(hex1, sizeof(hex1), "0x%04x", (mesh + i)->meta.magic);
-			snprintf(hex2, sizeof(hex2), "0x%04x", MOLTLUMP_MAGIC);
-			fprintf(stderr, "MESH %d HAS MAGIC %s, should be %s\n", i, hex1, hex2);
+			fprintf(stderr, "MESH %d HAS MAGIC %#08X, should be %#08X\n",
+					i, (mesh + i)->meta.magic, MOLTLUMP_MAGIC);
 			rc += 1;
 		}
 	}

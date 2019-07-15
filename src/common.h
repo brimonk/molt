@@ -129,6 +129,7 @@ enum { /* type values */
 enum {
 	MOLTLUMP_CONFIG,
 	MOLTLUMP_RUNINFO,
+	MOLTLUMP_HANDLES,
 	MOLTLUMP_NU,
 	MOLTLUMP_VWEIGHT,
 	MOLTLUMP_WWEIGHT,
@@ -221,6 +222,9 @@ struct cfg_t {
 	 * debugging and implementation
 	 */
 
+	// void * for the base hunk pointer
+	void *base_hunk;
+
 	// lump_nu_t dimensions
 	ivec_t nux_dim;
 	ivec_t nuy_dim;
@@ -307,6 +311,17 @@ struct lump_mesh_t { // problem state (the thing we simulate)
 	struct lumpmeta_t meta;
 	f64 umesh[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
 	f64 vmesh[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
+};
+
+struct lump_handles_t {
+	struct lump_runinfo_t *run;
+	struct cfg_t *cfg;
+	struct lump_efield_t *efield;
+	struct lump_pfield_t *pfield;
+	struct lump_nu_t *nu;
+	struct lump_vweight_t *vweight;
+	struct lump_wweight_t *wweight;
+	struct lump_mesh_t *mesh;
 };
 
 /* typedefs for all of the structures */
