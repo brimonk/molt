@@ -517,6 +517,8 @@ void setupstate_print(void *hunk)
 	// log out the mesh
 	mesh = io_lumpgetbase(hunk, MOLTLUMP_MESH);
 	LOG3D(mesh->umesh, cfg->umesh_dim, "UMESH[0]");
+	// LOG3DORD(mesh->umesh, cfg->umesh_dim, "UMESH[0]", ord_y_x_z);
+
 	LOG3D(mesh->vmesh, cfg->vmesh_dim, "VMESH[0]");
 }
 

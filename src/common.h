@@ -75,10 +75,16 @@ void print_err_and_die(char *msg, char *file, int line);
 s32 hunklog_1(char *file, int line, char *msg, ivec_t dim, f64 *p);
 s32 hunklog_2(char *file, int line, char *msg, ivec2_t dim, f64 *p);
 s32 hunklog_3(char *file, int line, char *msg, ivec3_t dim, f64 *p);
+s32 hunklog_3ord(char *file, int line, char *msg, ivec3_t dim, f64 *p, cvec3_t ord);
 
 #define LOG1D(p, d, m) hunklog_1(__FILE__, __LINE__, (m), (d), (p))
 #define LOG2D(p, d, m) hunklog_2(__FILE__, __LINE__, (m), (d), (p))
 #define LOG3D(p, d, m) hunklog_3(__FILE__, __LINE__, (m), (d), (p))
+
+#define LOG3DORD(p, d, m, o) \
+	hunklog_3ord(__FILE__, __LINE__, (m), (d), (p), (o))
+	
+
 #define LOG_NEWLINESEP 1
 #define LOG_FLOATFMT "% 4.5e"
 

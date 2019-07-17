@@ -125,12 +125,12 @@ void molt_step(lmesh_t *dst, lmesh_t *src, struct cfg_t *cfg, lnu_t *nu, lvweigh
 #include "calcs.h"
 #include "molt.h"
 
-static cvec3_t swap_x_y_z = {'x', 'y', 'z'};
-static cvec3_t swap_x_z_y = {'x', 'z', 'y'};
-static cvec3_t swap_y_x_z = {'y', 'x', 'z'};
-static cvec3_t swap_y_z_x = {'y', 'z', 'x'};
-static cvec3_t swap_z_x_y = {'z', 'x', 'y'};
-static cvec3_t swap_z_y_x = {'z', 'y', 'x'};
+static cvec3_t ord_x_y_z = {'x', 'y', 'z'};
+static cvec3_t ord_x_z_y = {'x', 'z', 'y'};
+static cvec3_t ord_y_x_z = {'y', 'x', 'z'};
+static cvec3_t ord_y_z_x = {'y', 'z', 'x'};
+static cvec3_t ord_z_x_y = {'z', 'x', 'y'};
+static cvec3_t ord_z_y_x = {'z', 'y', 'x'};
 
 /* molt_cfg_dims_t : initializes, very explicitly, cfg's time parameters */
 void molt_cfg_dims_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc)
