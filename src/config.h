@@ -1,3 +1,6 @@
+#ifndef MOLT_CONFIG
+#define MOLT_CONFIG
+
 /*
  * Brian Chrzanowski
  * Sun Feb 03, 2019 02:42 
@@ -14,23 +17,22 @@
  *
  * Having a standardized integer "unit" makes size and indexing calculations
  * effortless, and getting the real value is just a single multiplication away.
+ *
+ * TODO (brian)
+ * Think about if we want to, or care to have strings to be configured
+ * for 
  */
-
-#ifndef MOLT_CONFIG
-#define MOLT_CONFIG
-
-#define CEILING(X, Y)   (((X) + (Y) - 1) / (Y))
 
 /* mathematical constants first */
 #define PI 3.14159265
 
-/* freespace parameters */
+/* FREESPACE PARAMETERS */
 #define MOLT_LIGHTSPEED      299792458
 #define MOLT_HENRYPERMETER   4 * PI * 1E-7
 #define MOLT_FARADSPERMETER \
 	1 / (((long)MOLT_LIGHTSPEED * (long)MOLT_LIGHTSPEED) * MOLT_HENRYPERMETER)
 
-/* tissue parameters */
+/* TISSUE PARAMETERS */
 #define MOLT_STATICPERM      80
 #define MOLT_INFPERM         4
 #define MOLT_TAU             1
@@ -38,14 +40,7 @@
 #define MOLT_DISTRIBASYM     0.25
 #define MOLT_TISSUESPEED     (MOLT_LIGHTSPEED / (sqrt(MOLT_INFPERM)))
 
-/* 
- * mesh parameters 
- */
-
-/* 
- * Values are normalized to integers (u64s) for computation. Their values
- * will, when needed, be scaled according to the MOLT_INTSCALE value.
- */
+/* MESH PARAMETERS */
 
 #define MOLT_INTSCALE      0.01
 
@@ -66,25 +61,25 @@
 #define MOLT_T_STOP          10
 #define MOLT_T_STEP          1
 #define MOLT_T_POINTS        ((MOLT_T_STOP - MOLT_T_START) / MOLT_T_STEP)
-#define MOLT_T_POINTS_INC    (MOLT_T_POINTS + 1)
+#define MOLT_T_PINC          (MOLT_T_POINTS + 1)
 
 #define MOLT_X_START         0
-#define MOLT_X_STOP          100
-#define MOLT_X_STEP          2
+#define MOLT_X_STOP          200
+#define MOLT_X_STEP          1
 #define MOLT_X_POINTS        ((MOLT_X_STOP - MOLT_X_START) / MOLT_X_STEP)
-#define MOLT_X_POINTS_INC    (MOLT_X_POINTS + 1)
+#define MOLT_X_PINC          (MOLT_X_POINTS + 1)
 
 #define MOLT_Y_START         0
-#define MOLT_Y_STOP          100
-#define MOLT_Y_STEP          2
+#define MOLT_Y_STOP          200
+#define MOLT_Y_STEP          1
 #define MOLT_Y_POINTS        ((MOLT_Y_STOP - MOLT_Y_START) / MOLT_Y_STEP)
-#define MOLT_Y_POINTS_INC    (MOLT_Y_POINTS + 1)
+#define MOLT_Y_PINC          (MOLT_Y_POINTS + 1)
 
 #define MOLT_Z_START         0
-#define MOLT_Z_STOP          100
-#define MOLT_Z_STEP          2
+#define MOLT_Z_STOP          200
+#define MOLT_Z_STEP          1
 #define MOLT_Z_POINTS        ((MOLT_Z_STOP - MOLT_Z_START) / MOLT_Z_STEP)
-#define MOLT_Z_POINTS_INC    (MOLT_Z_POINTS + 1)
+#define MOLT_Z_PINC          (MOLT_Z_POINTS + 1)
 
 #define MOLT_CFL \
 	(MOLT_TISSUESPEED * (MOLT_T_STEP * MOLT_INTSCALE) *\
@@ -107,3 +102,4 @@
 #define MOLT_ALPHA MOLT_BETA / (MOLT_TISSUESPEED * MOLT_T_STEP * MOLT_INTSCALE)
 
 #endif
+

@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 /* macros to help index into our 2d and 3d arrays */
-#define IDX2D(x, y, ylen)    ((x) + ((ylen) * (y)))
+#define IDX2D(x, y, ylen)          ((x) + (y) * (ylen))
 #define IDX3D(x, y, z, ylen, zlen) ((x) + (y) * (ylen) + (z) * (zlen) * (ylen))
 
 #define SWAP(x, y, T) do { T SWAP = x; x = y; y = SWAP; } while (0)
@@ -29,6 +29,13 @@ typedef ivec_t ivec4_t[4];
 typedef ivec_t ivec5_t[5];
 typedef ivec_t ivec6_t[6];
 
+typedef s64 lvec_t;
+typedef lvec_t lvec2_t[2];
+typedef lvec_t lvec3_t[3];
+typedef lvec_t lvec4_t[4];
+typedef lvec_t lvec5_t[5];
+typedef lvec_t lvec6_t[6];
+
 typedef void * pvec_t;
 typedef pvec_t pvec2_t[2];
 typedef pvec_t pvec3_t[3];
@@ -36,14 +43,21 @@ typedef pvec_t pvec4_t[4];
 typedef pvec_t pvec5_t[5];
 typedef pvec_t pvec6_t[6];
 
-typedef f64 dvec_t; /* floating point vectors */
+typedef f64 dvec_t; // double
 typedef dvec_t dvec2_t[2];
 typedef dvec_t dvec3_t[3];
 typedef dvec_t dvec4_t[4];
 typedef dvec_t dvec5_t[5];
 typedef dvec_t dvec6_t[6];
 
-typedef char cvec_t; /* some less useful character vectors */
+typedef f64 * pdvec_t; // double *
+typedef pdvec_t pdvec2_t[2];
+typedef pdvec_t pdvec3_t[3];
+typedef pdvec_t pdvec4_t[4];
+typedef pdvec_t pdvec5_t[5];
+typedef pdvec_t pdvec6_t[6];
+
+typedef char cvec_t; // character vector
 typedef cvec_t cvec2_t[2];
 typedef cvec_t cvec3_t[3];
 typedef cvec_t cvec4_t[4];
@@ -66,7 +80,11 @@ s32 hunklog_3(char *file, int line, char *msg, ivec3_t dim, f64 *p);
 #define LOG2D(p, d, m) hunklog_2(__FILE__, __LINE__, (m), (d), (p))
 #define LOG3D(p, d, m) hunklog_3(__FILE__, __LINE__, (m), (d), (p))
 #define LOG_NEWLINESEP 1
-#define LOG_FLOATFMT "% 4.6e"
+#define LOG_FLOATFMT "% 4.5e"
+
+// we don't need a LOGMAKE_1 because that's the trivial case
+#define LOGMAKE_2(v,a,b)   ((v)[0]=(a),(v)[1]=(b))
+#define LOGMAKE_3(v,a,b,c) ((v)[0]=(a),(v)[1]=(b),(v)[2]=(c))
 
 /* 
  * we can actually define inline vector operations
@@ -88,7 +106,7 @@ s32 hunklog_3(char *file, int line, char *msg, ivec3_t dim, f64 *p);
  * VectorScale(v,s,o)
  *		make v, s units long, storing the result in o
  *
- * VectorMA(v,s,b,o)
+ * VectorMulAdd(v,s,b,o)
  *		Make b s units long, add to v, storing the result in o
  */
 
@@ -102,8 +120,10 @@ s32 hunklog_3(char *file, int line, char *msg, ivec3_t dim, f64 *p);
 #define VectorCopy(a,b)  ((b)[0]=(a)[0],(b)[1]=(a)[1],(b)[2]=(a)[2])
 #define VectorScale(v,s,o) \
 	((o)[0]=(v)[0]*(s), (o)[1]=(v)[1]*(s), (o)[2]=(v)[2]*(s))
-#define VectorMA(v,s,b,o) \
-	((o)[0]=(v)[0]+(b)[0]*(s),(o)[1]=(v)[1]+(b)[1]*(s),(o)[2]=(v)[2]+(b)[2]*(s))
+#define VectorMulAdd(v,s,b,o) \
+	((o)[0]=(v)[0]+(b)[0]*(s),\
+	 (o)[1]=(v)[1]+(b)[1]*(s),\
+	 (o)[2]=(v)[2]+(b)[2]*(s))
 #define VectorCrossProduct(a,b,c) \
 	((c)[0]=(a)[1]*(b)[2]-(a)[2]*(b)[1],\
 	 (c)[1]=(a)[2]*(b)[0]-(a)[0]*(b)[2],\
@@ -127,9 +147,11 @@ enum { /* type values */
 };
 
 enum {
+	// the config header is defined within the molt.h lib to decouple those
+	// functions from the rest of the program, hopefully giving whoever comes
+	// after me minimal headache
 	MOLTLUMP_CONFIG,
 	MOLTLUMP_RUNINFO,
-	MOLTLUMP_HANDLES,
 	MOLTLUMP_NU,
 	MOLTLUMP_VWEIGHT,
 	MOLTLUMP_WWEIGHT,
@@ -158,104 +180,6 @@ struct lump_header_t {
 	struct lump_t lump[MOLTLUMP_TOTAL];
 };
 
-struct cfg_t {
-	struct lumpmeta_t meta;
-
-	/* free space parms */
-	f64 lightspeed;
-	f64 henrymeter;
-	f64 faradmeter;
-
-	/* tissue space parms */
-	f64 staticperm;
-	f64 infiniteperm;
-	f64 tau;
-	f64 distribtail;
-	f64 distribasym;
-	f64 tissuespeed;
-
-	/* mesh parms */
-	f64 cfl;
-
-	// simulation values are kept as integers, and are scaled by the
-	// following value
-	f64 int_scale;
-
-	s32 t_start;
-	s32 t_stop;
-	s32 t_step;
-	s32 t_points;
-	s32 t_points_inc;
-
-	s32 x_start;
-	s32 x_stop;
-	s32 x_step;
-	s32 x_points;
-	s32 x_points_inc;
-
-	s32 y_start;
-	s32 y_stop;
-	s32 y_step;
-	s32 y_points;
-	s32 y_points_inc;
-
-	s32 z_start;
-	s32 z_stop;
-	s32 z_step;
-	s32 z_points;
-	s32 z_points_inc;
-
-	/* MOLT parameters */
-	f64 space_acc;
-	f64 time_acc;
-	f64 beta;
-	f64 beta_sq; // b^2 term in molt (for precomputation)
-	f64 beta_fo; // b^4 term in molt
-	f64 beta_si; // b^6 term in molt
-	f64 alpha;
-
-	/* 
-	 * store some dimensionality for easier use
-	 * NOTE (brian)
-	 *
-	 * these dimensions are supposed to be used for the ease of printf
-	 * debugging and implementation
-	 */
-
-	// void * for the base hunk pointer
-	void *base_hunk;
-
-	// lump_nu_t dimensions
-	ivec_t nux_dim;
-	ivec_t nuy_dim;
-	ivec_t nuz_dim;
-	ivec_t dnux_dim;
-	ivec_t dnuy_dim;
-	ivec_t dnuz_dim;
-
-	// lump_vweight_t dimensions
-	ivec_t vlx_dim;
-	ivec_t vrx_dim;
-	ivec_t vly_dim;
-	ivec_t vry_dim;
-	ivec_t vlz_dim;
-	ivec_t vrz_dim;
-
-	// lump_wweight_t dimensions
-	ivec2_t xl_weight_dim;
-	ivec2_t xr_weight_dim;
-	ivec2_t yl_weight_dim;
-	ivec2_t yr_weight_dim;
-	ivec2_t zl_weight_dim;
-	ivec2_t zr_weight_dim;
-
-	// the large hunk dimensionality
-	ivec3_t efield_data_dim;
-	ivec3_t pfield_data_dim;
-	ivec3_t umesh_dim;
-	ivec3_t vmesh_dim;
-};
-
 struct lump_runinfo_t {
 	struct lumpmeta_t meta;
 	f64 t_start;
@@ -277,12 +201,12 @@ struct lump_nu_t {
 
 struct lump_vweight_t {
 	struct lumpmeta_t meta;
-	f64 vlx[MOLT_X_POINTS_INC];
-	f64 vrx[MOLT_X_POINTS_INC];
-	f64 vly[MOLT_Y_POINTS_INC];
-	f64 vry[MOLT_Y_POINTS_INC];
-	f64 vlz[MOLT_Z_POINTS_INC];
-	f64 vrz[MOLT_Z_POINTS_INC];
+	f64 vlx[MOLT_X_PINC];
+	f64 vrx[MOLT_X_PINC];
+	f64 vly[MOLT_Y_PINC];
+	f64 vry[MOLT_Y_PINC];
+	f64 vlz[MOLT_Z_PINC];
+	f64 vrz[MOLT_Z_PINC];
 };
 
 struct lump_wweight_t {
@@ -299,29 +223,18 @@ struct lump_wweight_t {
 // TODO : get details on this from Causley, we currently don't use this
 struct lump_efield_t {
 	struct lumpmeta_t meta;
-	f64 data[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
+	f64 data[MOLT_X_PINC * MOLT_Y_PINC * MOLT_Z_PINC];
 };
 
 struct lump_pfield_t {
 	struct lumpmeta_t meta;
-	f64 data[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
+	f64 data[MOLT_X_PINC * MOLT_Y_PINC * MOLT_Z_PINC];
 };
 
 struct lump_mesh_t { // problem state (the thing we simulate)
 	struct lumpmeta_t meta;
-	f64 umesh[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
-	f64 vmesh[MOLT_X_POINTS_INC * MOLT_Y_POINTS_INC * MOLT_Z_POINTS_INC];
-};
-
-struct lump_handles_t {
-	struct lump_runinfo_t *run;
-	struct cfg_t *cfg;
-	struct lump_efield_t *efield;
-	struct lump_pfield_t *pfield;
-	struct lump_nu_t *nu;
-	struct lump_vweight_t *vweight;
-	struct lump_wweight_t *wweight;
-	struct lump_mesh_t *mesh;
+	f64 umesh[MOLT_X_PINC * MOLT_Y_PINC * MOLT_Z_PINC];
+	f64 vmesh[MOLT_X_PINC * MOLT_Y_PINC * MOLT_Z_PINC];
 };
 
 /* typedefs for all of the structures */

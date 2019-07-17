@@ -86,8 +86,8 @@ s32 hunklog_2(char *file, int line, char *msg, ivec2_t dim, f64 *p)
 	printf("%s:%d %s\n", file, line, msg);
 
 	lines = 0;
-	for (x = 0; x < dim[0]; x++, lines++) {
-		for (y = 0; y < dim[1]; y++) {
+	for (y = 0; y < dim[1]; y++) {
+		for (x = 0; x < dim[0]; x++, lines++) {
 			i = IDX2D(x, y, dim[1]);
 			printf(fmt, x, y, p[i]);
 		}
@@ -129,9 +129,9 @@ s32 hunklog_3(char *file, int line, char *msg, ivec3_t dim, f64 *p)
 	printf("%s:%d %s\n", file, line, msg);
 
 	lines = 0;
-	for (x = 0; x < dim[0]; x++, lines++) {
+	for (z = 0; z < dim[2]; z++) {
 		for (y = 0; y < dim[1]; y++) {
-			for (z = 0; z < dim[2]; z++) {
+			for (x = 0; x < dim[0]; x++, lines++) {
 				i = IDX3D(x, y, z, dim[1], dim[2]);
 				printf(fmt, x, y, z, p[i]);
 			}
