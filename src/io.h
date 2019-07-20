@@ -18,6 +18,7 @@ int io_resize(int fd, size_t size);
 int io_close(int fd);
 u64 io_getsize();
 char *io_getfilename();
+int io_exists(char *path); /* returns true if a file exists */
 
 /* lump helper funcs */
 

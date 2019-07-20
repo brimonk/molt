@@ -182,6 +182,12 @@ int io_close(int fd)
 	return rc;
 }
 
+/* io_exists : returns true if a file exists */
+int io_exists(char *path)
+{
+	return access(path, F_OK) == 0;
+}
+
 /* lump functions */
 
 /* io_lumpcheck : 0 if file has correct magic, else if it doesn't */

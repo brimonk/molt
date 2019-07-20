@@ -20,10 +20,15 @@
  * Get Information on EField and PField simulation from Causley
  *   Look in common.h:~250 for more details
  *
- * Store Dimensionality in cfg structure
- *   Would be stored as an ivec{1,2,3}_t where necessary
+ * Viewer
+ * 1. Parse Arguments
+ * 2. Read Keyboard/Mouse Inputs
+ * 3. Frame Timing Controls
+ * 4. Display 3d Room
+ * 5. Display Simulation Bounded Cube (Perform in-sim Rotations)
  *
  * WISHLIST
+ * 1. setuplump_* should really be "init" or "fillup" lump
  */
 
 #include <stdio.h>
@@ -41,12 +46,10 @@
 #include "calcs.h"
 #include "config.h"
 #include "common.h"
+#include "viewer.h"
 
 #define MOLT_IMPLEMENTATION
 #include "molt.h"
-
-#define DEFAULTFILE "data.dat"
-#define DATADUMP 1
 
 /* lump setup functions */
 void setup_simulation(void **base, u64 *size, int fd);
@@ -65,30 +68,88 @@ void do_simulation(void *hunk, u64 hunksize);
 void setupstate_print(void *hunk);
 s32 lump_magiccheck(void *hunk);
 
+void print_help(char *prog);
+
+#define USAGE "USAGE : %s [--viewer] [-v] [-h] outfile\n"
+
+#define VERBOSE 0x01
+#define VIEWER  0x02
+
 int main(int argc, char **argv)
 {
 	void *hunk;
+	char *fname, *s, **targv, targc;
 	u64 hunksize;
-	int fd;
+	s32 fd, fexists, longopt;
+	u32 flags;
+
+	flags = 0, targc = argc, targv = argv;
+
+	// parse arguments
+	while (--targc > 0 && (*++targv)[0] == '-') {
+		for (s = targv[0] + 1, longopt = 0; *s && !longopt; s++) {
+
+			// parse long options first to avoid getting all illegal options
+			if (strcmp(s, "-viewer") == 0) {
+				flags |= VIEWER;
+				longopt = 1;
+				continue;
+			}
+
+			switch (*s) {
+				case 'v':
+					flags |= VERBOSE;
+					break;
+				case 'h':
+					print_help(argv[0]);
+					return 1;
+				default:
+					fprintf(stderr, "Illegal Option %c\n", *s);
+					targc = 0;
+					break;
+			}
+		}
+	}
+
+	if (targc != 1) {
+		fprintf(stderr, USAGE, argv[0]);
+		return 1;
+	}
+
+	fname = targv[0];
+	fexists = io_exists(fname);
 
 	hunksize = sizeof(struct lump_header_t);
 
-	fd = io_open(DEFAULTFILE);
+	fd = io_open(fname);
 
-	io_resize(fd, hunksize);
+	// NOTE (brian) we only want to resize the file and zero out the sim data
+	// if we have a completely new file, otherwise we might want to see it in
+	// the viewer, or re-perform the calculations or something
+	if (!fexists) {
+		io_resize(fd, hunksize);
+	}
+
 	hunk = io_mmap(fd, hunksize);
-
-	setup_simulation(&hunk, &hunksize, fd);
+	if (!fexists) {
+		setup_simulation(&hunk, &hunksize, fd);
+	}
 
 	io_masync(hunk, hunk, hunksize);
 
-	do_simulation(hunk, hunksize);
+	if (flags & VIEWER) {
+		viewer_run(hunk, hunksize, fd, NULL);
+	} else {
+		do_simulation(hunk, hunksize);
+	}
 
 	/* sync the file, then clean up */
 	io_mssync(hunk, hunk, hunksize);
 
-	lump_magiccheck(hunk);
-	setupstate_print(hunk);
+	if (flags & VERBOSE) {
+		lump_magiccheck(hunk);
+		setupstate_print(hunk);
+	}
 
 	io_munmap(hunk);
 	io_close(fd);
@@ -234,6 +295,7 @@ u64 setup_lumps(void *base)
 }
 
 /* simsetup_cfg : setup the config lump */
+// void setuplump_cfg(struct molt_cfg_t *cfg, int argc, char **argv)
 void setuplump_cfg(struct lump_header_t *hdr, struct molt_cfg_t *cfg)
 {
 	memset(cfg, 0, sizeof *cfg);
@@ -249,7 +311,7 @@ void setuplump_cfg(struct lump_header_t *hdr, struct molt_cfg_t *cfg)
 
 	// compute alpha by hand because it relies on simulation specific params
 	// (beta is set by the previous function)
-	// TODO (brian) can we get alpha setting into the library
+	// TODO (brian) can we get alpha setting into the library?
 	cfg->alpha = cfg->beta /
 		(MOLT_TISSUESPEED * cfg->t_params[MOLT_PARAM_STEP] * cfg->int_scale);
 }
@@ -565,5 +627,14 @@ s32 lump_magiccheck(void *hunk)
 	}
 
 	return rc;
+}
+
+/* print_help : prints some help text */
+void print_help(char *prog)
+{
+	fprintf(stderr, USAGE, prog);
+	fprintf(stderr, "-h\t\t\tprints this help text\n");
+	fprintf(stderr, "-v\t\t\tdisplays verbose simulation info\n");
+	fprintf(stderr, "--viewer\t\tattempts to run the viewer\n");
 }
 
