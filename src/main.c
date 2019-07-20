@@ -21,7 +21,6 @@
  *   Look in common.h:~250 for more details
  *
  * Viewer
- * 1. Parse Arguments
  * 2. Read Keyboard/Mouse Inputs
  * 3. Frame Timing Controls
  * 4. Display 3d Room
@@ -29,6 +28,8 @@
  *
  * WISHLIST
  * 1. setuplump_* should really be "init" or "fillup" lump
+ * 2. Perform our GPU computations through the SDL OpenGL Context??????
+ *    That's kinda nutty. But, it might be a neat feature.
  */
 
 #include <stdio.h>

@@ -50,6 +50,13 @@ typedef dvec_t dvec4_t[4];
 typedef dvec_t dvec5_t[5];
 typedef dvec_t dvec6_t[6];
 
+typedef f32 fvec_t; // float
+typedef fvec_t fvec2_t[2];
+typedef fvec_t fvec3_t[3];
+typedef fvec_t fvec4_t[4];
+typedef fvec_t fvec5_t[5];
+typedef fvec_t fvec6_t[6];
+
 typedef f64 * pdvec_t; // double *
 typedef pdvec_t pdvec2_t[2];
 typedef pdvec_t pdvec3_t[3];
