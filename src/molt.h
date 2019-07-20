@@ -32,6 +32,8 @@ enum {
 	MOLT_PARAM_PINC // actual total
 };
 
+#define MOLT_FLAG_FIRSTSTEP 0x01
+
 struct molt_cfg_t {
 	// simulation values are kept as integers, and are scaled by the
 	// following value
@@ -52,43 +54,6 @@ struct molt_cfg_t {
 	f64 beta_fo; // b^4 term in sweeping function
 	f64 beta_si; // b^6 term in sweeping function
 	f64 alpha;
-
-	/* 
-	 * store some dimensionality for easier use
-	 * NOTE (brian)
-	 * these dimensions are supposed to be used for the ease of printf
-	 * debugging and implementation
-	 */
-
-	// lump_nu_t dimensions
-	ivec_t nux_dim;
-	ivec_t nuy_dim;
-	ivec_t nuz_dim;
-	ivec_t dnux_dim;
-	ivec_t dnuy_dim;
-	ivec_t dnuz_dim;
-
-	// lump_vweight_t dimensions
-	ivec_t vlx_dim;
-	ivec_t vrx_dim;
-	ivec_t vly_dim;
-	ivec_t vry_dim;
-	ivec_t vlz_dim;
-	ivec_t vrz_dim;
-
-	// lump_wweight_t dimensions
-	ivec2_t xl_weight_dim;
-	ivec2_t xr_weight_dim;
-	ivec2_t yl_weight_dim;
-	ivec2_t yr_weight_dim;
-	ivec2_t zl_weight_dim;
-	ivec2_t zr_weight_dim;
-
-	// the large hunk dimensionality
-	ivec3_t efield_data_dim;
-	ivec3_t pfield_data_dim;
-	ivec3_t umesh_dim;
-	ivec3_t vmesh_dim;
 };
 
 // molt_cfg dimension intializer functions
@@ -103,13 +68,11 @@ void molt_cfg_set_intscale(struct molt_cfg_t *cfg, f64 scale);
 // molt_cfg set accuracy based parameters
 void molt_cfg_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc);
 
-#if 0
-/* molt_firststep : specific routines required for the "first" timestep */
-void molt_firststep(lmesh_t *dst, lmesh_t *src, struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
+// parampull_xyz pulls out a parameter of xyz into dst
+void molt_cfg_parampull_xyz(struct molt_cfg_t *cfg, s32 *dst, s32 param);
 
-/* molt_step : regular timestepping routine */
-void molt_step(lmesh_t *dst, lmesh_t *src, struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
-#endif
+void molt_step(struct molt_cfg_t *cfg, f64 *next, f64 *curr, f64 *prev, pdvec3_t *nu, pdvec3_t *dnu, pdvec3_t *vw, pdvec3_t *ww);
+void molt_step_vec(struct molt_cfg_t *cfg, pdvec3_t mesh, pdvec3_t nu, pdvec3_t dnu, pdvec3_t vw, pdvec3_t ww);
 
 #ifdef MOLT_IMPLEMENTATION
 
@@ -205,6 +168,22 @@ void molt_cfg_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc)
 	cfg->beta_fo = pow(cfg->beta, 4) / 12;
 	cfg->beta_si = pow(cfg->beta, 6) / 360;
 }
+
+/* molt_cfg_parampull_xyz : helper func to pull out xyz params into dst */
+void molt_cfg_parampull_xyz(struct molt_cfg_t *cfg, s32 *dst, s32 param)
+{
+	// NOTE (brian) the pulling is always in xyz order
+	dst[0] = cfg->x_params[param];
+	dst[1] = cfg->y_params[param];
+	dst[2] = cfg->z_params[param];
+}
+
+/* molt_step : performs one molt timestep */
+void molt_step(struct molt_cfg_t *cfg, f64 *next, f64 *curr, f64 *prev, pdvec3_t *nu, pdvec3_t *dnu, pdvec3_t *vw, pdvec3_t *ww)
+{
+}
+
+void molt_step_vec(struct molt_cfg_t *cfg, pdvec3_t mesh, pdvec3_t nu, pdvec3_t dnu, pdvec3_t vw, pdvec3_t ww);
 
 #if 0
 

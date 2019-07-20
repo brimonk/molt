@@ -40,6 +40,7 @@
 #include "io.h"
 #include "calcs.h"
 #include "config.h"
+#include "common.h"
 
 #define MOLT_IMPLEMENTATION
 #include "molt.h"
@@ -251,48 +252,6 @@ void setuplump_cfg(struct lump_header_t *hdr, struct molt_cfg_t *cfg)
 	// TODO (brian) can we get alpha setting into the library
 	cfg->alpha = cfg->beta /
 		(MOLT_TISSUESPEED * cfg->t_params[MOLT_PARAM_STEP] * cfg->int_scale);
-
-	// nu and dnu
-	cfg->nux_dim  = MOLT_X_POINTS;
-	cfg->nuy_dim  = MOLT_Y_POINTS;
-	cfg->nuz_dim  = MOLT_Z_POINTS;
-	cfg->dnux_dim = MOLT_X_POINTS;
-	cfg->dnuy_dim = MOLT_Y_POINTS;
-	cfg->dnuz_dim = MOLT_Z_POINTS;
-
-	// efield
-	cfg->efield_data_dim[0] = MOLT_X_PINC;
-	cfg->efield_data_dim[1] = MOLT_Y_PINC;
-	cfg->efield_data_dim[2] = MOLT_Z_PINC;
-
-	// pfield
-	cfg->pfield_data_dim[0] = MOLT_X_PINC;
-	cfg->pfield_data_dim[1] = MOLT_Y_PINC;
-	cfg->pfield_data_dim[2] = MOLT_Z_PINC;
-
-	// vweight
-	cfg->vlx_dim = MOLT_X_PINC;
-	cfg->vrx_dim = MOLT_X_PINC;
-	cfg->vly_dim = MOLT_Y_PINC;
-	cfg->vry_dim = MOLT_Y_PINC;
-	cfg->vlz_dim = MOLT_Z_PINC;
-	cfg->vrz_dim = MOLT_Z_PINC;
-
-	// wweight
-	cfg->xl_weight_dim[0] = MOLT_X_POINTS; cfg->xl_weight_dim[1] = MOLT_SPACEACC + 1;
-	cfg->xr_weight_dim[0] = MOLT_X_POINTS; cfg->xr_weight_dim[1] = MOLT_SPACEACC + 1;
-	cfg->yl_weight_dim[0] = MOLT_Y_POINTS; cfg->yl_weight_dim[1] = MOLT_SPACEACC + 1;
-	cfg->yr_weight_dim[0] = MOLT_Y_POINTS; cfg->yr_weight_dim[1] = MOLT_SPACEACC + 1;
-	cfg->zl_weight_dim[0] = MOLT_Z_POINTS; cfg->zl_weight_dim[1] = MOLT_SPACEACC + 1;
-	cfg->zr_weight_dim[0] = MOLT_Z_POINTS; cfg->zr_weight_dim[1] = MOLT_SPACEACC + 1;
-
-	// mesh (umesh and vmesh)
-	cfg->umesh_dim[0] = MOLT_X_PINC;
-	cfg->umesh_dim[1] = MOLT_Y_PINC;
-	cfg->umesh_dim[2] = MOLT_Z_PINC;
-	cfg->vmesh_dim[0] = MOLT_X_PINC;
-	cfg->vmesh_dim[1] = MOLT_Y_PINC;
-	cfg->vmesh_dim[2] = MOLT_Z_PINC;
 }
 
 /* simsetup_run : setup run information */
@@ -346,6 +305,7 @@ void setuplump_nu(struct lump_header_t *hdr, struct lump_nu_t *nu)
 	struct molt_cfg_t *cfg;
 	struct lump_t *lump;
 	s32 i;
+	ivec3_t dim, step;
 
 	lump = &hdr->lump[MOLTLUMP_NU];
 	memset(nu, 0, lump->lumpsize);
@@ -354,22 +314,25 @@ void setuplump_nu(struct lump_header_t *hdr, struct lump_nu_t *nu)
 
 	nu->meta.magic = MOLTLUMP_MAGIC;
 
-	for (i = 0; i < cfg->nux_dim; i++)
-		nu->nux[i] = cfg->int_scale * cfg->x_params[MOLT_PARAM_STEP] * cfg->alpha;
+	molt_cfg_parampull_xyz(cfg, dim,  MOLT_PARAM_POINTS);
+	molt_cfg_parampull_xyz(cfg, step, MOLT_PARAM_STEP);
 
-	for (i = 0; i < cfg->dnux_dim; i++)
+	for (i = 0; i < dim[0]; i++)
+		nu->nux[i] = cfg->int_scale * step[0] * cfg->alpha;
+
+	for (i = 0; i < dim[0]; i++)
 		nu->dnux[i] = exp(-nu->nux[i]);
 
-	for (i = 0; i < cfg->nuy_dim; i++)
-		nu->nuy[i] = cfg->int_scale * cfg->y_params[MOLT_PARAM_STEP] * cfg->alpha;
+	for (i = 0; i < dim[1]; i++)
+		nu->nuy[i] = cfg->int_scale * step[1] * cfg->alpha;
 
-	for (i = 0; i < cfg->dnuy_dim; i++)
+	for (i = 0; i < dim[1]; i++)
 		nu->dnuy[i] = exp(-nu->nuy[i]);
 
-	for (i = 0; i < cfg->nuz_dim; i++)
-		nu->nuz[i] = cfg->int_scale * cfg->z_params[MOLT_PARAM_STEP] * cfg->alpha;
+	for (i = 0; i < dim[2]; i++)
+		nu->nuz[i] = cfg->int_scale * step[2] * cfg->alpha;
 
-	for (i = 0; i < cfg->dnuz_dim; i++)
+	for (i = 0; i < dim[2]; i++)
 		nu->dnuz[i] = exp(-nu->nuz[i]);
 }
 
@@ -377,33 +340,34 @@ void setuplump_nu(struct lump_header_t *hdr, struct lump_nu_t *nu)
 void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw)
 {
 	struct molt_cfg_t *cfg;
-	f64 alpha;
 	s64 i;
+	ivec3_t dim;
 
 	memset(vw, 0, sizeof *vw);
 
 	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
-	alpha = cfg->alpha;
 
 	vw->meta.magic = MOLTLUMP_MAGIC;
 
-	for (i = 0; i < cfg->vlx_dim; i++) // vlx
-		vw->vlx[i] = exp((-alpha) * cfg->int_scale * i);
+	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_PINC);
 
-	for (i = 0; i < cfg->vrx_dim; i++) // vrx
-		vw->vrx[i] = exp((-alpha) * cfg->int_scale * i);
+	for (i = 0; i < dim[0]; i++) // vlx
+		vw->vlx[i] = exp((-cfg->alpha) * cfg->int_scale * i);
 
-	for (i = 0; i < cfg->vly_dim; i++) // vly
-		vw->vly[i] = exp((-alpha) * cfg->int_scale * i);
+	for (i = 0; i < dim[0]; i++) // vrx
+		vw->vrx[i] = exp((-cfg->alpha) * cfg->int_scale * i);
 
-	for (i = 0; i < cfg->vry_dim; i++) // vry
-		vw->vry[i] = exp((-alpha) * cfg->int_scale * i);
+	for (i = 0; i < dim[1]; i++) // vly
+		vw->vly[i] = exp((-cfg->alpha) * cfg->int_scale * i);
 
-	for (i = 0; i < cfg->vlz_dim; i++) // vlz
-		vw->vrz[i] = exp((-alpha) * cfg->int_scale * i);
+	for (i = 0; i < dim[1]; i++) // vry
+		vw->vry[i] = exp((-cfg->alpha) * cfg->int_scale * i);
 
-	for (i = 0; i < cfg->vrz_dim; i++) // vrz
-		vw->vlz[i] = exp((-alpha) * cfg->int_scale * i);
+	for (i = 0; i < dim[2]; i++) // vlz
+		vw->vrz[i] = exp((-cfg->alpha) * cfg->int_scale * i);
+
+	for (i = 0; i < dim[2]; i++) // vrz
+		vw->vlz[i] = exp((-cfg->alpha) * cfg->int_scale * i);
 }
 
 /* setuplump_wweight : setup the wweight lump */
@@ -473,14 +437,15 @@ void setupstate_print(void *hunk)
 	struct lump_wweight_t *ww;
 	struct lump_mesh_t *mesh;
 	s32 i;
+	ivec2_t xweight_dim, yweight_dim, zweight_dim;
+	ivec3_t mesh_dim;
 
 	hdr = hunk;
 
 	cfg = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
 
+	/* print out lump & storage information */
 	printf("header : 0x%8x\tver : %d\t type : 0x%02x\n", hdr->meta.magic, hdr->meta.version, hdr->meta.type);
-
-	/* print out lump information */
 	for (i = 0; i < MOLTLUMP_TOTAL; i++) {
 		printf("lump[%d] off : 0x%08lx\tlumpsz : 0x%08lx\telemsz : 0x%08lx\n",
 			i, hdr->lump[i].offset, hdr->lump[i].lumpsize, hdr->lump[i].elemsize);
@@ -489,37 +454,46 @@ void setupstate_print(void *hunk)
 
 	// dump out all of the nu segments
 	nu = io_lumpgetbase(hunk, MOLTLUMP_NU);
-	LOG1D(nu->nux, cfg->nux_dim, "NU-X");
-	LOG1D(nu->nuy, cfg->nuy_dim, "NU-Y");
-	LOG1D(nu->nuz, cfg->nuz_dim, "NU-Z");
-	LOG1D(nu->dnux, cfg->dnux_dim, "DNU-X");
-	LOG1D(nu->dnuy, cfg->dnuy_dim, "DNU-Y");
-	LOG1D(nu->dnuz, cfg->dnuz_dim, "DNU-Z");
+	LOG1D(nu->nux, cfg->x_params[MOLT_PARAM_POINTS], "NU-X");
+	LOG1D(nu->nuy, cfg->y_params[MOLT_PARAM_POINTS], "NU-Y");
+	LOG1D(nu->nuz, cfg->z_params[MOLT_PARAM_POINTS], "NU-Z");
+	LOG1D(nu->dnux, cfg->x_params[MOLT_PARAM_POINTS], "DNU-X");
+	LOG1D(nu->dnuy, cfg->y_params[MOLT_PARAM_POINTS], "DNU-Y");
+	LOG1D(nu->dnuz, cfg->z_params[MOLT_PARAM_POINTS], "DNU-Z");
 
 	// log all of the vweights
 	vw = io_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
-	LOG1D(vw->vlx, cfg->vlx_dim, "VWEIGHT-VLX");
-	LOG1D(vw->vrx, cfg->vrx_dim, "VWEIGHT-VRX");
-	LOG1D(vw->vly, cfg->vly_dim, "VWEIGHT-VLY");
-	LOG1D(vw->vry, cfg->vry_dim, "VWEIGHT-VRY");
-	LOG1D(vw->vlz, cfg->vlz_dim, "VWEIGHT-VLZ");
-	LOG1D(vw->vrz, cfg->vrz_dim, "VWEIGHT-VRZ");
+	LOG1D(vw->vlx, cfg->x_params[MOLT_PARAM_PINC], "VWEIGHT-VLX");
+	LOG1D(vw->vrx, cfg->x_params[MOLT_PARAM_PINC], "VWEIGHT-VRX");
+	LOG1D(vw->vly, cfg->y_params[MOLT_PARAM_PINC], "VWEIGHT-VLY");
+	LOG1D(vw->vry, cfg->y_params[MOLT_PARAM_PINC], "VWEIGHT-VRY");
+	LOG1D(vw->vlz, cfg->z_params[MOLT_PARAM_PINC], "VWEIGHT-VLZ");
+	LOG1D(vw->vrz, cfg->z_params[MOLT_PARAM_PINC], "VWEIGHT-VRZ");
 
-	// log all of the wweights
+	// configure the weights, and log wweights
 	ww = io_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
-	LOG2D(ww->xl_weight, cfg->xl_weight_dim, "WWEIGHT-XL");
-	LOG2D(ww->xr_weight, cfg->xr_weight_dim, "WWEIGHT-XR");
-	LOG2D(ww->yl_weight, cfg->yl_weight_dim, "WWEIGHT-YL");
-	LOG2D(ww->yr_weight, cfg->yr_weight_dim, "WWEIGHT-YR");
-	LOG2D(ww->zl_weight, cfg->zl_weight_dim, "WWEIGHT-ZL");
-	LOG2D(ww->zr_weight, cfg->zr_weight_dim, "WWEIGHT-ZR");
+
+	// setup the weights for passing
+	Vec2Set(xweight_dim, cfg->x_params[MOLT_PARAM_POINTS], cfg->spaceacc + 1);
+	Vec2Set(yweight_dim, cfg->y_params[MOLT_PARAM_POINTS], cfg->spaceacc + 1);
+	Vec2Set(zweight_dim, cfg->z_params[MOLT_PARAM_POINTS], cfg->spaceacc + 1);
+
+	LOG2D(ww->xl_weight, xweight_dim, "WWEIGHT-XL");
+	LOG2D(ww->xr_weight, xweight_dim, "WWEIGHT-XR");
+	LOG2D(ww->yl_weight, yweight_dim, "WWEIGHT-YL");
+	LOG2D(ww->yr_weight, yweight_dim, "WWEIGHT-YR");
+	LOG2D(ww->zl_weight, zweight_dim, "WWEIGHT-ZL");
+	LOG2D(ww->zr_weight, zweight_dim, "WWEIGHT-ZR");
 
 	// log out the mesh
 	mesh = io_lumpgetbase(hunk, MOLTLUMP_MESH);
-	LOG3D(mesh->umesh, cfg->umesh_dim, "UMESH[0]");
-	// LOG3DORD(mesh->umesh, cfg->umesh_dim, "UMESH[0]", ord_y_x_z);
 
-	LOG3D(mesh->vmesh, cfg->vmesh_dim, "VMESH[0]");
+	molt_cfg_parampull_xyz(cfg, mesh_dim, MOLT_PARAM_POINTS);
+	molt_cfg_parampull_xyz(cfg, mesh_dim, MOLT_PARAM_POINTS);
+
+	// LOG3DORD(mesh->umesh, cfg->umesh_dim, "UMESH[0]", ord_y_x_z);
+	LOG3D(mesh->umesh, mesh_dim, "UMESH[0]");
+	LOG3D(mesh->vmesh, mesh_dim, "VMESH[0]");
 }
 
 /* lump_magiccheck : checks all lumps for the magic number, asserts if wrong */

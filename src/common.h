@@ -114,10 +114,14 @@ s32 hunklog_3ord(char *file, int line, char *msg, ivec3_t dim, f64 *p, cvec3_t o
  *
  * VectorMulAdd(v,s,b,o)
  *		Make b s units long, add to v, storing the result in o
+ *
+ * VectorSet(v,a,b,c)
+ *		Sets v to the values a, b, c
  */
 
 #define VectorDotProduct(a,b) ((a)[0]*(b)[0]+(a)[1]*(b)[1]+(a)[2]*(b)[2])
-#define VectorSubtract(a,b,c) ((c)[0]=(a)[0]-(b)[0],\
+#define Vec3Sub(a,b,c) \
+	((c)[0]=(a)[0]-(b)[0],\
 		(c)[1]=(a)[1]-(b)[1],(c)[2]=(a)[2]-(b)[2])
 #define VectorAdd(a,b,c) \
 		((c)[0]=(a)[0]+(b)[0],\
@@ -136,6 +140,8 @@ s32 hunklog_3ord(char *file, int line, char *msg, ivec3_t dim, f64 *p, cvec3_t o
 	 (c)[2]=(a)[0]*(b)[1]-(a)[1]*(b)[0])
 #define VectorClear(a) ((a)[0]=0,(a)[1]=0,(a)[2]=0)
 #define VectorPrint(a) (printf("%lf, %lf, %lf\n", (a)[0], (a)[1], (a)[2]))
+#define Vec2Set(v,a,b)   ((v)[0]=(a),(v)[1]=(b))
+#define Vec3Set(v,a,b,c) ((v)[0]=(a),(v)[1]=(b),(v)[2]=(c))
 
 /* simulation information */
 
