@@ -156,6 +156,29 @@ char *io_getfilename()
 	return &io_filename[0];
 }
 
+/* io_readfile : reads file 'path' into memory and NULL terminates */
+char *io_readfile(char *path)
+{
+	FILE *fp;
+	s64 size;
+	s8 *buf;
+
+	fp = fopen(path, "r");
+
+	// get the file's size
+	fseek(fp, 0, SEEK_END);
+	size = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+
+	buf = malloc(size + 1);
+	memset(buf, 0, size + 1);
+
+	fread(buf, 1, size, fp);
+	fclose(fp);
+
+	return buf;
+}
+
 int io_resize(int fd, size_t size)
 {
 	int rc;

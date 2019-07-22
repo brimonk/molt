@@ -21,7 +21,6 @@
  *   Look in common.h:~250 for more details
  *
  * Viewer
- * 2. Read Keyboard/Mouse Inputs
  * 3. Frame Timing Controls
  * 4. Display 3d Room
  * 5. Display Simulation Bounded Cube (Perform in-sim Rotations)

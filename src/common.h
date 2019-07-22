@@ -72,7 +72,7 @@ typedef cvec_t cvec5_t[5];
 typedef cvec_t cvec6_t[6];
 
 #define BUFSMALL 32
-#define BUFLARGE 128
+#define BUFLARGE 4096
 
 void print_err_and_die(char *msg, char *file, int line);
 #define PRINT_AND_DIE(x) (print_err_and_die((x), __FILE__, __LINE__))

@@ -19,6 +19,7 @@ int io_close(int fd);
 u64 io_getsize();
 char *io_getfilename();
 int io_exists(char *path); /* returns true if a file exists */
+char *io_readfile(char *path); /* reads 'path' into buffer and NULL terms */
 
 /* lump helper funcs */
 
