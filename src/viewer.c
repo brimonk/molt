@@ -31,6 +31,7 @@
 #include "common.h"
 #include "molt.h"
 #include "io.h"
+#include "handmademath.h"
 
 // get some other viewer flags out of the way
 #define VIEWER_SDL_INITFLAGS \
@@ -71,6 +72,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	struct simstate_t state;
 	u32 prevts, currts;
 	u32 program_shader;
+	u32 tmp;
 	s32 rc;
 
 	u32 vbo, vao;
@@ -83,6 +85,8 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	};
 
 	rc = 0, state.run = 1;
+
+	hmm_mat4 transform;
 
 	if (SDL_Init(VIEWER_SDL_INITFLAGS) != 0) {
 		ERRLOG("Couldn't Init SDL", SDL_GetError());
@@ -127,9 +131,9 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	glUseProgram(program_shader);
 
-	f32 a;
+	f32 r_val;
 
-	a = 0.0f;
+	r_val = 0;
 
 	while (state.run) {
 		prevts = SDL_GetTicks();
@@ -139,12 +143,22 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 		state.run = !state.r_esc[1];
 
-		a += 0.1f;
-		if (a >= 1.0f) a = 0.0f;
+		if (state.r_esc[0])
+			r_val += 1.0f;
+
+		if (r_val > 360.0f)
+			r_val = 0.0f;
 
 		// render
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		// setup some silly transform stuff
+		transform = HMM_Mat4d(1.0f);
+		transform = HMM_Rotate(r_val, HMM_Vec3(0.0f, 0.0f, 1.0f));
+
+		tmp = glGetUniformLocation(program_shader, "transform");
+		glUniformMatrix4fv(tmp, 1, GL_FALSE, (f32 *)&transform);
 
 		glBindVertexArray(vao);
 		glDrawArrays(GL_TRIANGLES, 0, 3);

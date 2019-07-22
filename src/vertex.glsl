@@ -16,10 +16,12 @@ layout (location = 1) in vec3 iColor;
 
 out vec3 vColor;
 
+uniform mat4 transform;
+
 void main()
 {
 	// just translating from CPU to GPU, effectively
-	gl_Position = vec4(iPos, 1.0f);
+	gl_Position = transform * vec4(iPos, 1.0f);
 	vColor = iColor;
 }
 
