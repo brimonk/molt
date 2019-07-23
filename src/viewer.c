@@ -46,6 +46,9 @@
 #define VERTEX_SHADER_PATH   "src/vertex.glsl"
 #define FRAGMENT_SHADER_PATH "src/fragment.glsl"
 
+#define TARGET_FPS 90
+#define TARGET_MS_FORFRAME 1000 / TARGET_FPS
+
 struct simstate_t {
 	// input goes first
 	ivec2_t mousepos;
@@ -134,6 +137,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	f32 r_val;
 
 	r_val = 0;
+	prevts = SDL_GetTicks();
 
 	while (state.run) {
 		prevts = SDL_GetTicks();
@@ -163,9 +167,13 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		glBindVertexArray(vao);
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 
-		currts = SDL_GetTicks();
-
 		SDL_GL_SwapWindow(window);
+
+		// delay if needed
+		currts = prevts - SDL_GetTicks();
+		if (currts < TARGET_MS_FORFRAME) {
+			SDL_Delay(TARGET_MS_FORFRAME - currts);
+		}
 	}
 
 	glDeleteVertexArrays(1, &vao);
