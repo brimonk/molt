@@ -12,16 +12,20 @@
 #version 330
 
 layout (location = 0) in vec3 iPos;
-layout (location = 1) in vec3 iColor;
+// layout (location = 1) in vec3 iColor;
 
 out vec3 vColor;
 
-uniform mat4 transform;
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 proj;
 
 void main()
 {
 	// just translating from CPU to GPU, effectively
-	gl_Position = transform * vec4(iPos, 1.0f);
-	vColor = iColor;
+	gl_Position = proj * view * model * vec4(iPos, 1.0f);
+	// vColor = iColor;
+	// vColor = vec3(1.0f, 0.0f, 0.0f);
+	vColor = iPos;
 }
 

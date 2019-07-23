@@ -6,9 +6,15 @@
  *
  * This viewer, for ease of transport, requires SDL2 to operate.
  *
- * TODO
- * 1. Error Handling
- * 2. Include Headers
+ * TODO (brian)
+ * 1. Create multiple vertex floating point offset for the cfg mesh grid
+ * 2. Display the mesh grid with some sort of colored logic
+ *    We probably want the color to be some fragment shader function.
+ * 3. Add 3d camera movement.
+ *
+ * TODO (brian, Eventually)
+ * 1. SDL / OpenGL Error Handling
+ * 2. Cross Platform Include Headers
  * 3. Real Memory umesh and vmesh cache hunks that we can memcpy into and out of
  *
  * WISHLIST
@@ -48,6 +54,8 @@
 
 #define TARGET_FPS 90
 #define TARGET_MS_FORFRAME 1000 / TARGET_FPS
+#define WIDTH  1024
+#define HEIGHT  768
 
 struct simstate_t {
 	// input goes first
@@ -76,20 +84,60 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	u32 prevts, currts;
 	u32 program_shader;
 	u32 tmp;
+
+	u32 model_location, view_location, persp_loc;
 	s32 rc;
 
 	u32 vbo, vao;
 
-	f32 vertices[] = {
-		// positions          // colors
-		 0.5f, -0.5f, 0.0f,   1.0f, 0.0f, 0.0f,
-		-0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,
-		 0.0f,  0.5f, 0.0f,   0.0f, 0.0f, 1.0f,
+	float vertices[] = {
+		-0.5f, -0.5f, -0.5f,
+		 0.5f, -0.5f, -0.5f,
+		 0.5f,  0.5f, -0.5f,
+		 0.5f,  0.5f, -0.5f,
+		-0.5f,  0.5f, -0.5f,
+		-0.5f, -0.5f, -0.5f,
+
+		-0.5f, -0.5f,  0.5f,
+		 0.5f, -0.5f,  0.5f,
+		 0.5f,  0.5f,  0.5f,
+		 0.5f,  0.5f,  0.5f,
+		-0.5f,  0.5f,  0.5f,
+		-0.5f, -0.5f,  0.5f,
+
+		-0.5f,  0.5f,  0.5f,
+		-0.5f,  0.5f, -0.5f,
+		-0.5f, -0.5f, -0.5f,
+		-0.5f, -0.5f, -0.5f,
+		-0.5f, -0.5f,  0.5f,
+		-0.5f,  0.5f,  0.5f,
+
+		 0.5f,  0.5f,  0.5f,
+		 0.5f,  0.5f, -0.5f,
+		 0.5f, -0.5f, -0.5f,
+		 0.5f, -0.5f, -0.5f,
+		 0.5f, -0.5f,  0.5f,
+		 0.5f,  0.5f,  0.5f,
+
+		-0.5f, -0.5f, -0.5f,
+		 0.5f, -0.5f, -0.5f,
+		 0.5f, -0.5f,  0.5f,
+		 0.5f, -0.5f,  0.5f,
+		-0.5f, -0.5f,  0.5f,
+		-0.5f, -0.5f, -0.5f,
+
+		-0.5f,  0.5f, -0.5f,
+		 0.5f,  0.5f, -0.5f,
+		 0.5f,  0.5f,  0.5f,
+		 0.5f,  0.5f,  0.5f,
+		-0.5f,  0.5f,  0.5f,
+		-0.5f,  0.5f, -0.5f,
 	};
+
+	hmm_mat4 model, view, proj, orig;
 
 	rc = 0, state.run = 1;
 
-	hmm_mat4 transform;
 
 	if (SDL_Init(VIEWER_SDL_INITFLAGS) != 0) {
 		ERRLOG("Couldn't Init SDL", SDL_GetError());
@@ -115,6 +163,8 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		ERRLOG("Couldn't set the swap interval", SDL_GetError());
 	}
 
+	glEnable(GL_DEPTH_TEST);
+
 	program_shader = viewer_mkshader(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH);
 
 	glGenVertexArrays(1, &vao);
@@ -125,19 +175,18 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
 	// position
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
 	glEnableVertexAttribArray(0);
-
-	// color
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
-	glEnableVertexAttribArray(1);
 
 	glUseProgram(program_shader);
 
 	f32 r_val;
-
 	r_val = 0;
 	prevts = SDL_GetTicks();
+
+	// setup original cube state
+	orig = HMM_Mat4d(1.0f);
+	orig = HMM_MultiplyMat4(orig, HMM_Rotate(90, HMM_Vec3(0.0f, 1.0f, 1.0f)));
 
 	while (state.run) {
 		prevts = SDL_GetTicks();
@@ -157,15 +206,29 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		// setup some silly transform stuff
-		transform = HMM_Mat4d(1.0f);
-		transform = HMM_Rotate(r_val, HMM_Vec3(0.0f, 0.0f, 1.0f));
+		glUseProgram(program_shader);
 
-		tmp = glGetUniformLocation(program_shader, "transform");
-		glUniformMatrix4fv(tmp, 1, GL_FALSE, (f32 *)&transform);
+		// create our transformation
+#if 1
+		model = HMM_Rotate(SDL_GetTicks(), HMM_Vec3(1.0f, 0.0f, 0.0f));
+		model = HMM_MultiplyMat4(model, orig);
+#else
+		model = HMM_Mat4d(1.0f);
+#endif
+		view = HMM_Translate(HMM_Vec3(0.0f, 0.0f, -3.0f));
+		proj = HMM_Perspective(45.0f, WIDTH / HEIGHT, 0.1f, 100.0f);
+
+		model_location = glGetUniformLocation(program_shader, "model");
+		view_location = glGetUniformLocation(program_shader, "view");
+		persp_loc = glGetUniformLocation(program_shader, "proj");
+
+		// send them to the shader
+		glUniformMatrix4fv(model_location, 1, GL_FALSE, (f32 *)&model);
+		glUniformMatrix4fv(view_location, 1, GL_FALSE, (f32 *)&view);
+		glUniformMatrix4fv(persp_loc, 1, GL_FALSE, (f32 *)&proj);
 
 		glBindVertexArray(vao);
-		glDrawArrays(GL_TRIANGLES, 0, 3);
+		glDrawArrays(GL_TRIANGLES, 0, 36);
 
 		SDL_GL_SwapWindow(window);
 
