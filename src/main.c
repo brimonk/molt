@@ -14,6 +14,10 @@
  *   4. Synchronizes after those timesteps
  *
  * TODO (Brian)
+ * 1. Make vmesh its own hunk element
+ * 2. Clean up calling semantics of molt.h guts
+ * 3. Run a single simulation all the way through
+ * 4. Comment to leave wa & wb as they are.
  *
  * Cleaner Calling for X, Y, and Z operators
  *
@@ -29,6 +33,10 @@
  * 1. setuplump_* should really be "init" or "fillup" lump
  * 2. Perform our GPU computations through the SDL OpenGL Context??????
  *    That's kinda nutty. But, it might be a neat feature.
+ *    Also might just be flat out impossible because OpenGL kinda requires a
+ *    window.
+ * 3. Output Log Index (UMESH[0] starts on line X)
+ *    Might be better computed with a shell-script.
  */
 
 #include <stdio.h>
@@ -61,7 +69,7 @@ void setuplump_pfield(struct lump_header_t *hdr, struct lump_pfield_t *pfield);
 void setuplump_nu(struct lump_header_t *hdr, struct lump_nu_t *nu);
 void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw);
 void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww);
-void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state);
+void setuplump_umesh(struct lump_header_t *hdr, struct lump_mesh_t *state);
 
 void do_simulation(void *hunk, u64 hunksize);
 
@@ -72,18 +80,21 @@ void print_help(char *prog);
 
 #define USAGE "USAGE : %s [--viewer] [-v] [-h] outfile\n"
 
-#define VERBOSE 0x01
-#define VIEWER  0x02
+#define FLG_VERBOSE 0x01
+#define FLG_VIEWER  0x02
+#define FLG_SIM     0x04
 
 int main(int argc, char **argv)
 {
 	void *hunk;
 	char *fname, *s, **targv, targc;
 	u64 hunksize;
-	s32 fd, fexists, longopt;
+	s32 fd, fexists, finit, longopt;
 	u32 flags;
 
 	flags = 0, targc = argc, targv = argv;
+
+	flags |= FLG_SIM;
 
 	// parse arguments
 	while (--targc > 0 && (*++targv)[0] == '-') {
@@ -91,14 +102,16 @@ int main(int argc, char **argv)
 
 			// parse long options first to avoid getting all illegal options
 			if (strcmp(s, "-viewer") == 0) {
-				flags |= VIEWER;
-				longopt = 1;
-				continue;
+				flags |= FLG_VIEWER; longopt = 1; continue;
+			}
+
+			if (strcmp(s, "-nosim") == 0) {
+				flags &= ~FLG_SIM; longopt = 1; continue;
 			}
 
 			switch (*s) {
 				case 'v':
-					flags |= VERBOSE;
+					flags |= FLG_VERBOSE;
 					break;
 				case 'h':
 					print_help(argv[0]);
@@ -119,36 +132,36 @@ int main(int argc, char **argv)
 	fname = targv[0];
 	fexists = io_exists(fname);
 
-	hunksize = sizeof(struct lump_header_t);
-
 	fd = io_open(fname);
-
-	// NOTE (brian) we only want to resize the file and zero out the sim data
-	// if we have a completely new file, otherwise we might want to see it in
-	// the viewer, or re-perform the calculations or something
-	if (!fexists) {
+	hunksize = io_getsize();
+	if (hunksize == 0) {
+		// setup everything if the file is zero bytes
+		// - assumes no SIGINT in this if block
+		finit = 1;
+		hunksize = sizeof(struct lump_header_t);
 		io_resize(fd, hunksize);
-	}
-
-	hunk = io_mmap(fd, hunksize);
-	if (!fexists) {
+		// mind the reader, setup_simulation remmaps the hunk into vmemory
+		// after figuring out how big it is
+		hunk = io_mmap(fd, hunksize);
 		setup_simulation(&hunk, &hunksize, fd);
-	}
-
-	io_masync(hunk, hunk, hunksize);
-
-	if (flags & VIEWER) {
-		viewer_run(hunk, hunksize, fd, NULL);
+		io_masync(hunk, hunk, hunksize);
 	} else {
-		do_simulation(hunk, hunksize);
+		// just map the file regularly, the size is good, state assumed so
+		hunk = io_mmap(fd, hunksize);
 	}
 
-	/* sync the file, then clean up */
-	io_mssync(hunk, hunk, hunksize);
+	if (flags & FLG_SIM) {
+		do_simulation(hunk, hunksize);
+		io_mssync(hunk, hunk, hunksize);
+	}
 
-	if (flags & VERBOSE) {
+	if (flags & FLG_VERBOSE) {
 		lump_magiccheck(hunk);
 		setupstate_print(hunk);
+	}
+
+	if (flags & FLG_VIEWER) {
+		viewer_run(hunk, hunksize, fd, NULL);
 	}
 
 	io_munmap(hunk);
@@ -165,14 +178,20 @@ void do_simulation(void *hunk, u64 hunksize)
 	struct lump_nu_t *nu;
 	struct lump_vweight_t *vw;
 	struct lump_wweight_t *ww;
-	struct lump_mesh_t *mesh, *curr;
+	struct lump_vmesh_t *vmesh;
+	struct lump_umesh_t *umesh, *curr;
+
+	u32 firststep_flg, normal_flg;
 
 	cfg   = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
 	run   = io_lumpgetbase(hunk, MOLTLUMP_RUNINFO);
 	nu    = io_lumpgetbase(hunk, MOLTLUMP_NU);
 	vw    = io_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
 	ww    = io_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
-	mesh  = io_lumpgetbase(hunk, MOLTLUMP_MESH);
+	vmesh = io_lumpgetbase(hunk, MOLTLUMP_VMESH);
+	umesh = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
+
+	firststep_flg = MOLT_FLAG_FIRSTSTEP;
 
 #if 0
 	molt_firststep(mesh + 1, mesh, cfg, nu, vw, ww);
@@ -221,13 +240,14 @@ void setup_simulation(void **base, u64 *size, int fd)
 	setuplump_nu(*base, io_lumpgetbase(*base, MOLTLUMP_NU));
 	setuplump_vweight(*base, io_lumpgetbase(*base, MOLTLUMP_VWEIGHT));
 	setuplump_wweight(*base, io_lumpgetbase(*base, MOLTLUMP_WWEIGHT));
-	setuplump_mesh(*base, io_lumpgetbase(*base, MOLTLUMP_MESH));
+	setuplump_umesh(*base, io_lumpgetbase(*base, MOLTLUMP_UMESH));
 }
 
 /* setup_lumps : returns size of file after lumpsystem setup */
 u64 setup_lumps(void *base)
 {
 	struct lump_header_t *hdr;
+	s32 curr_lump;
 	u64 curr_offset;
 
 	/* begin the setup by setting up our lump header and our lump directory */
@@ -236,60 +256,67 @@ u64 setup_lumps(void *base)
 	curr_offset = sizeof(struct lump_header_t);
 
 	/* setup the lump header with the little run-time data we have */
-	hdr->lump[0].offset = curr_offset;
-	hdr->lump[0].elemsize = sizeof(struct molt_cfg_t);
-	hdr->lump[0].lumpsize = 1 * hdr->lump[0].elemsize;
-
-	curr_offset += hdr->lump[0].lumpsize;
+	curr_lump = MOLTLUMP_CONFIG;
+	hdr->lump[curr_lump].offset = curr_offset;
+	hdr->lump[curr_lump].elemsize = sizeof(struct molt_cfg_t);
+	hdr->lump[curr_lump].lumpsize = 1 * hdr->lump[curr_lump].elemsize;
+	curr_offset += hdr->lump[curr_lump].lumpsize;
 
 	/* setup our runtime info lump */
-	hdr->lump[1].offset = curr_offset;
-	hdr->lump[1].elemsize = sizeof(struct lump_runinfo_t);
-	hdr->lump[1].lumpsize = 1 * hdr->lump[1].elemsize;
-
-	curr_offset += hdr->lump[1].lumpsize;
+	curr_lump = MOLTLUMP_RUNINFO;
+	hdr->lump[curr_lump].offset = curr_offset;
+	hdr->lump[curr_lump].elemsize = sizeof(struct lump_runinfo_t);
+	hdr->lump[curr_lump].lumpsize = 1 * hdr->lump[curr_lump].elemsize;
+	curr_offset += hdr->lump[curr_lump].lumpsize;
 
 	/* setup our nu information */
-	hdr->lump[2].offset = curr_offset;
-	hdr->lump[2].elemsize = sizeof(struct lump_nu_t);
-	hdr->lump[2].lumpsize = hdr->lump[2].elemsize;
-
-	curr_offset += hdr->lump[2].lumpsize;
+	curr_lump = MOLTLUMP_NU;
+	hdr->lump[curr_lump].offset = curr_offset;
+	hdr->lump[curr_lump].elemsize = sizeof(struct lump_nu_t);
+	hdr->lump[curr_lump].lumpsize = hdr->lump[curr_lump].elemsize;
+	curr_offset += hdr->lump[curr_lump].lumpsize;
 
 	/* setup our vweight information */
-	hdr->lump[3].offset = curr_offset;
-	hdr->lump[3].elemsize = sizeof(struct lump_vweight_t);
-	hdr->lump[3].lumpsize = hdr->lump[3].elemsize;
-
-	curr_offset += hdr->lump[3].lumpsize;
+	curr_lump = MOLTLUMP_VWEIGHT;
+	hdr->lump[curr_lump].offset = curr_offset;
+	hdr->lump[curr_lump].elemsize = sizeof(struct lump_vweight_t);
+	hdr->lump[curr_lump].lumpsize = hdr->lump[curr_lump].elemsize;
+	curr_offset += hdr->lump[curr_lump].lumpsize;
 
 	/* setup our wweight information */
-	hdr->lump[4].offset = curr_offset;
-	hdr->lump[4].elemsize = sizeof(struct lump_wweight_t);
-	hdr->lump[4].lumpsize = hdr->lump[4].elemsize;
-
-	curr_offset += hdr->lump[4].lumpsize;
+	curr_lump = MOLTLUMP_WWEIGHT;
+	hdr->lump[curr_lump].offset = curr_offset;
+	hdr->lump[curr_lump].elemsize = sizeof(struct lump_wweight_t);
+	hdr->lump[curr_lump].lumpsize = hdr->lump[4].elemsize;
+	curr_offset += hdr->lump[curr_lump].lumpsize;
 
 	/* setup our efield information */
-	hdr->lump[5].offset = curr_offset;
-	hdr->lump[5].elemsize = sizeof(struct lump_efield_t);
-	hdr->lump[5].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[5].elemsize;
-
-	curr_offset += hdr->lump[5].lumpsize;
+	curr_lump = MOLTLUMP_EFIELD;
+	hdr->lump[curr_lump].offset = curr_offset;
+	hdr->lump[curr_lump].elemsize = sizeof(struct lump_efield_t);
+	hdr->lump[curr_lump].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[curr_lump].elemsize;
+	curr_offset += hdr->lump[curr_lump].lumpsize;
 
 	/* setup our pfield information */
-	hdr->lump[6].offset = curr_offset;
-	hdr->lump[6].elemsize = sizeof(struct lump_pfield_t);
-	hdr->lump[6].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[6].elemsize;
+	curr_lump = MOLTLUMP_PFIELD;
+	hdr->lump[curr_lump].offset = curr_offset;
+	hdr->lump[curr_lump].elemsize = sizeof(struct lump_pfield_t);
+	hdr->lump[curr_lump].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[curr_lump].elemsize;
+	curr_offset += hdr->lump[curr_lump].lumpsize;
 
-	curr_offset += hdr->lump[6].lumpsize;
+	/* the wave initial conditions */
+	curr_lump = MOLTLUMP_VMESH;
+	hdr->lump[curr_lump].offset = curr_offset;
+	hdr->lump[curr_lump].elemsize = sizeof(struct lump_vmesh_t);
+	hdr->lump[curr_lump].lumpsize = hdr->lump[curr_lump].elemsize;
+	curr_offset += hdr->lump[curr_lump].lumpsize;
 
-	/* setup our problem state */
-	hdr->lump[7].offset = curr_offset;
-	hdr->lump[7].elemsize = sizeof(struct lump_mesh_t);
-	hdr->lump[7].lumpsize = ((u64)MOLT_T_PINC) * hdr->lump[7].elemsize;
-
-	curr_offset += hdr->lump[7].lumpsize;
+	/* the 3d volume lump */
+	curr_lump = MOLTLUMP_UMESH;
+	hdr->lump[curr_lump].offset = curr_offset;
+	hdr->lump[curr_lump].elemsize = sizeof(struct lump_umesh_t);
+	hdr->lump[curr_lump].lumpsize = ((u64)MOLT_T_PINC) * hdr->lump[curr_lump].elemsize;
+	curr_offset += hdr->lump[curr_lump].lumpsize;
 
 	return curr_offset;
 }
@@ -449,29 +476,37 @@ void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww)
 	get_exp_weights(nu->nuz, ww->zl_weight, ww->zr_weight, cfg->z_params[MOLT_PARAM_POINTS], cfg->spaceacc);
 }
 
-/* setuplump_mesh : setup the "problem state" lump */
-void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
+/* setuplump_vmesh : sets up the initial condition for the wave */
+void setuplump_vmesh(struct lump_header_t *hdr, struct lump_vmesh_t *vmesh)
 {
-	// write zeroes to the mesh
-	s32 x, y, z, i, xpinc, ypinc, zpinc;
+}
+
+/* setuplump_umesh : setup the initial conditions for the (3d) volume */
+void setuplump_umesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
+{
+	// write zeroes to the umesh
+	s32 x, y, z, i, xpinc, ypinc, zpinc, xpoints, ypoints, zpoints;
 	struct molt_cfg_t *cfg;
 	struct lump_t *lump;
-	struct lump_mesh_t *mesh;
+	struct lump_umesh_t *umesh;
 	f64 fx, fy, fz;
 
-	lump = &hdr->lump[MOLTLUMP_MESH];
-	mesh = io_lumpgetbase(hdr, MOLTLUMP_MESH);
+	lump = &hdr->lump[MOLTLUMP_UMESH];
+	umesh = io_lumpgetbase(hdr, MOLTLUMP_UMESH);
 	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 
 	memset(state, 0, lump->lumpsize);
 
 	for (i = 0; i < lump->lumpsize / lump->elemsize; i++) {
-		mesh[i].meta.magic = MOLTLUMP_MAGIC;
+		umesh[i].meta.magic = MOLTLUMP_MAGIC;
 	}
 
-	xpinc = cfg->x_params[MOLT_PARAM_PINC];
-	ypinc = cfg->y_params[MOLT_PARAM_PINC];
-	zpinc = cfg->y_params[MOLT_PARAM_PINC];
+	xpinc   = cfg->x_params[MOLT_PARAM_PINC];
+	ypinc   = cfg->y_params[MOLT_PARAM_PINC];
+	zpinc   = cfg->y_params[MOLT_PARAM_PINC];
+	xpoints = cfg->x_params[MOLT_PARAM_POINTS];
+	ypoints = cfg->y_params[MOLT_PARAM_POINTS];
+	zpoints = cfg->z_params[MOLT_PARAM_POINTS];
 
 	// we only want to setup the first (0th) umesh applies function f
 	for (z = 0; z < zpinc; z++) {
@@ -479,11 +514,11 @@ void setuplump_mesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 			for (x = 0; x < xpinc; x++) {
 				i = IDX3D(x, y, z, ypinc, zpinc);
 
-				fx = pow((cfg->int_scale * (x - cfg->x_params[MOLT_PARAM_POINTS] / 2)), 2);
-				fy = pow((cfg->int_scale * (y - cfg->y_params[MOLT_PARAM_POINTS] / 2)), 2);
-				fz = pow((cfg->int_scale * (z - cfg->z_params[MOLT_PARAM_POINTS] / 2)), 2);
+				fx = pow((cfg->int_scale * (x - xpoints / 2)), 2);
+				fy = pow((cfg->int_scale * (y - ypoints / 2)), 2);
+				fz = pow((cfg->int_scale * (z - zpoints / 2)), 2);
 
-				mesh->umesh[i] = exp(-fx - fy - fz);
+				umesh->data[i] = exp(-fx - fy - fz);
 			}
 		}
 	}
@@ -497,10 +532,11 @@ void setupstate_print(void *hunk)
 	struct lump_nu_t *nu;
 	struct lump_vweight_t *vw;
 	struct lump_wweight_t *ww;
-	struct lump_mesh_t *mesh;
+	struct lump_vmesh_t *vmesh;
+	struct lump_umesh_t *umesh;
 	s32 i;
 	ivec2_t xweight_dim, yweight_dim, zweight_dim;
-	ivec3_t mesh_dim;
+	ivec3_t umesh_dim, vmesh_dim;
 
 	hdr = hunk;
 
@@ -509,8 +545,13 @@ void setupstate_print(void *hunk)
 	/* print out lump & storage information */
 	printf("header : 0x%8x\tver : %d\t type : 0x%02x\n", hdr->meta.magic, hdr->meta.version, hdr->meta.type);
 	for (i = 0; i < MOLTLUMP_TOTAL; i++) {
-		printf("lump[%d] off : 0x%08lx\tlumpsz : 0x%08lx\telemsz : 0x%08lx\n",
-			i, hdr->lump[i].offset, hdr->lump[i].lumpsize, hdr->lump[i].elemsize);
+		printf("lump[%d] off : 0x%08lx\tlumpsz : 0x%08lx\telemsz : 0x%08lx\t"
+				"cnt : %ld\n",
+			i,
+			hdr->lump[i].offset,
+			hdr->lump[i].lumpsize,
+			hdr->lump[i].elemsize,
+			hdr->lump[i].lumpsize / hdr->lump[i].elemsize);
 	}
 	printf("\n");
 
@@ -547,15 +588,15 @@ void setupstate_print(void *hunk)
 	LOG2D(ww->zl_weight, zweight_dim, "WWEIGHT-ZL");
 	LOG2D(ww->zr_weight, zweight_dim, "WWEIGHT-ZR");
 
-	// log out the mesh
-	mesh = io_lumpgetbase(hunk, MOLTLUMP_MESH);
+	// log out the initial state of the wave
+	vmesh = io_lumpgetbase(hunk, MOLTLUMP_VMESH);
+	molt_cfg_parampull_xyz(cfg, vmesh_dim, MOLT_PARAM_POINTS);
+	LOG3D(vmesh->data, vmesh_dim, "VMESH");
 
-	molt_cfg_parampull_xyz(cfg, mesh_dim, MOLT_PARAM_POINTS);
-	molt_cfg_parampull_xyz(cfg, mesh_dim, MOLT_PARAM_POINTS);
-
-	// LOG3DORD(mesh->umesh, cfg->umesh_dim, "UMESH[0]", ord_y_x_z);
-	LOG3D(mesh->umesh, mesh_dim, "UMESH[0]");
-	LOG3D(mesh->vmesh, mesh_dim, "VMESH[0]");
+	// log out the 3d volume
+	umesh = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
+	molt_cfg_parampull_xyz(cfg, umesh_dim, MOLT_PARAM_POINTS);
+	LOG3D(umesh->data, umesh_dim, "UMESH[0]");
 }
 
 /* lump_magiccheck : checks all lumps for the magic number, asserts if wrong */
@@ -572,32 +613,39 @@ s32 lump_magiccheck(void *hunk)
 
 	struct lump_efield_t *efield;
 	struct lump_pfield_t *pfield;
-	struct lump_mesh_t *mesh;
+	struct lump_umesh_t *umesh;
 
-	s32 simplemagic[5];
+	s32 single_elem_lump[6] = {
+		MOLTLUMP_CONFIG, MOLTLUMP_RUNINFO,
+		MOLTLUMP_NU, MOLTLUMP_VWEIGHT,
+		MOLTLUMP_WWEIGHT, MOLTLUMP_VMESH
+	};
+
+
+	s32 single_elem_magic[6];
 	s32 i, rc;
 
 	rc = 0;
 
-	// get all of the lumps that have only one magic value
-	simplemagic[0] = io_lumpgetmeta(hunk, MOLTLUMP_CONFIG)->magic;
-	simplemagic[1] = io_lumpgetmeta(hunk, MOLTLUMP_RUNINFO)->magic;
-	simplemagic[2] = io_lumpgetmeta(hunk, MOLTLUMP_NU)->magic;
-	simplemagic[3] = io_lumpgetmeta(hunk, MOLTLUMP_VWEIGHT)->magic;
-	simplemagic[4] = io_lumpgetmeta(hunk, MOLTLUMP_WWEIGHT)->magic;
+	/* get all of the lumps that have only one magic value */
+
+	for (i = 0; i < 6; i++) {
+		single_elem_magic[i] = io_lumpgetmeta(hunk, single_elem_lump[i])->magic;
+	}
+
 
 	// spin through and check them all
 	for (i = 0; i < 5; i++) {
-		if (simplemagic[i] != MOLTLUMP_MAGIC) {
+		if (single_elem_magic[i] != MOLTLUMP_MAGIC) {
 			fprintf(stderr, "LUMP %d HAS MAGIC %#08X, should be %#08X\n",
-					i, simplemagic[i], MOLTLUMP_MAGIC);
+					single_elem_lump[i], single_elem_magic[i], MOLTLUMP_MAGIC);
 			rc += 1;
 		}
 	}
 
 	efield = io_lumpgetbase(hunk, MOLTLUMP_EFIELD);
 	pfield = io_lumpgetbase(hunk, MOLTLUMP_PFIELD);
-	mesh   = io_lumpgetbase(hunk, MOLTLUMP_MESH);
+	umesh   = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
 
 	// spin through the efield
 	for (i = 0; i < MOLT_T_POINTS; i++) {
@@ -617,11 +665,11 @@ s32 lump_magiccheck(void *hunk)
 		}
 	}
 
-	// spin through all of the mesh lumps
+	// spin through all of the umesh lumps
 	for (i = 0; i < MOLT_T_PINC; i++) {
-		if ((mesh + i)->meta.magic != MOLTLUMP_MAGIC) {
-			fprintf(stderr, "MESH %d HAS MAGIC %#08X, should be %#08X\n",
-					i, (mesh + i)->meta.magic, MOLTLUMP_MAGIC);
+		if ((umesh + i)->meta.magic != MOLTLUMP_MAGIC) {
+			fprintf(stderr, "umesh %d HAS MAGIC %#08X, should be %#08X\n",
+					i, (umesh + i)->meta.magic, MOLTLUMP_MAGIC);
 			rc += 1;
 		}
 	}

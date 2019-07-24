@@ -156,7 +156,7 @@ s32 hunklog_3ord(char *file, int line, char *msg, ivec3_t dim, f64 *p, cvec3_t o
 #include "config.h"
 
 #define MOLTLUMP_MAGIC *(s32 *)"MOLT"
-#define MOLTLUMP_TOTAL 8
+#define MOLTLUMP_TOTAL 9
 #define MOLTCURRVERSION 1
 
 enum { /* type values */
@@ -176,7 +176,8 @@ enum {
 	MOLTLUMP_WWEIGHT,
 	MOLTLUMP_EFIELD,
 	MOLTLUMP_PFIELD,
-	MOLTLUMP_MESH
+	MOLTLUMP_VMESH,
+	MOLTLUMP_UMESH
 };
 
 // meta data for a single lump
@@ -250,10 +251,14 @@ struct lump_pfield_t {
 	f64 data[MOLT_X_PINC * MOLT_Y_PINC * MOLT_Z_PINC];
 };
 
-struct lump_mesh_t { // problem state (the thing we simulate)
+struct lump_vmesh_t {
 	struct lumpmeta_t meta;
-	f64 umesh[MOLT_X_PINC * MOLT_Y_PINC * MOLT_Z_PINC];
-	f64 vmesh[MOLT_X_PINC * MOLT_Y_PINC * MOLT_Z_PINC];
+	f64 data[MOLT_X_PINC * MOLT_Y_PINC * MOLT_Z_PINC];
+};
+
+struct lump_umesh_t { // problem state (the thing we simulate)
+	struct lumpmeta_t meta;
+	f64 data[MOLT_X_PINC * MOLT_Y_PINC * MOLT_Z_PINC];
 };
 
 /* typedefs for all of the structures */

@@ -8,7 +8,7 @@
  * Sat Apr 06, 2019 22:21
  *
  * TODO Create a Single-Header file Lib (Brian)
- * 1. Initializer Functions for 
+ * 1. Initializer Functions
  * 2. Use CSTDLIB math.h? stdio.h? stdlib.h?
  *
  * TODO Future
@@ -71,7 +71,8 @@ void molt_cfg_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc);
 // parampull_xyz pulls out a parameter of xyz into dst
 void molt_cfg_parampull_xyz(struct molt_cfg_t *cfg, s32 *dst, s32 param);
 
-void molt_step(struct molt_cfg_t *cfg, f64 *next, f64 *curr, f64 *prev, pdvec3_t *nu, pdvec3_t *dnu, pdvec3_t *vw, pdvec3_t *ww);
+// void molt_step_f1(struct molt_cfg_t *cfg, f64 *next, f64 *curr, f64 *prev, f64 *nu, f64 *dnu, pdvec3_t *nu, pdvec3_t *dnu, pdvec3_t *vw, pdvec3_t *ww);
+// void molt_step_f1(struct molt_cfg_t *cfg, f64 *next, f64 *curr, f64 *prev, pdvec3_t *nu, pdvec3_t *dnu, pdvec3_t *vw, pdvec3_t *ww);
 void molt_step_vec(struct molt_cfg_t *cfg, pdvec3_t mesh, pdvec3_t nu, pdvec3_t dnu, pdvec3_t vw, pdvec3_t ww);
 
 #ifdef MOLT_IMPLEMENTATION

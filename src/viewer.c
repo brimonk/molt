@@ -12,6 +12,21 @@
  *    We probably want the color to be some fragment shader function.
  * 3. Add 3d camera movement.
  *
+ * 4. Texture-Based 3d Volume Rendering
+ *
+ *    https://developer.download.nvidia.com/books/HTML/gpugems/gpugems_ch39.html
+ *
+ *    While complex and potentially very slow, this is effectively the real way
+ *    to do this. From that Nvidia book chapter, effectively you create textures
+ *    at various slices of the volume perpendicular to the 3d camera's line of
+ *    focus (?). The considerations, however are performance concerns a
+ *    programmer needs to be aware of:
+ *
+ *    * Procedural Rendering Might Be Neccessary
+ *    * Rasterization Bottlenecks
+ *    * Limitations of Fragment Programs (Shaders)
+ *    * Texture Memory Limitations
+ *
  * TODO (brian, Eventually)
  * 1. SDL / OpenGL Error Handling
  * 2. Cross Platform Include Headers
