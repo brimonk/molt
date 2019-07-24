@@ -14,7 +14,6 @@
  *   4. Synchronizes after those timesteps
  *
  * TODO (Brian)
- * 1. Make vmesh its own hunk element
  * 2. Clean up calling semantics of molt.h guts
  * 3. Run a single simulation all the way through
  * 4. Comment to leave wa & wb as they are.
@@ -50,14 +49,14 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#define MOLT_IMPLEMENTATION
+#include "molt.h"
+
 #include "io.h"
 #include "calcs.h"
 #include "config.h"
 #include "common.h"
 #include "viewer.h"
-
-#define MOLT_IMPLEMENTATION
-#include "molt.h"
 
 /* lump setup functions */
 void setup_simulation(void **base, u64 *size, int fd);
@@ -89,7 +88,7 @@ int main(int argc, char **argv)
 	void *hunk;
 	char *fname, *s, **targv, targc;
 	u64 hunksize;
-	s32 fd, fexists, finit, longopt;
+	s32 fd, longopt;
 	u32 flags;
 
 	flags = 0, targc = argc, targv = argv;
@@ -130,14 +129,12 @@ int main(int argc, char **argv)
 	}
 
 	fname = targv[0];
-	fexists = io_exists(fname);
 
 	fd = io_open(fname);
 	hunksize = io_getsize();
 	if (hunksize == 0) {
 		// setup everything if the file is zero bytes
 		// - assumes no SIGINT in this if block
-		finit = 1;
 		hunksize = sizeof(struct lump_header_t);
 		io_resize(fd, hunksize);
 		// mind the reader, setup_simulation remmaps the hunk into vmemory
@@ -173,35 +170,72 @@ int main(int argc, char **argv)
 /* do_simulation : actually does the simulating */
 void do_simulation(void *hunk, u64 hunksize)
 {
-	struct cfg_t *cfg;
+	struct molt_cfg_t *cfg;
 	struct lump_runinfo_t *run;
-	struct lump_nu_t *nu;
-	struct lump_vweight_t *vw;
-	struct lump_wweight_t *ww;
+	struct lump_nu_t *nu_lump;
+	struct lump_vweight_t *vw_lump;
+	struct lump_wweight_t *ww_lump;
 	struct lump_vmesh_t *vmesh;
 	struct lump_umesh_t *umesh, *curr;
 
 	u32 firststep_flg, normal_flg;
 
-	cfg   = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
-	run   = io_lumpgetbase(hunk, MOLTLUMP_RUNINFO);
-	nu    = io_lumpgetbase(hunk, MOLTLUMP_NU);
-	vw    = io_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
-	ww    = io_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
-	vmesh = io_lumpgetbase(hunk, MOLTLUMP_VMESH);
-	umesh = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
+	pdvec3_t vol;
+	pdvec6_t nu, vw, ww;
 
+	cfg     = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
+	run     = io_lumpgetbase(hunk, MOLTLUMP_RUNINFO);
+	nu_lump = io_lumpgetbase(hunk, MOLTLUMP_NU);
+	vw_lump = io_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
+	ww_lump = io_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
+	vmesh   = io_lumpgetbase(hunk, MOLTLUMP_VMESH);
+	umesh   = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
+
+	nu[0] = nu_lump->nux;
+	nu[1] = nu_lump->dnux;
+	nu[2] = nu_lump->nuy;
+	nu[3] = nu_lump->dnuy;
+	nu[4] = nu_lump->nuz;
+	nu[5] = nu_lump->dnuz;
+
+	vw[0] = vw_lump->vlx;
+	vw[1] = vw_lump->vrx;
+	vw[2] = vw_lump->vly;
+	vw[3] = vw_lump->vry;
+	vw[4] = vw_lump->vlz;
+	vw[5] = vw_lump->vrz;
+
+	ww[0] = ww_lump->xl_weight;
+	ww[1] = ww_lump->xr_weight;
+	ww[2] = ww_lump->yl_weight;
+	ww[3] = ww_lump->yr_weight;
+	ww[4] = ww_lump->zl_weight;
+	ww[5] = ww_lump->zr_weight;
+
+	// we have to set the first step flag, for caring about initial conditions
 	firststep_flg = MOLT_FLAG_FIRSTSTEP;
+	normal_flg = 0;
 
-#if 0
-	molt_firststep(mesh + 1, mesh, cfg, nu, vw, ww);
+	// setup the volume info for the FIRST step
+	// 0 - next, 1 - curr, 2 - prev
+	vol[0] = (umesh + 1)->data;
+	vol[1] = umesh->data;
+	vol[2] = vmesh->data;
+
+	molt_step3v(cfg, vol, nu, vw, ww, firststep_flg);
 
 	for (run->t_idx = 1; run->t_idx < run->t_total; run->t_idx++) {
-		curr = mesh + run->t_idx;
-		molt_step(curr + 1, curr, cfg, nu, vw, ww);
-		/* save off some fields as required */
+		curr = umesh + run->t_idx;
+
+		// ensure that vol is filled with the correct parameters
+		vol[0] = (curr + 1)->data;
+		vol[1] = (curr    )->data;
+		vol[2] = (curr - 1)->data;
+
+		molt_step3v(cfg, vol, nu, vw, ww, normal_flg);
+
+		// save off whatever fields are required
 	}
-#endif
 }
 
 /* setup_simulation : sets up simulation based on config.h */

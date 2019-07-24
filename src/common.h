@@ -58,6 +58,7 @@ typedef fvec_t fvec5_t[5];
 typedef fvec_t fvec6_t[6];
 
 typedef f64 * pdvec_t; // double *
+typedef pdvec_t pdvec1_t[1]; // double *
 typedef pdvec_t pdvec2_t[2];
 typedef pdvec_t pdvec3_t[3];
 typedef pdvec_t pdvec4_t[4];
