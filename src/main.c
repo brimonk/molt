@@ -132,7 +132,7 @@ int main(int argc, char **argv)
 
 	fd = io_open(fname);
 	hunksize = io_getsize();
-	if (hunksize == 0) {
+	// if (hunksize == 0) {
 		// setup everything if the file is zero bytes
 		// - assumes no SIGINT in this if block
 		hunksize = sizeof(struct lump_header_t);
@@ -141,11 +141,13 @@ int main(int argc, char **argv)
 		// after figuring out how big it is
 		hunk = io_mmap(fd, hunksize);
 		setup_simulation(&hunk, &hunksize, fd);
-		io_masync(hunk, hunk, hunksize);
+		io_mssync(hunk, hunk, hunksize);
+#if 0
 	} else {
 		// just map the file regularly, the size is good, state assumed so
 		hunk = io_mmap(fd, hunksize);
 	}
+#endif
 
 	if (flags & FLG_SIM) {
 		do_simulation(hunk, hunksize);
@@ -571,6 +573,7 @@ void setupstate_print(void *hunk)
 	s32 i;
 	ivec2_t xweight_dim, yweight_dim, zweight_dim;
 	ivec3_t umesh_dim, vmesh_dim;
+	char buf[BUFLARGE];
 
 	hdr = hunk;
 
@@ -630,7 +633,11 @@ void setupstate_print(void *hunk)
 	// log out the 3d volume
 	umesh = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
 	molt_cfg_parampull_xyz(cfg, umesh_dim, MOLT_PARAM_POINTS);
-	LOG3D(umesh->data, umesh_dim, "UMESH[0]");
+
+	for (i = 0; i < cfg->t_params[MOLT_PARAM_PINC]; i++) {
+		snprintf(buf, sizeof buf, "UMESH[%02d]", i);
+		LOG3D((umesh + i)->data, umesh_dim, buf);
+	}
 }
 
 /* lump_magiccheck : checks all lumps for the magic number, asserts if wrong */

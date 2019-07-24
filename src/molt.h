@@ -382,13 +382,13 @@ void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw,
 	pdvec2_t opstor;
 
 	// first, we have to acquire some working storage, external to our meshes
-	molt_cfg_parampull_xyz(cfg, mesh_dim, MOLT_PARAM_POINTS);
+	molt_cfg_parampull_xyz(cfg, mesh_dim, MOLT_PARAM_PINC);
 
-	totalelem = mesh_dim[0] * mesh_dim[1] * mesh_dim[2];
+	totalelem = ((u64)mesh_dim[0]) * mesh_dim[1] * mesh_dim[2];
 
-	work_d1 = malloc((size_t)mesh_dim[0] * mesh_dim[1] * mesh_dim[2]);
-	work_d2 = malloc((size_t)mesh_dim[0] * mesh_dim[1] * mesh_dim[2]);
-	work_d3 = malloc((size_t)mesh_dim[0] * mesh_dim[1] * mesh_dim[2]);
+	work_d1 = malloc(sizeof(f64) * totalelem);
+	work_d2 = malloc(sizeof(f64) * totalelem);
+	work_d3 = malloc(sizeof(f64) * totalelem);
 
 	next = vol[MOLT_VOL_NEXT];
 	curr = vol[MOLT_VOL_CURR];
@@ -494,9 +494,9 @@ void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, p
 	src = vol[1];
 
 	// first, we have to acquire some working storage, external to our meshes
-	molt_cfg_parampull_xyz(cfg, mesh_dim, MOLT_PARAM_POINTS);
+	molt_cfg_parampull_xyz(cfg, mesh_dim, MOLT_PARAM_PINC);
 
-	totalelem = mesh_dim[0] * mesh_dim[1] * mesh_dim[2];
+	totalelem = ((u64)mesh_dim[0]) * mesh_dim[1] * mesh_dim[2];
 
 	x_sweep_params[0] = nu[0];
 	x_sweep_params[1] = nu[1];
@@ -519,10 +519,10 @@ void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, p
 	z_sweep_params[4] = ww[4];
 	z_sweep_params[5] = ww[5];
 
-	work_ix = malloc((size_t)mesh_dim[0] * mesh_dim[1] * mesh_dim[2]);
-	work_iy = malloc((size_t)mesh_dim[0] * mesh_dim[1] * mesh_dim[2]);
-	work_iz = malloc((size_t)mesh_dim[0] * mesh_dim[1] * mesh_dim[2]);
-	work_tmp = malloc((size_t)mesh_dim[0] * mesh_dim[1] * mesh_dim[2]);
+	work_ix  = malloc(sizeof(f64) * totalelem);
+	work_iy  = malloc(sizeof(f64) * totalelem);
+	work_iz  = malloc(sizeof(f64) * totalelem);
+	work_tmp = malloc(sizeof(f64) * totalelem);
 
 	// sweep in x, y, z
 	molt_sweep(cfg, work_ix,     src, x_sweep_params, molt_ord_xyz);
@@ -562,7 +562,7 @@ void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, p
 }
 
 /* molt_c_op : MOLT's C Convolution Operator*/
-void molt_c_op(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw, pdvec6_t ww)
+void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, pdvec6_t ww)
 {
 	/*
 	 * NOTE (brian)
@@ -585,9 +585,9 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw, p
 	src = vol[1];
 
 	// first, we have to acquire some working storage, external to our meshes
-	molt_cfg_parampull_xyz(cfg, mesh_dim, MOLT_PARAM_POINTS);
+	molt_cfg_parampull_xyz(cfg, mesh_dim, MOLT_PARAM_PINC);
 
-	totalelem = mesh_dim[0] * mesh_dim[1] * mesh_dim[2];
+	totalelem = ((u64)mesh_dim[0]) * mesh_dim[1] * mesh_dim[2];
 
 	x_sweep_params[0] = nu[0];
 	x_sweep_params[1] = nu[1];
@@ -610,11 +610,11 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw, p
 	z_sweep_params[4] = ww[4];
 	z_sweep_params[5] = ww[5];
 
-	work_ix = malloc((size_t)mesh_dim[0] * mesh_dim[1] * mesh_dim[2]);
-	work_iy = malloc((size_t)mesh_dim[0] * mesh_dim[1] * mesh_dim[2]);
-	work_iz = malloc((size_t)mesh_dim[0] * mesh_dim[1] * mesh_dim[2]);
-	work_tmp = malloc((size_t)mesh_dim[0] * mesh_dim[1] * mesh_dim[2]);
-	work_tmp_ = malloc((size_t)mesh_dim[0] * mesh_dim[1] * mesh_dim[2]);
+	work_ix   = malloc(sizeof(f64) * totalelem);
+	work_iy   = malloc(sizeof(f64) * totalelem);
+	work_iz   = malloc(sizeof(f64) * totalelem);
+	work_tmp  = malloc(sizeof(f64) * totalelem);
+	work_tmp_ = malloc(sizeof(f64) * totalelem);
 
 	// sweep in x, y, z
 	molt_sweep(cfg, work_ix,     src, x_sweep_params, molt_ord_xyz);
@@ -658,6 +658,7 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw, p
 	free(work_iy);
 	free(work_iz);
 	free(work_tmp);
+	free(work_tmp_);
 }
 
 /* molt_sweep : performs a sweep across the mesh in the dimension specified */
@@ -724,9 +725,9 @@ void molt_reorg(struct molt_cfg_t *cfg, f64 *dst, f64 *src, f64 *work, cvec3_t s
 	u64 src_i, dst_i, total;
 	ivec3_t idx, dim;
 
-	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_POINTS);
+	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_PINC);
 
-	total = (u64)dim[0] * dim[1] * dim[2];
+	total = ((u64)dim[0]) * dim[1] * dim[2];
 
 	for (idx[2] = 0; idx[2] < dim[2]; idx[2]++) {
 		for (idx[1] = 0; idx[1] < dim[1]; idx[1]++) {
