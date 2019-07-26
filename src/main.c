@@ -238,6 +238,9 @@ void do_simulation(void *hunk, u64 hunksize)
 
 		// save off whatever fields are required
 	}
+
+	// TODO (brian) move somewhere else
+	molt_cfg_free_workstore(cfg);
 }
 
 /* setup_simulation : sets up simulation based on config.h */
@@ -377,6 +380,9 @@ void setuplump_cfg(struct lump_header_t *hdr, struct molt_cfg_t *cfg)
 	// TODO (brian) can we get alpha setting into the library?
 	cfg->alpha = cfg->beta /
 		(MOLT_TISSUESPEED * cfg->t_params[MOLT_PARAM_STEP] * cfg->int_scale);
+
+	// setup working storage by virtue of the library
+	molt_cfg_set_workstore(cfg);
 }
 
 /* simsetup_run : setup run information */

@@ -98,7 +98,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	struct simstate_t state;
 	u32 prevts, currts;
 	u32 program_shader;
-	u32 tmp;
 
 	u32 model_location, view_location, persp_loc;
 	s32 rc;

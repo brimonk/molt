@@ -8,21 +8,25 @@
  * Sat Apr 06, 2019 22:21
  *
  * TODO Create a Single-Header file Lib (Brian)
- * 1. Initializer Functions
- * 2. Use CSTDLIB math.h? stdio.h? stdlib.h?
- * 3. The problem gets considerably harder when we don't (ab)use working storage
+ * 1. Dimensionality should be u64 vec3_t, lvec3_t
+ * 2. Possibly reorder the parameters in molt_cfg_parampull_gen
+ *    Also might want to change the name, as it requires an order...
+ * 3. Define DBL_MAX and friends without the C standard library (?)
+ * 4. Change the vectored datatypes to be "mo_*" or "molt_*"
+ *    The latter has a lot of typing.
+ *
+ *    Maybe we could just have #defines setup to turn on or off parts of
+ *    the library? Dunno.
+ *
+ * 5. Include file-configurable function qualifier (static, static inline, etc)
  *
  * TODO Future
  * ?. Consider putting in the alpha calculation
  * ?. Debug/Test
+ * ?. Remove use CSTDLIB math.h? stdio.h? stdlib.h?
  *
  * TODO Even Higher Amounts of Performance (Brian)
  * 1. In Place Mesh Reorganize (HARD)
- * 2. Make function declaration not look like trash
- * 3. Figure out if we actually need swap_sub
- *
- * QUESTIONS:
- * 1. Should we use something other than vL for our weights all the time?
  */
 
 enum {
@@ -61,6 +65,10 @@ struct molt_cfg_t {
 	f64 beta_fo; // b^4 term in sweeping function
 	f64 beta_si; // b^6 term in sweeping function
 	f64 alpha;
+
+	// working storage for simulation
+	f64 *workstore[8];
+	f64 *worksweep;
 };
 
 // molt_cfg dimension intializer functions
@@ -68,15 +76,13 @@ void molt_cfg_dims_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 
 void molt_cfg_dims_x(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc);
 void molt_cfg_dims_y(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc);
 void molt_cfg_dims_z(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc);
-
-// molt_cfg integer scaling set
 void molt_cfg_set_intscale(struct molt_cfg_t *cfg, f64 scale);
-
-// molt_cfg set accuracy based parameters
 void molt_cfg_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc);
-
-// parampull_xyz pulls out a parameter of xyz into dst
 void molt_cfg_parampull_xyz(struct molt_cfg_t *cfg, s32 *dst, s32 param);
+s64 molt_cfg_parampull_gen(struct molt_cfg_t *cfg, s32 oidx, s32 cfgidx, cvec3_t order);
+
+void molt_cfg_set_workstore(struct molt_cfg_t *cfg);
+void molt_cfg_free_workstore(struct molt_cfg_t *cfg);
 
 /* molt_step%v : a concise way to setup some parameters for whatever dim is being used */
 void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw, pdvec6_t ww, u32 flags);
@@ -106,13 +112,25 @@ void molt_step3f(struct molt_cfg_t *cfg,
 void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, pdvec6_t ww);
 void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, pdvec6_t ww);
 
-/* molt_sweep : performs a sweep across the mesh in the dimension specified */
+// molt_sweep : performs a sweep across the mesh in the dimension specified
 void molt_sweep(struct molt_cfg_t *cfg, f64 *dst, f64 *src, pdvec6_t params, cvec3_t order);
 
 /* molt_reorg : reorganize a 3d volume */
 void molt_reorg(struct molt_cfg_t *cfg, f64 *dst, f64 *src, f64 *work, cvec3_t src_ord, cvec3_t dst_ord);
 
+/* molt_gfquad_m : green's function quadriture on the input vector */
+void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec6_t params, cvec3_t order);
+
+/* molt_makel : applies dirichlet boundary conditions to the line in */
+void molt_makel(struct molt_cfg_t *cfg, f64 *arr, pdvec6_t params, f64 minval, s64 len);
+
+/* molt_vect_mul : perform element-wise vector multiplication */
+f64 molt_vect_mul(f64 *veca, f64 *vecb, s32 veclen);
+
 #ifdef MOLT_IMPLEMENTATION
+
+// TODO remove if possible
+#include <float.h>
 
 static cvec3_t molt_ord_xyz = {'x', 'y', 'z'};
 static cvec3_t molt_ord_xzy = {'x', 'z', 'y'};
@@ -120,6 +138,8 @@ static cvec3_t molt_ord_yxz = {'y', 'x', 'z'};
 static cvec3_t molt_ord_yzx = {'y', 'z', 'x'};
 static cvec3_t molt_ord_zxy = {'z', 'x', 'y'};
 static cvec3_t molt_ord_zyx = {'z', 'y', 'x'};
+
+static s32 molt_gfquad_bound(s32 idx, s32 m2, s32 len);
 
 /* molt_cfg_dims_t : initializes, very explicitly, cfg's time parameters */
 void molt_cfg_dims_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc)
@@ -161,6 +181,21 @@ void molt_cfg_dims_z(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 
 	cfg->z_params[MOLT_PARAM_PINC]   = pointsinc;
 }
 
+/* molt_cfg_parampull_gen : generic param puller for an order, config idx and the order's idx */
+s64 molt_cfg_parampull_gen(struct molt_cfg_t *cfg, s32 oidx, s32 cfgidx, cvec3_t order)
+{
+	switch (order[oidx]) {
+	case 'x':
+		return cfg->x_params[cfgidx];
+	case 'y':
+		return cfg->y_params[cfgidx];
+	case 'z':
+		return cfg->z_params[cfgidx];
+	}
+
+	return -1;
+}
+
 /* molt_cfg_set_intscale : sets the integer scale value (trivial) */
 void molt_cfg_set_intscale(struct molt_cfg_t *cfg, f64 scale)
 {
@@ -193,6 +228,54 @@ void molt_cfg_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc)
 	cfg->beta_sq = pow(cfg->beta, 2);
 	cfg->beta_fo = pow(cfg->beta, 4) / 12;
 	cfg->beta_si = pow(cfg->beta, 6) / 360;
+}
+
+/* molt_cfg_set_workstore : auto sets up the working store with the CRT */
+void molt_cfg_set_workstore(struct molt_cfg_t *cfg)
+{
+	/*
+	 * NOTE
+	 * assumes the following:
+	 *
+	 * These have the dimensionality of the mesh:
+	 *   workstore[0, 1, 2]       Used in molt_step3v
+	 *   workstore[3, 4, 5, 6, 7] Used in the C and D operators
+	 *
+	 * This has the dimensionality of the LONGEST dimension
+	 *   workstore[8]             Used in molt_sweep
+	 */
+
+	ivec3_t dim;
+	s64 elems, len, i;
+
+	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_PINC);
+	elems = ((s64)dim[0]) * dim[1] * dim[2];
+
+	for (i = 0, len = dim[0]; i < 3; i++) {
+		if (len < dim[i])
+			len = dim[i];
+	}
+
+	for (i = 0; i < 8; i++) {
+		cfg->workstore[i] = malloc(sizeof(f64) * elems);
+	}
+
+	cfg->worksweep = malloc(sizeof(f64) * len);
+}
+
+/* molt_cfg_free_workstore : frees all of the working storage */
+void molt_cfg_free_workstore(struct molt_cfg_t *cfg)
+{
+	s32 i;
+
+	for (i = 0; i < 8; i++) {
+		free(cfg->workstore[i]);
+	}
+
+	free(cfg->worksweep);
+
+	memset(cfg->workstore, 0, sizeof cfg->workstore);
+	cfg->worksweep = NULL;
 }
 
 /* molt_cfg_parampull_xyz : helper func to pull out xyz params into dst */
@@ -386,9 +469,9 @@ void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw,
 
 	totalelem = ((u64)mesh_dim[0]) * mesh_dim[1] * mesh_dim[2];
 
-	work_d1 = malloc(sizeof(f64) * totalelem);
-	work_d2 = malloc(sizeof(f64) * totalelem);
-	work_d3 = malloc(sizeof(f64) * totalelem);
+	work_d1 = cfg->workstore[0];
+	work_d2 = cfg->workstore[1];
+	work_d3 = cfg->workstore[2];
 
 	next = vol[MOLT_VOL_NEXT];
 	curr = vol[MOLT_VOL_CURR];
@@ -403,7 +486,7 @@ void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw,
 	}
 
 	// now we can begin doing work
-	opstor[0] = work_d1, opstor[1] = curr;
+	opstor[0] = work_d1, opstor[1] = next;
 	molt_c_op(cfg, opstor, nu, vw, ww);
 
 	// u = u + beta ^ 2 * D1
@@ -445,10 +528,6 @@ void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw,
 		// next = next + 2 * curr - prev
 		for (i = 0; i < totalelem; i++) { next[i] += 2 * curr[i] - prev[i]; }
 	}
-
-	free(work_d1);
-	free(work_d2);
-	free(work_d3);
 }
 
 /* molt_d_op : MOLT's D Convolution Operator*/
@@ -486,7 +565,6 @@ void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, p
 	ivec3_t mesh_dim;
 	f64 *work_ix, *work_iy, *work_iz, *work_tmp;
 	f64 *src, *dst;
-	f64 tmp;
 
 	pdvec6_t x_sweep_params, y_sweep_params, z_sweep_params;
 
@@ -519,10 +597,10 @@ void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, p
 	z_sweep_params[4] = ww[4];
 	z_sweep_params[5] = ww[5];
 
-	work_ix  = malloc(sizeof(f64) * totalelem);
-	work_iy  = malloc(sizeof(f64) * totalelem);
-	work_iz  = malloc(sizeof(f64) * totalelem);
-	work_tmp = malloc(sizeof(f64) * totalelem);
+	work_ix  = cfg->workstore[3];
+	work_iy  = cfg->workstore[4];
+	work_iz  = cfg->workstore[5];
+	work_tmp = cfg->workstore[6];
 
 	// sweep in x, y, z
 	molt_sweep(cfg, work_ix,     src, x_sweep_params, molt_ord_xyz);
@@ -577,7 +655,6 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, p
 	ivec3_t mesh_dim;
 	f64 *work_ix, *work_iy, *work_iz, *work_tmp, *work_tmp_;
 	f64 *src, *dst;
-	f64 tmp;
 
 	pdvec6_t x_sweep_params, y_sweep_params, z_sweep_params;
 
@@ -610,11 +687,11 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, p
 	z_sweep_params[4] = ww[4];
 	z_sweep_params[5] = ww[5];
 
-	work_ix   = malloc(sizeof(f64) * totalelem);
-	work_iy   = malloc(sizeof(f64) * totalelem);
-	work_iz   = malloc(sizeof(f64) * totalelem);
-	work_tmp  = malloc(sizeof(f64) * totalelem);
-	work_tmp_ = malloc(sizeof(f64) * totalelem);
+	work_ix   = cfg->workstore[3];
+	work_iy   = cfg->workstore[4];
+	work_iz   = cfg->workstore[5];
+	work_tmp  = cfg->workstore[6];
+	work_tmp_ = cfg->workstore[7];
 
 	// sweep in x, y, z
 	molt_sweep(cfg, work_ix,     src, x_sweep_params, molt_ord_xyz);
@@ -664,6 +741,153 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, p
 /* molt_sweep : performs a sweep across the mesh in the dimension specified */
 void molt_sweep(struct molt_cfg_t *cfg, f64 *dst, f64 *src, pdvec6_t params, cvec3_t order)
 {
+	ivec3_t dim;
+	f64 *ptr, minval;
+	s64 rowlen, rownum, i;
+
+	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_PINC);
+
+	// fetch the row's length and the number of rows
+	rowlen  = molt_cfg_parampull_gen(cfg, 0, MOLT_PARAM_PINC, order);
+	rownum  = molt_cfg_parampull_gen(cfg, 1, MOLT_PARAM_PINC, order);
+	rownum *= molt_cfg_parampull_gen(cfg, 2, MOLT_PARAM_PINC, order);
+
+	// find the minval (dN in Matlab)
+	for (i = 0, minval = DBL_MAX; i < rowlen; i++) {
+		if (src[i] < minval)
+			minval = src[i];
+	}
+
+	// walk through the volume, grabbing each row-organized value
+	for (i = 0, ptr = src; i < rownum; i++, ptr += rowlen) {
+		molt_gfquad_m(cfg, cfg->worksweep, ptr, params, order);
+		molt_makel(cfg, cfg->worksweep, params, minval, rowlen);
+		memcpy(ptr, cfg->worksweep, sizeof(f64) * rowlen);
+	}
+}
+
+/* molt_gfquad_m : green's function quadriture on the input vector */
+void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec6_t params, cvec3_t order)
+{
+	/* out and in's length is defined by hunklen */
+	f64 IL, IR;
+	s32 iL, iR, iC, M2, N;
+	s32 i, bound, orderm;
+	s64 rowlen;
+
+	f64 *d  = params[1];
+	f64 *wl = params[4];
+	f64 *wr = params[5];
+
+	rowlen = molt_cfg_parampull_gen(cfg, 0, MOLT_PARAM_PINC, order);
+	orderm = cfg->spaceacc;
+
+	IL = 0;
+	IR = 0;
+	M2 = orderm / 2;
+	N = rowlen - 1;
+
+	orderm++;
+
+	iL = 0;
+	iC = -M2;
+	iR = rowlen - orderm;
+
+	for (i = 0; i < rowlen; i++) { /* left */
+		bound = molt_gfquad_bound(i, M2, N);
+
+		switch (bound) {
+		case -1: // left bound
+			IL = d[i] * IL + molt_vect_mul(&wl[i * orderm], &in[iL], orderm);
+			break;
+		case 0: // center
+			IL = d[i] * IL + molt_vect_mul(&wl[i * orderm], &in[i + 1 + iC], orderm);
+			break;
+		case 1:
+			IL = d[i] * IL + molt_vect_mul(&wl[i * orderm], &in[iR], orderm);
+			break;
+		}
+
+		out[i + 1] = out[i + 1] + IL;
+	}
+
+	for (i = rowlen - 1; i >= 0; i--) { /* right */
+		bound = molt_gfquad_bound(i, M2, N);
+
+		switch (bound) {
+		case -1: // left bound
+			IR = d[i] * IR + molt_vect_mul(&wr[i * orderm], &in[iL], orderm);
+			break;
+		case 0: // center
+			IR = d[i] * IR + molt_vect_mul(&wr[i * orderm], &in[i + iC], orderm);
+			break;
+		case 1: // right
+			IR = d[i] * IR + molt_vect_mul(&wr[i * orderm], &in[iR], orderm);
+			break;
+		}
+
+		out[i] = out[i] + IR;
+	}
+}
+
+/* molt_gfquad_bound : return easy bound parameters for gfquad */
+static s32 molt_gfquad_bound(s32 idx, s32 m2, s32 len)
+{
+	if (0 <= idx && idx < m2) {
+		return -1;
+	}
+
+	if (m2 <= idx && idx <= len - m2) {
+		return 0;
+	}
+
+	if (len - m2 <= idx && idx <= len) {
+		return 1;
+	}
+
+	assert(0);
+	return 0;
+}
+
+/* molt_makel : applies dirichlet boundary conditions to the line in */
+void molt_makel(struct molt_cfg_t *cfg, f64 *arr, pdvec6_t params, f64 minval, s64 len)
+{
+	/*
+	 * molt_makel applies dirichlet boundary conditions to the line in place
+	 *
+	 * Executes this 
+	 * w = w + ((wa - w(1)) * (vL - dN * vR) + (wb - w(end)) * (vR - dN * vL))
+	 *			/ (1 - dN ^ 2)
+	 *
+	 * NOTE(s)
+	 * wa and wb are left here as const scalars for future expansion of boundary
+	 * conditions.
+	 */
+
+	f64 *vl, *vr;
+	f64 wa_use, wb_use, wc_use;
+	f64 val;
+	s64 i;
+
+	const f64 wa = 0;
+	const f64 wb = 0;
+
+	vl = params[2];
+	vr = params[3];
+
+	// * wa_use - w(1)
+	// * wb_use - w(end)
+	// * wc_use - 1 - dN ^ 2
+	wa_use = wa - arr[0];
+	wb_use = wb - arr[len - 1];
+	wc_use = 1 - pow(minval, 2);
+
+	for (i = 0; i < len; i++) {
+		val  = wa_use * vl[i] - minval * vr[i];
+		val += wb_use * vr[i] - minval * vl[i];
+		val /= wc_use;
+		arr[i] += val;
+	}
 }
 
 /* mk_genericidx : retrieves a generic index from input dimensionality */
@@ -684,8 +908,8 @@ static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order)
 	 * the output index
 	 */
 
-	s32 i, *p;
 	ivec3_t lval, ldim;
+	s32 i;
 
 	for (i = 0; i < 3; i++) {
 		switch (order[i]) {
@@ -704,7 +928,7 @@ static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order)
 		}
 	}
 
-	return IDX3D(ival[0], ival[1], ival[2], ldim[1], ldim[2]);
+	return IDX3D(lval[0], lval[1], lval[2], ldim[1], ldim[2]);
 }
 
 
@@ -742,377 +966,8 @@ void molt_reorg(struct molt_cfg_t *cfg, f64 *dst, f64 *src, f64 *work, cvec3_t s
 	memcpy(dst, src, sizeof(*dst) * total);
 }
 
-#if 0
-
-// TODO move this
-static inline s32 gfquad_bound(s32 idx, s32 orderm, s32 len);
-
-/* do_c_op : The MOLT C Operator */
-static void do_c_op(f64 *dst, f64 *src, struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
-
-/* do_d_op : The MOLT D Operator */
-static void do_d_op(f64 *dst, f64 *src, struct cfg_t *cfg, lnu_t *nu, lvweight_t *vw, lwweight_t *ww);
-
-static
-void mesh3_swap(f64 *out, f64* in, ivec3_t *dim, cvec3_t from, cvec3_t to);
-
-static inline u64 mk_genericidx(ivec3_t inpts, ivec3_t dim, cvec3_t order);
-
-/* meshdim_swap : swaps the dim values in dim from 'from' to 'to' */
-static void meshdim_swap(ivec3_t *dim, cvec3_t from, cvec3_t to);
-
-static void mk_genericdim(ivec3_t *out, ivec3_t dim, cvec3_t to);
-
-static void matrix_subtract(f64 *out, f64 *ina, f64 *inb, ivec3_t dim);
-static f64 minarr(f64 *arr, s32 arrlen);
-static f64 vect_mul(f64 *veca, f64 *vecb, s32 veclen);
-
-static void
-do_sweep
-(f64 *mesh, f64 *work, f64 *dvec, f64 *vl_r, f64 *vr_r,
- f64 *vl_w, f64 *vr_w, f64 *wl, f64 *wr, s32 rowlen, s32 iters,
- s32 vw_len, s32 wx_len, s32 wy_len, s32 orderm);
-
-
-static void
-gfquad(f64 *out, f64 *in, f64 *d, f64 *wl, f64 *wr,
-		s32 veclen, s32 orderm, s32 wxlen, s32 wylen);
-
-static void
-make_l(f64 *vec, f64 *vl_r, f64 *vr_r, f64 *vl_w, f64 *vr_w,
-		f64 wa, f64 wb, f64 dn, s32 vlen);
-
-/* BEGIN PUBLIC MOLT ROUTINES */
-
-/* do_sweep : sweeps iters times over rowlen strides of mesh data */
-static void
-do_sweep
-(f64 *mesh, f64 *work, f64 *dvec, f64 *vl_r, f64 *vr_r,
- f64 *vl_w, f64 *vr_w, f64 *wl, f64 *wr, s32 rowlen, s32 iters,
- s32 vw_len, s32 wx_len, s32 wy_len, s32 orderm)
-{
-	f64 *ptr;
-	f64 minval, minvalsq;
-	f64 wa, wb;
-	s32 i;
-
-	// NOTE (brian) wa and wb both have to deal with boundary conditions and
-	// as of writing (07/23/19), both are not used, and left at 0
-
-	wa = 0;
-	wb = 0;
-
-	minval = minarr(vl_r, vw_len);
-
-	// perform iters number of iterations
-	for (i = 0, ptr = mesh; i < iters; i++, ptr += rowlen) {
-		// ptr = mesh + (i * rowlen);
-		memset(work, 0, sizeof(*work) * rowlen);
-		gfquad(work, ptr, dvec, wl, wr, rowlen, orderm, wx_len, wy_len);
-		make_l(work, vl_r, vr_r, vl_w, vr_w, wa, wb, minval, vw_len);
-		memcpy(ptr, work, sizeof(*work) * rowlen);
-	}
-}
-
-/* gfquad : performs green's function quadriture on the input vector */
-static void
-gfquad(f64 *out, f64 *in, f64 *d, f64 *wl, f64 *wr,
-		s32 veclen, s32 orderm, s32 wxlen, s32 wylen)
-{
-	/* out and in's length is defined by hunklen */
-	f64 IL, IR;
-	s32 iL, iR, iC, M2, N;
-	s32 i, bound;
-
-	IL = 0;
-	IR = 0;
-	M2 = orderm / 2;
-	N = veclen - 1;
-
-	orderm++;
-	iL = 0;
-	iC = -M2;
-	iR = veclen - orderm;
-
-	for (i = 0; i < veclen; i++) { /* left */
-		bound = gfquad_bound(i, M2, N);
-
-		switch (bound) {
-		case -1: // left bound
-			IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[iL], orderm);
-			break;
-		case 0: // center
-			IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[i + 1 + iC], orderm);
-			break;
-		case 1:
-			IL = d[i] * IL + vect_mul(&wl[i * orderm], &in[iR], orderm);
-			break;
-		}
-
-		out[i + 1] = out[i + 1] + IL;
-	}
-
-	for (i = veclen - 1; i >= 0; i--) { /* right */
-		bound = gfquad_bound(i, M2, N);
-
-		switch (bound) {
-		case -1: // left bound
-			IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[iL], orderm);
-			break;
-		case 0: // center
-			IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[i + iC], orderm);
-			break;
-		case 1: // right
-			IR = d[i] * IR + vect_mul(&wr[i * orderm], &in[iR], orderm);
-			break;
-		}
-
-		out[i] = out[i] + IR;
-	}
-}
-
-/* gfquad_bound : return easy bound parameters for gfquad */
-static inline s32 gfquad_bound(s32 idx, s32 m2, s32 len)
-{
-	if (0 <= idx && idx <= 0 + m2) {
-		return -1;
-	}
-
-	if (m2 + 1 <= idx && idx <= len - m2) {
-		return 0;
-	}
-
-	if (len - m2 + 1 <= idx && idx <= len) {
-		return 1;
-	}
-
-	assert(0);
-	return 0;
-}
-
-/* make_l : applies dirichlet boundary conditions to the line in */
-static void
-make_l(f64 *vec, f64 *vl_r, f64 *vr_r, f64 *vl_w, f64 *vr_w,
-		f64 wa, f64 wb, f64 dn, s32 vlen)
-{
-	/*
-	 * make_l applies dirichlet boundary conditions to the line in place
-	 *
-	 * w = w + ((wa - w(1)) * (vL - dN * vR) + (wb - w(end)) * (vR - dN * vL))
-	 *			/ (1 - dN ^ 2)
-	 *
-	 * because we need to compute the results of the inner vector expressions,
-	 * and we still need the weights to be correct (vl and vr) from outside the
-	 * function, pointers are suffixed with an _r and a _w to show which is the
-	 * read and write pointers
-	 *
-	 * vec - place to write to
-	 * vl_r, vr_r - vw weights to be read from
-	 * vl_w, vr_w - working space the same size as vl_r and vr_r
-	 * wa, wb     - scalars...(TODO Look Into This)
-	 * dn         - minarr value from the weights (precompute)
-	 * vlen       - length of all of the vectors
-	 */
-
-	f64 wa_use, wb_use, wc_use;
-
-	// * wa - w(1)
-	// * wb - w(end)
-	// * 1 - dN ^ 2
-	wa_use = wa - vec[0];
-	wb_use = wb - vec[vlen - 1];
-	wc_use = 1 - pow(dn, 2);
-
-	// (vL - dN * vR)
-	vec_mul_s(vr_w, vr_r, -1.0 * dn, vlen);
-	vec_add_v(vl_w, vl_r,      vr_w, vlen);
-
-	// (vR - dN * vL)
-	vec_mul_s(vl_w, vl_r, -1.0 * dn, vlen);
-	vec_add_v(vr_w, vr_r,      vl_w, vlen);
-
-	// (wa - w(1)) * (vL - dN * vR)
-	vec_mul_s(vl_w, vl_w, wa_use, vlen);
-
-	// (wb - w(end)) * (vR - dN * vL)
-	vec_mul_s(vr_w, vr_w, wb_use, vlen);
-
-	// add the two computed vectors together
-	vec_add_v(vr_w, vr_w, vl_w, vlen);
-
-	// (...) / (1 - dN ^ 2) (current working answer is in vr_w)
-	vec_mul_s(vr_w, vr_w, 1 / wc_use, vlen);
-
-	// w = w + (...) / (...) (answer is still in vr_w)
-	vec_add_v(vec, vr_w, vec, vlen);
-}
-
-/* mesh3_swap : reorganizes a 3d mesh */
-static
-void mesh3_swap(f64 *out, f64* in, ivec3_t *dim, cvec3_t from, cvec3_t to)
-{
-	/*
-	 * mesh - pointer to the base mesh hunk
-	 * dim  - 0 - x len, 1 - y len, 2 - z len
-	 * curr - current ordering of the dimensions
-	 * order- desired ordering of the dimensions
-	 *
-	 * this function will swap TWO of the THREE elements in our 3d mesh.
-	 * careful bookkeeping for the functions that call this routine HAVE to be
-	 * ensured.
-	 * Keep in mind, this will be replaced by a GPU version that will (probably)
-	 * kick this thing's butt, so it's almost lazy on purpose.
-	 *
-	 * While it might be slow, the function is generalized to work over any of
-	 * the 3 possible swaps we might want, x <-> y, x <-> z, z <-> y. Over the
-	 * loop of the three axis, a switch table is utilized to retrieve a pointer
-	 * between our two elements, after which our swap is performed.
-	 *
-	 * TL;DR, I really hated writing this function. I think it should be better.
-	 *
-	 * WARNING : this WILL fail if the input and output pointers are the same
-	 */
-
-	u64 from_idx, to_idx;
-	ivec3_t idx, ldim;
-
-	// copy from our external dimensionality to our local one
-	ldim[0] = (*dim)[0];
-	ldim[1] = (*dim)[1];
-	ldim[2] = (*dim)[2];
-
-	// first, perform the matrix swaps that are required
-	for (idx[2] = 0; idx[2] < ldim[2]; idx[2]++) {
-		for (idx[1] = 0; idx[1] < ldim[1]; idx[1]++) {
-			for (idx[0] = 0; idx[0] < ldim[0]; idx[0]++) { // for all of our things
-				from_idx = mk_genericidx(idx, ldim, from);
-				to_idx   = mk_genericidx(idx, ldim, to);
-				out[to_idx] = in[from_idx];
-			}
-		}
-	}
-
-	// now ensure that our external dimensionality matches with
-	// what we just swapped around
-	meshdim_swap(dim, from, to);
-}
-
-/* meshdim_swap : swaps the dim values in dim from 'from' to 'to' */
-static void meshdim_swap(ivec3_t *dim, cvec3_t from, cvec3_t to)
-{
-	s32 i, xlen, ylen, zlen;
-
-	xlen = ylen = zlen = -1;
-
-	// retrieve the dimensions into specific, known vars
-	for (i = 0; i < 3; i++) {
-		if (from[i] == 'x') { xlen = (*dim)[i]; }
-		if (from[i] == 'y') { ylen = (*dim)[i]; }
-		if (from[i] == 'z') { zlen = (*dim)[i]; }
-	}
-
-	// now put them back, with a similar technique to above
-	for (i = 0; i < 3; i++) {
-		if (to[i] == 'x') { (*dim)[i] = xlen; }
-		if (to[i] == 'y') { (*dim)[i] = ylen; }
-		if (to[i] == 'z') { (*dim)[i] = zlen; }
-	}
-}
-
-/* mk_genericidx : retrieves a generic index from input dimensionality */
-static inline
-u64 mk_genericidx(ivec3_t inpts, ivec3_t dim, cvec3_t order)
-{
-	/*
-	 * inpts and dim are assumed to come in with the structure:
-	 *   - 0 -> x
-	 *   - 1 -> y
-	 *   - 2 -> z
-	 *
-	 * and the order vector is used to reorganize them to provide us with
-	 * the output index
-	 */
-
-	s32 i;
-	ivec3_t outpts, tmp;
-
-	VectorCopy(dim, tmp);
-
-	for (i = 0; i < 3; i++) {
-		switch (order[i]) {
-		case 'x':
-			outpts[i] = inpts[0];
-			tmp[i] = dim[0];
-			break;
-		case 'y':
-			outpts[i] = inpts[1];
-			tmp[i] = dim[1];
-			break;
-		case 'z':
-			outpts[i] = inpts[2];
-			tmp[i] = dim[2];
-			break;
-		}
-	}
-
-	return IDX3D(outpts[0], outpts[1], outpts[2], tmp[1], tmp[2]);
-}
-
-/* mk_genericdim : reorders dim in x,y,z to the 'to' specification */
-static void mk_genericdim(ivec3_t *out, ivec3_t dim, cvec3_t to)
-{
-	s32 i;
-
-	for (i = 0; i < 3; i++) {
-		switch (to[i]) {
-		case 'x':
-			(*out)[i] = dim[0];
-			break;
-		case 'y':
-			(*out)[i] = dim[1];
-			break;
-		case 'z':
-			(*out)[i] = dim[2];
-			break;
-		}
-	}
-}
-
-/* matrix_subtract : subtracts inb from ina storing in out */
-static
-void matrix_subtract(f64 *out, f64 *ina, f64 *inb, ivec3_t dim)
-{
-	ivec3_t idx;
-	s32 i;
-
-	for (idx[0] = 0; idx[0] < dim[0]; idx[0]++) {
-		for (idx[1] = 0; idx[2] < dim[0]; idx[1]++) {
-			for (idx[2] = 0; idx[2] < dim[0]; idx[2]++) {
-				i = IDX3D(idx[0], idx[1], idx[2], dim[1], dim[2]);
-				out[i] = ina[i] - inb[i];
-			}
-		}
-	}
-}
-
-/* minarr : finds the minimum f64 value in an array in linear time */
-static f64 minarr(f64 *arr, s32 arrlen)
-{
-	f64 retval;
-	s32 i;
-
-	retval = DBL_MAX;
-
-	for (i = 0; i < arrlen; i++) {
-		if (arr[i] < retval)
-			retval = arr[i];
-	}
-
-	return retval;
-}
-
-/* vect_mul : perform element-wise vector multiplication */
-static f64 vect_mul(f64 *veca, f64 *vecb, s32 veclen)
+/* molt_vect_mul : perform element-wise vector multiplication */
+f64 molt_vect_mul(f64 *veca, f64 *vecb, s32 veclen)
 {
 	f64 val;
 	s32 i;
@@ -1123,8 +978,6 @@ static f64 vect_mul(f64 *veca, f64 *vecb, s32 veclen)
 
 	return val;
 }
-
-#endif
 
 #endif // MOLT_IMPLEMENTATION
 
