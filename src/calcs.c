@@ -25,12 +25,13 @@
 #define WORKINGSTACKN 12
 
 /* get_exp_weights : construct local weights for int up to order M */
-void get_exp_weights(f64 *nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm)
+void get_exp_weights(f64 nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm)
 {
 	int i, j, k;
 	int rowlen, reallen;
 	double *x, *phi, *workvect_r, *workvect_l;
 	double *workmat_r, *workmat_l;
+	double tmpnu;
 
 	rowlen = orderm + 1;
 	reallen = nulen + 1;
@@ -47,21 +48,20 @@ void get_exp_weights(f64 *nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm)
 		PRINT_AND_DIE("Couldn't Get Enough Memory");
 	}
 
-	/* get the cumulative sum, store in X */
-	memcpy(x + 1, nu, sizeof(double) * nulen);
-	cumsum(x, reallen);
+	// fetch the cumulative sum of nu
+	nu_cumsum(x, nu, reallen);
 
 	for (i = 0; i < nulen; i++) {
 		/* get the current coefficients */
-		exp_coeff(phi, rowlen, nu[i]);
+		exp_coeff(phi, rowlen, nu);
 
 		/* determine what indicies we need to operate over */
 		j = get_exp_ind(i, nulen, orderm);
 
 		/* fill our our Z vectors */
 		for (k = 0; k < rowlen; k++) {
-			workvect_r[k] = (x[j + k] - x[i]) / nu[i];
-			workvect_l[k] = (x[i + 1] - x[j + k]) / nu[i];
+			workvect_r[k] = (x[j + k] - x[i    ]) / nu;
+			workvect_l[k] = (x[i + 1] - x[j + k]) / nu;
 		}
 
 		invvan(workmat_l, workvect_l, rowlen);
@@ -217,16 +217,16 @@ double polyval(double *vect, double scale, int vectlen)
 	return retval;
 }
 
-/* cumsum : perform a cumulative sum over elem along dimension dim */
-void cumsum(double *elem, int len)
+/* nu_cumsum : perform a cumulative sum over elem along dimension dim */
+void nu_cumsum(double *elem, double nu, int len)
 {
 	/* this function models octave behavior, not what it states it does IMO */
-	double curr;
 	int i;
 
-	for (i = 0, curr = 0.0; i < len; i++) {
-		curr += elem[i];
-		elem[i] = curr;
+	memset(elem, 0, sizeof(*elem) * len);
+
+	for (i = 0; i < len; i++, nu += nu) {
+		elem[i] += nu;
 	}
 }
 

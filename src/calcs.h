@@ -15,7 +15,7 @@
 #include "common.h"
 
 /* get_exp_weights : construct local weights for int up to order M */
-void get_exp_weights(f64 *nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm);
+void get_exp_weights(f64 nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm);
 
 /* get_exp_ind : get indexes of X for get_exp_weights */
 int get_exp_ind(int i, int n, int m);
@@ -41,8 +41,8 @@ void polydiv(double *dst, double *src, double scale, int dstlen, int srclen);
 /* polyval : evaluate a polynomial at x = z */
 double polyval(double *vect, double scale, int vectlen);
 
-/* cumsum : perform a cumulative sum over elem along dimension dim */
-void cumsum(double *elem, int len);
+/* nu_cumsum : perform a cumulative sum over elem along dimension dim */
+void nu_cumsum(double *elem, double nu, int len);
 
 /* exp_coeff : find the exponential coefficients, given nu and M */
 void exp_coeff(double *phi, int philen, double nu);

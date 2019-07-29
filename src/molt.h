@@ -14,11 +14,14 @@
  * 3. Define DBL_MAX and friends without the C standard library (?)
  * 4. Change the vectored datatypes to be "mo_*" or "molt_*"
  *    The latter has a lot of typing.
+ * 5. Define enums or macros for param indicies
  *
  *    Maybe we could just have #defines setup to turn on or off parts of
  *    the library? Dunno.
  *
  * 5. Include file-configurable function qualifier (static, static inline, etc)
+ *
+ * 6. Clean up the other routine calling conventions. (Oops)
  *
  * TODO Future
  * ?. Consider putting in the alpha calculation
@@ -66,6 +69,12 @@ struct molt_cfg_t {
 	f64 beta_si; // b^6 term in sweeping function
 	f64 alpha;
 
+	// NOTE (brian) we can keep nu as a set of scalars as there's unsolved
+	// geometry issues to be solved, should we want to really change the
+	// granularity of the mesh
+	dvec3_t nu;
+	dvec3_t dnu;
+
 	// working storage for simulation
 	f64 *workstore[8];
 	f64 *worksweep;
@@ -78,6 +87,7 @@ void molt_cfg_dims_y(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 
 void molt_cfg_dims_z(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc);
 void molt_cfg_set_intscale(struct molt_cfg_t *cfg, f64 scale);
 void molt_cfg_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc);
+void molt_cfg_set_nu(struct molt_cfg_t *cfg);
 void molt_cfg_parampull_xyz(struct molt_cfg_t *cfg, s32 *dst, s32 param);
 s64 molt_cfg_parampull_gen(struct molt_cfg_t *cfg, s32 oidx, s32 cfgidx, cvec3_t order);
 
@@ -85,44 +95,41 @@ void molt_cfg_set_workstore(struct molt_cfg_t *cfg);
 void molt_cfg_free_workstore(struct molt_cfg_t *cfg);
 
 /* molt_step%v : a concise way to setup some parameters for whatever dim is being used */
-void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw, pdvec6_t ww, u32 flags);
-void molt_step2v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec4_t nu, pdvec4_t vw, pdvec4_t ww, u32 flags);
-void molt_step1v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec2_t nu, pdvec2_t vw, pdvec2_t ww, u32 flags);
+void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u32 flags);
+void molt_step2v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec4_t vw, pdvec4_t ww, u32 flags);
+void molt_step1v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec2_t vw, pdvec2_t ww, u32 flags);
 
 /* molt_step%f : a less concise, yet more explicit approach to the same thing */
 void molt_step1f(struct molt_cfg_t *cfg,
 		f64 *next, f64 *curr, f64 *prev,
-		f64 *nu_x, f64 *dnu_x,
 		f64 *vl_x, f64 *vr_x,
 		f64 *wl_x, f64 *wr_x, u32 flags);
 
 void molt_step2f(struct molt_cfg_t *cfg,
 		f64 *next, f64 *curr, f64 *prev,
-		f64 *nu_x, f64 *dnu_x, f64 *nu_y, f64 *dnu_y,
 		f64 *vl_x, f64 *vr_x, f64 *vl_y, f64 *vr_y,
 		f64 *wl_x, f64 *wr_x, f64 *wl_y, f64 *wr_y, u32 flags);
 
 void molt_step3f(struct molt_cfg_t *cfg,
 		f64 *next, f64 *curr, f64 *prev,
-		f64 *nu_x, f64 *dnu_x, f64 *nu_y, f64 *dnu_y, f64 *nu_z, f64 *dnu_z,
 		f64 *vl_x, f64 *vr_x, f64 *vl_y, f64 *vr_y, f64 *vl_z, f64 *vr_z,
 		f64 *wl_x, f64 *wr_x, f64 *wl_y, f64 *wr_y, f64 *wl_z, f64 *wr_z, u32 flags);
 
 
-void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, pdvec6_t ww);
-void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, pdvec6_t ww);
+void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww);
+void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww);
 
 // molt_sweep : performs a sweep across the mesh in the dimension specified
-void molt_sweep(struct molt_cfg_t *cfg, f64 *dst, f64 *src, pdvec6_t params, cvec3_t order);
+void molt_sweep(struct molt_cfg_t *cfg, f64 *dst, f64 *src, pdvec4_t params, cvec3_t order);
 
 /* molt_reorg : reorganize a 3d volume */
 void molt_reorg(struct molt_cfg_t *cfg, f64 *dst, f64 *src, f64 *work, cvec3_t src_ord, cvec3_t dst_ord);
 
 /* molt_gfquad_m : green's function quadriture on the input vector */
-void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec6_t params, cvec3_t order);
+void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, cvec3_t order);
 
 /* molt_makel : applies dirichlet boundary conditions to the line in */
-void molt_makel(struct molt_cfg_t *cfg, f64 *arr, pdvec6_t params, f64 minval, s64 len);
+void molt_makel(struct molt_cfg_t *cfg, f64 *arr, pdvec4_t params, f64 minval, s64 len);
 
 /* molt_vect_mul : perform element-wise vector multiplication */
 f64 molt_vect_mul(f64 *veca, f64 *vecb, s32 veclen);
@@ -230,6 +237,19 @@ void molt_cfg_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc)
 	cfg->beta_si = pow(cfg->beta, 6) / 360;
 }
 
+/* molt_cfg_set_nu : computes nu and dnu values from existing cfg structure */
+void molt_cfg_set_nu(struct molt_cfg_t *cfg)
+{
+	assert(cfg->alpha);
+
+	cfg->nu[0] = cfg->int_scale * cfg->x_params[MOLT_PARAM_STEP] * cfg->alpha;
+	cfg->nu[1] = cfg->int_scale * cfg->y_params[MOLT_PARAM_STEP] * cfg->alpha;
+	cfg->nu[2] = cfg->int_scale * cfg->z_params[MOLT_PARAM_STEP] * cfg->alpha;
+	cfg->dnu[0] = exp(-cfg->nu[0]);
+	cfg->dnu[1] = exp(-cfg->nu[1]);
+	cfg->dnu[2] = exp(-cfg->nu[2]);
+}
+
 /* molt_cfg_set_workstore : auto sets up the working store with the CRT */
 void molt_cfg_set_workstore(struct molt_cfg_t *cfg)
 {
@@ -290,39 +310,36 @@ void molt_cfg_parampull_xyz(struct molt_cfg_t *cfg, s32 *dst, s32 param)
 /* molt_step1f : explicit parameter for molt stepping in 1d */
 void molt_step1f(struct molt_cfg_t *cfg,
 		f64 *next, f64 *curr, f64 *prev,
-		f64 *nu_x, f64 *dnu_x,
 		f64 *vl_x, f64 *vr_x,
 		f64 *wl_x, f64 *wr_x, u32 flags)
 {
 	// NOTE we really just setup params for molt_step3v, and execute that
-	pdvec3_t vol, nu, vw, ww;
+	pdvec3_t vol;
+	pdvec6_t vw, ww;
 
 	memset(&vol, 0, sizeof vol);
-	memset( &nu, 0, sizeof nu);
 	memset( &vw, 0, sizeof vw);
 	memset( &ww, 0, sizeof ww);
 
 	// MOV parameters
 	vol[0] = next; vol[1] = curr; vol[2] = prev;
-	nu[0] = nu_x; nu[1] = dnu_x;
 	vw[0] = vl_x; vw[1] = vr_x;
 	ww[0] = wl_x; ww[1] = wr_x;
 
-	molt_step3v(cfg, vol, nu, vw, ww, flags);
+	molt_step3v(cfg, vol, vw, ww, flags);
 }
 
 /* molt_step2f : explicit parameter for molt stepping in 2d */
 void molt_step2f(struct molt_cfg_t *cfg,
 		f64 *next, f64 *curr, f64 *prev,
-		f64 *nu_x, f64 *dnu_x, f64 *nu_y, f64 *dnu_y,
 		f64 *vl_x, f64 *vr_x, f64 *vl_y, f64 *vr_y,
 		f64 *wl_x, f64 *wr_x, f64 *wl_y, f64 *wr_y, u32 flags)
 {
 	// NOTE we really just setup params for molt_step3v, and execute that
-	pdvec3_t vol, nu, vw, ww;
+	pdvec3_t vol;
+	pdvec4_t vw, ww;
 
 	memset(&vol, 0, sizeof vol);
-	memset( &nu, 0, sizeof nu);
 	memset( &vw, 0, sizeof vw);
 	memset( &ww, 0, sizeof ww);
 
@@ -330,11 +347,6 @@ void molt_step2f(struct molt_cfg_t *cfg,
 	vol[0] = next;
 	vol[1] = curr;
 	vol[2] = prev;
-
-	nu[0] = nu_x;
-	nu[1] = dnu_x;
-	nu[2] = nu_y;
-	nu[3] = dnu_y;
 
 	vw[0] = vl_x;
 	vw[1] = vr_x;
@@ -346,21 +358,20 @@ void molt_step2f(struct molt_cfg_t *cfg,
 	ww[2] = wl_y;
 	ww[3] = wr_y;
 
-	molt_step3v(cfg, vol, nu, vw, ww, flags);
+	molt_step3v(cfg, vol, vw, ww, flags);
 }
 
 /* molt_step3f : explicit parameter for molt stepping in 3d */
 void molt_step3f(struct molt_cfg_t *cfg,
 		f64 *next, f64 *curr, f64 *prev,
-		f64 *nu_x, f64 *dnu_x, f64 *nu_y, f64 *dnu_y, f64 *nu_z, f64 *dnu_z,
 		f64 *vl_x, f64 *vr_x, f64 *vl_y, f64 *vr_y, f64 *vl_z, f64 *vr_z,
 		f64 *wl_x, f64 *wr_x, f64 *wl_y, f64 *wr_y, f64 *wl_z, f64 *wr_z, u32 flags)
 {
 	// NOTE we really just setup params for molt_step3v, and execute that
-	pdvec3_t vol, nu, vw, ww;
+	pdvec3_t vol;
+	pdvec6_t vw, ww;
 
 	memset(&vol, 0, sizeof vol);
-	memset( &nu, 0, sizeof nu);
 	memset( &vw, 0, sizeof vw);
 	memset( &ww, 0, sizeof ww);
 
@@ -368,13 +379,6 @@ void molt_step3f(struct molt_cfg_t *cfg,
 	vol[0] = next;
 	vol[1] = curr;
 	vol[2] = prev;
-
-	nu[0] = nu_x;
-	nu[1] = dnu_x;
-	nu[2] = nu_y;
-	nu[3] = dnu_y;
-	nu[4] = nu_z;
-	nu[5] = dnu_z;
 
 	vw[0] = vl_x;
 	vw[1] = vr_x;
@@ -390,26 +394,17 @@ void molt_step3f(struct molt_cfg_t *cfg,
 	ww[4] = wl_z;
 	ww[5] = wr_z;
 
-	molt_step3v(cfg, vol, nu, vw, ww, flags);
+	molt_step3v(cfg, vol, vw, ww, flags);
 }
 
 /* molt_step1v : concise function for calling molt_step3v from 1d data */
-void molt_step1v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec2_t nu, pdvec2_t vw, pdvec2_t ww, u32 flags)
+void molt_step1v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec2_t vw, pdvec2_t ww, u32 flags)
 {
 	// NOTE we really just setup params for molt_step3v, and execute that
-	pdvec3_t outvol, outnu, outvw, outww;
+	pdvec6_t outvw, outww;
 
-	memset(&outvol, 0, sizeof outvol);
-	memset( &outnu, 0, sizeof outnu);
 	memset( &outvw, 0, sizeof outvw);
 	memset( &outww, 0, sizeof outww);
-
-	outvol[0] = vol[0];
-	outvol[1] = vol[1];
-	outvol[2] = vol[2];
-
-	outnu[0] = nu[0];
-	outnu[1] = nu[1];
 
 	outvw[0] = vw[0];
 	outvw[1] = vw[1];
@@ -417,29 +412,17 @@ void molt_step1v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec2_t nu, pdvec2_t vw,
 	outww[0] = ww[0];
 	outww[1] = ww[1];
 
-	molt_step3v(cfg, vol, nu, vw, ww, flags);
+	molt_step3v(cfg, vol, outvw, outww, flags);
 }
 
 /* molt_step2v : concise function for calling molt_step3v from 2d data */
-void molt_step2v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec4_t nu, pdvec4_t vw, pdvec4_t ww, u32 flags)
+void molt_step2v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec4_t vw, pdvec4_t ww, u32 flags)
 {
 	// NOTE we really just setup params for molt_step3v, and execute that
-	pdvec3_t outvol, outnu, outvw, outww;
+	pdvec6_t outvw, outww;
 
-	memset(&outvol, 0, sizeof outvol);
-	memset( &outnu, 0, sizeof outnu);
 	memset( &outvw, 0, sizeof outvw);
 	memset( &outww, 0, sizeof outww);
-
-	// copy the params one by one
-	outvol[0] = vol[0];
-	outvol[1] = vol[1];
-	outvol[2] = vol[2];
-
-	outnu[0] = nu[0];
-	outnu[1] = nu[1];
-	outnu[2] = nu[2];
-	outnu[3] = nu[3];
 
 	outvw[0] = vw[0];
 	outvw[1] = vw[1];
@@ -451,11 +434,11 @@ void molt_step2v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec4_t nu, pdvec4_t vw,
 	outww[2] = ww[2];
 	outww[3] = ww[3];
 
-	molt_step3v(cfg, vol, nu, vw, ww, flags);
+	molt_step3v(cfg, vol, vw, ww, flags);
 }
 
 /* molt_step3v : the actual MOLT function, everything else is sugar */
-void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw, pdvec6_t ww, u32 flags)
+void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u32 flags)
 {
 	u64 totalelem, i;
 	ivec3_t mesh_dim;
@@ -487,7 +470,7 @@ void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw,
 
 	// now we can begin doing work
 	opstor[0] = work_d1, opstor[1] = next;
-	molt_c_op(cfg, opstor, nu, vw, ww);
+	molt_c_op(cfg, opstor, vw, ww);
 
 	// u = u + beta ^ 2 * D1
 	for (i = 0; i < totalelem; i++) {
@@ -496,9 +479,9 @@ void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw,
 
 	if (cfg->timeacc >= 2) {
 		opstor[0] = work_d2, opstor[1] = work_d1;
-		molt_c_op(cfg, opstor, nu, vw, ww);
+		molt_c_op(cfg, opstor, vw, ww);
 		opstor[0] = work_d1, opstor[1] = work_d1;
-		molt_c_op(cfg, opstor, nu, vw, ww);
+		molt_c_op(cfg, opstor, vw, ww);
 
 		// u = u - beta ^ 2 * D2 + beta ^ 4 / 12 * D1
 		for (i = 0; i < totalelem; i++) {
@@ -508,11 +491,11 @@ void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw,
 
 	if (cfg->timeacc >= 3) {
 		opstor[0] = work_d3, opstor[1] = work_d2;
-		molt_c_op(cfg, opstor, nu, vw, ww);
+		molt_c_op(cfg, opstor, vw, ww);
 		opstor[0] = work_d2, opstor[1] = work_d2;
-		molt_c_op(cfg, opstor, nu, vw, ww);
+		molt_c_op(cfg, opstor, vw, ww);
 		opstor[0] = work_d1, opstor[1] = work_d1;
-		molt_c_op(cfg, opstor, nu, vw, ww);
+		molt_c_op(cfg, opstor, vw, ww);
 
 		// u = u + (beta ^ 2 * D3 - 2 * beta ^ 4 / 12 * D2 + beta ^ 6 / 360 * D1)
 		for (i = 0; i < totalelem; i++) {
@@ -531,7 +514,7 @@ void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t nu, pdvec6_t vw,
 }
 
 /* molt_d_op : MOLT's D Convolution Operator*/
-void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, pdvec6_t ww)
+void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 {
 	/*
 	 * NOTE (brian)
@@ -576,26 +559,20 @@ void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, p
 
 	totalelem = ((u64)mesh_dim[0]) * mesh_dim[1] * mesh_dim[2];
 
-	x_sweep_params[0] = nu[0];
-	x_sweep_params[1] = nu[1];
-	x_sweep_params[2] = vw[0];
-	x_sweep_params[3] = vw[1];
-	x_sweep_params[4] = ww[0];
-	x_sweep_params[5] = ww[1];
+	x_sweep_params[0] = vw[0];
+	x_sweep_params[1] = vw[1];
+	x_sweep_params[2] = ww[0];
+	x_sweep_params[3] = ww[1];
 
-	y_sweep_params[0] = nu[2];
-	y_sweep_params[1] = nu[3];
-	y_sweep_params[2] = vw[2];
-	y_sweep_params[3] = vw[3];
-	y_sweep_params[4] = ww[2];
-	y_sweep_params[5] = ww[3];
+	y_sweep_params[0] = vw[2];
+	y_sweep_params[1] = vw[3];
+	y_sweep_params[2] = ww[2];
+	y_sweep_params[3] = ww[3];
 
-	z_sweep_params[0] = nu[4];
-	z_sweep_params[1] = nu[5];
-	z_sweep_params[2] = vw[4];
-	z_sweep_params[3] = vw[5];
-	z_sweep_params[4] = ww[4];
-	z_sweep_params[5] = ww[5];
+	z_sweep_params[0] = vw[4];
+	z_sweep_params[1] = vw[5];
+	z_sweep_params[2] = ww[4];
+	z_sweep_params[3] = ww[5];
 
 	work_ix  = cfg->workstore[3];
 	work_iy  = cfg->workstore[4];
@@ -640,7 +617,7 @@ void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, p
 }
 
 /* molt_c_op : MOLT's C Convolution Operator*/
-void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, pdvec6_t ww)
+void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 {
 	/*
 	 * NOTE (brian)
@@ -666,26 +643,20 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, p
 
 	totalelem = ((u64)mesh_dim[0]) * mesh_dim[1] * mesh_dim[2];
 
-	x_sweep_params[0] = nu[0];
-	x_sweep_params[1] = nu[1];
-	x_sweep_params[2] = vw[0];
-	x_sweep_params[3] = vw[1];
-	x_sweep_params[4] = ww[0];
-	x_sweep_params[5] = ww[1];
+	x_sweep_params[0] = vw[0];
+	x_sweep_params[1] = vw[1];
+	x_sweep_params[2] = ww[0];
+	x_sweep_params[3] = ww[1];
 
-	y_sweep_params[0] = nu[2];
-	y_sweep_params[1] = nu[3];
-	y_sweep_params[2] = vw[2];
-	y_sweep_params[3] = vw[3];
-	y_sweep_params[4] = ww[2];
-	y_sweep_params[5] = ww[3];
+	y_sweep_params[0] = vw[2];
+	y_sweep_params[1] = vw[3];
+	y_sweep_params[2] = ww[2];
+	y_sweep_params[3] = ww[3];
 
-	z_sweep_params[0] = nu[4];
-	z_sweep_params[1] = nu[5];
-	z_sweep_params[2] = vw[4];
-	z_sweep_params[3] = vw[5];
-	z_sweep_params[4] = ww[4];
-	z_sweep_params[5] = ww[5];
+	z_sweep_params[0] = vw[4];
+	z_sweep_params[1] = vw[5];
+	z_sweep_params[2] = ww[4];
+	z_sweep_params[3] = ww[5];
 
 	work_ix   = cfg->workstore[3];
 	work_iy   = cfg->workstore[4];
@@ -739,7 +710,7 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t nu, pdvec6_t vw, p
 }
 
 /* molt_sweep : performs a sweep across the mesh in the dimension specified */
-void molt_sweep(struct molt_cfg_t *cfg, f64 *dst, f64 *src, pdvec6_t params, cvec3_t order)
+void molt_sweep(struct molt_cfg_t *cfg, f64 *dst, f64 *src, pdvec4_t params, cvec3_t order)
 {
 	ivec3_t dim;
 	f64 *ptr, minval;
@@ -767,17 +738,32 @@ void molt_sweep(struct molt_cfg_t *cfg, f64 *dst, f64 *src, pdvec6_t params, cve
 }
 
 /* molt_gfquad_m : green's function quadriture on the input vector */
-void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec6_t params, cvec3_t order)
+void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, cvec3_t order)
 {
 	/* out and in's length is defined by hunklen */
 	f64 IL, IR;
+	f64 d;
 	s32 iL, iR, iC, M2, N;
 	s32 i, bound, orderm;
 	s64 rowlen;
 
-	f64 *d  = params[1];
-	f64 *wl = params[4];
-	f64 *wr = params[5];
+	// pull out the correct dnu value
+	switch (order[0]) {
+	case 'x':
+		d = cfg->dnu[0];
+		break;
+	case 'y':
+		d = cfg->dnu[1];
+		break;
+	case 'z':
+		d = cfg->dnu[2];
+		break;
+	default:
+		assert(0); // TODO recompute it here ??????
+	}
+
+	f64 *wl = params[2];
+	f64 *wr = params[3];
 
 	rowlen = molt_cfg_parampull_gen(cfg, 0, MOLT_PARAM_PINC, order);
 	orderm = cfg->spaceacc;
@@ -793,41 +779,44 @@ void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec6_t params, c
 	iC = -M2;
 	iR = rowlen - orderm;
 
-	for (i = 0; i < rowlen; i++) { /* left */
+	for (i = 0; i < N; i++) { /* left */
 		bound = molt_gfquad_bound(i, M2, N);
 
 		switch (bound) {
 		case -1: // left bound
-			IL = d[i] * IL + molt_vect_mul(&wl[i * orderm], &in[iL], orderm);
+			IL = d * IL + molt_vect_mul(&wl[i * orderm], &in[iL], orderm);
 			break;
 		case 0: // center
-			IL = d[i] * IL + molt_vect_mul(&wl[i * orderm], &in[i + 1 + iC], orderm);
+			IL = d * IL + molt_vect_mul(&wl[i * orderm], &in[i + 1 + iC], orderm);
 			break;
 		case 1:
-			IL = d[i] * IL + molt_vect_mul(&wl[i * orderm], &in[iR], orderm);
+			IL = d * IL + molt_vect_mul(&wl[i * orderm], &in[iR], orderm);
 			break;
 		}
 
 		out[i + 1] = out[i + 1] + IL;
 	}
 
-	for (i = rowlen - 1; i >= 0; i--) { /* right */
+	for (i = N; i >= 0; i--) { /* right */
 		bound = molt_gfquad_bound(i, M2, N);
 
 		switch (bound) {
 		case -1: // left bound
-			IR = d[i] * IR + molt_vect_mul(&wr[i * orderm], &in[iL], orderm);
+			IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[iL], orderm);
 			break;
 		case 0: // center
-			IR = d[i] * IR + molt_vect_mul(&wr[i * orderm], &in[i + iC], orderm);
+			IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[i + 1 + iC], orderm);
 			break;
 		case 1: // right
-			IR = d[i] * IR + molt_vect_mul(&wr[i * orderm], &in[iR], orderm);
+			IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[iR], orderm);
 			break;
 		}
 
 		out[i] = out[i] + IR;
 	}
+
+	for (i = 0; i < rowlen; i++)
+		out[i] /= 2;
 }
 
 /* molt_gfquad_bound : return easy bound parameters for gfquad */

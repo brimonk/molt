@@ -157,7 +157,7 @@ s32 hunklog_3ord(char *file, int line, char *msg, ivec3_t dim, f64 *p, cvec3_t o
 #include "config.h"
 
 #define MOLTLUMP_MAGIC *(s32 *)"MOLT"
-#define MOLTLUMP_TOTAL 9
+#define MOLTLUMP_TOTAL 8
 #define MOLTCURRVERSION 1
 
 enum { /* type values */
@@ -172,7 +172,6 @@ enum {
 	// after me minimal headache
 	MOLTLUMP_CONFIG,
 	MOLTLUMP_RUNINFO,
-	MOLTLUMP_NU,
 	MOLTLUMP_VWEIGHT,
 	MOLTLUMP_WWEIGHT,
 	MOLTLUMP_EFIELD,
@@ -208,16 +207,6 @@ struct lump_runinfo_t {
 	f64 t_stop;
 	s32 t_idx;
 	s32 t_total;
-};
-
-struct lump_nu_t {
-	struct lumpmeta_t meta;
-	f64 nux[MOLT_X_POINTS];
-	f64 nuy[MOLT_Y_POINTS];
-	f64 nuz[MOLT_Z_POINTS];
-	f64 dnux[MOLT_X_POINTS];
-	f64 dnuy[MOLT_Y_POINTS];
-	f64 dnuz[MOLT_Z_POINTS];
 };
 
 struct lump_vweight_t {
@@ -270,12 +259,6 @@ typedef struct lump_nu_t      lnu_t;
 typedef struct lump_vweight_t lvweight_t;
 typedef struct lump_wweight_t lwweight_t;
 typedef struct lump_mesh_t    lmesh_t;
-
-// helper structures
-struct vweight {
-	f64 *read;
-	f64 *write;
-};
 
 #endif
 
