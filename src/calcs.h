@@ -41,8 +41,8 @@ void polydiv(double *dst, double *src, double scale, int dstlen, int srclen);
 /* polyval : evaluate a polynomial at x = z */
 double polyval(double *vect, double scale, int vectlen);
 
-/* nu_cumsum : perform a cumulative sum over elem along dimension dim */
-void nu_cumsum(double *elem, double nu, int len);
+/* cumsum : perform a cumulative sum over elem along dimension dim */
+void cumsum(double *elem, int len, double x);
 
 /* exp_coeff : find the exponential coefficients, given nu and M */
 void exp_coeff(double *phi, int philen, double nu);

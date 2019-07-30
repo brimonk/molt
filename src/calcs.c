@@ -8,6 +8,8 @@
  * 1. Complete Get_Exp_Weights conversion
  * 2. Prefix functions required to do that
  * 3. Declare functions as static where not needed in public interface
+ *
+ * 4. Change get_exp_weights "nulen" to be something like, "dimlen" or whatever
  */
 
 #include <stdio.h>
@@ -49,7 +51,7 @@ void get_exp_weights(f64 nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm)
 	}
 
 	// fetch the cumulative sum of nu
-	nu_cumsum(x, nu, reallen);
+	cumsum(x, reallen, nu);
 
 	for (i = 0; i < nulen; i++) {
 		/* get the current coefficients */
@@ -104,34 +106,27 @@ void matflip(double *mat, int n)
 int get_exp_ind(int i, int n, int m)
 {
 	/*
-	 * there are "four" bounding points of this 1d situation.
+	 * there are two bounding points for gathering the indicies
 	 *
-	 *  0     - start
-	 *  m / 2 - left stencil edge
-	 *  n-m/2 - right stencil edge
-	 *  n     - end
+	 * left  = m / 2
+	 * right = n + 1 - m / 2
 	 *
-	 *  Please PLEASE be careful editing this.
+	 * Please, PLEASE be careful editing this.
 	 */
 
-	int farleft, farright, left, right;
+	int left, right;
 	int rc;
 
 	i++;
+	left  = m / 2;
+	right = n + 1 - m / 2;
 
-	farleft = 0;
-	left = m / 2;
-	right = n - m / 2;
-	farright = n;
-
-	if (farleft <= i && i < left)
+	if (i <= left)
 		rc = 0;
-
-	if (left <= i && i < right)
-		rc = i - m / 2;
-
-	if (right <= i && i <= farright)
+	else if (right <= i)
 		rc = n - m;
+	else
+		rc = i - m / 2;
 
 	return rc;
 }
@@ -217,16 +212,13 @@ double polyval(double *vect, double scale, int vectlen)
 	return retval;
 }
 
-/* nu_cumsum : perform a cumulative sum over elem along dimension dim */
-void nu_cumsum(double *elem, double nu, int len)
+/* cumsum : perform a cumulative sum over elem along dimension dim */
+void cumsum(double *elem, int len, double x)
 {
-	/* this function models octave behavior, not what it states it does IMO */
 	int i;
 
-	memset(elem, 0, sizeof(*elem) * len);
-
-	for (i = 0; i < len; i++, nu += nu) {
-		elem[i] += nu;
+	for (i = 0, elem[0] = 0.0; i < len - 1; i++) {
+		elem[i + 1] = elem[i] + x;
 	}
 }
 
