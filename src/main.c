@@ -62,6 +62,7 @@ void setuplump_efield(struct lump_header_t *hdr, struct lump_efield_t *efield);
 void setuplump_pfield(struct lump_header_t *hdr, struct lump_pfield_t *pfield);
 void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw);
 void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww);
+void setuplump_vmesh(struct lump_header_t *hdr, struct lump_vmesh_t *vmesh);
 void setuplump_umesh(struct lump_header_t *hdr, struct lump_mesh_t *state);
 
 void do_simulation(void *hunk, u64 hunksize);
@@ -255,6 +256,7 @@ void setup_simulation(void **base, u64 *size, int fd)
 	setuplump_pfield(*base, io_lumpgetbase(*base, MOLTLUMP_PFIELD));
 	setuplump_vweight(*base, io_lumpgetbase(*base, MOLTLUMP_VWEIGHT));
 	setuplump_wweight(*base, io_lumpgetbase(*base, MOLTLUMP_WWEIGHT));
+	setuplump_vmesh(*base, io_lumpgetbase(*base, MOLTLUMP_VMESH));
 	setuplump_umesh(*base, io_lumpgetbase(*base, MOLTLUMP_UMESH));
 }
 
@@ -454,6 +456,7 @@ void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww)
 void setuplump_vmesh(struct lump_header_t *hdr, struct lump_vmesh_t *vmesh)
 {
 	// NOTE (brian) not used, initial wave velocity setup
+	vmesh->meta.magic = MOLTLUMP_MAGIC;
 }
 
 /* setuplump_umesh : setup the initial conditions for the (3d) volume */
