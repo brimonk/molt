@@ -60,8 +60,8 @@ void get_exp_weights(f64 nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm)
 
 		/* fill our our Z vectors */
 		for (k = 0; k < rowlen; k++) {
-			workvect_r[k] = (x[j + k] - x[i    ]) / nu;
 			workvect_l[k] = (x[i + 1] - x[j + k]) / nu;
+			workvect_r[k] = (x[j + k] - x[i    ]) / nu;
 		}
 
 		invvan(workmat_l, workvect_l, rowlen);
