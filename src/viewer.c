@@ -7,12 +7,25 @@
  * This viewer, for ease of transport, requires SDL2 to operate.
  *
  * TODO (brian)
- * 1. Create multiple vertex floating point offset for the cfg mesh grid
- * 2. Display the mesh grid with some sort of colored logic
- *    We probably want the color to be some fragment shader function.
- * 3. Add 3d camera movement.
+ * 1. Debug Info In Lower Left of Screen
+ *
+ *    Info to Display (through text)
+ *
+ *    * FPS, FrameTiming
+ *    * (X,Y,Z,T) Player Position
+ *    * (X,Y,Z,T,Magnitude) Selected Gridpoint
+ *    * Data Displayed
+ *
+ * 2. Refactor Run Loop
+ *
+ * 3. Implement a Loose Particle System, Like the one found here:
+ *    http://www.opengl-tutorial.org/intermediate-tutorials/billboards-particles/particles-instancing/
  *
  * 4. Texture-Based 3d Volume Rendering
+ *
+ *    Should the particle system become too slow, I could probably use a
+ *    texture-based 3d volume rendering. Reason being that GPU fill-rate is
+ *    the main thing that limits engineering data with lots of data.
  *
  *    https://developer.download.nvidia.com/books/HTML/gpugems/gpugems_ch39.html
  *
@@ -27,14 +40,11 @@
  *    * Limitations of Fragment Programs (Shaders)
  *    * Texture Memory Limitations
  *
+ * 5. Change how we get input, convert it to use SDL Events
+ *
  * TODO (brian, Eventually)
  * 1. SDL / OpenGL Error Handling
  * 2. Cross Platform Include Headers
- * 3. Real Memory umesh and vmesh cache hunks that we can memcpy into and out of
- *
- * WISHLIST
- * 1. umesh/vmesh ringbuffer cache thingy (magically load the next items)
- *    and update next/prev entries in the ringbuffer
  */
 
 #include <stdio.h>
@@ -42,6 +52,7 @@
 #include <string.h>
 #include <time.h>
 #include <assert.h>
+#include <float.h>
 
 #include <SDL2/SDL.h> // TODO (brian) check include path for other operating systems
 
@@ -68,7 +79,7 @@
 #define FRAGMENT_SHADER_PATH "src/fragment.glsl"
 
 #define TARGET_FPS 90
-#define TARGET_MS_FORFRAME 1000 / TARGET_FPS
+#define TARGET_FRAMETIME 1000 / TARGET_FPS
 #define WIDTH  1024
 #define HEIGHT  768
 
@@ -81,10 +92,19 @@ struct simstate_t {
 	ivec2_t r_esc; // r-0, esc-1
 	ivec2_t pgup_pgdown; // pgup-0, pgdown-1, controls timestepping
 
+	// 0 - time we last drew a frame
+	// 1 - time at the start of the frame
+	// 2 - time at the end of the frame
+	uivec3_t frametime;
+
 	// viewer state last
 	fvec3_t userpos, usercam, uservel;
 	int run;
+
+	f64 lbound, hbound; // low and high range of values on ALL the meshes
 };
+
+void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high);
 
 void viewer_getinputs(struct simstate_t *state);
 void viewer_handleinput(struct simstate_t *state);
@@ -96,11 +116,14 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	SDL_Window *window;
 	SDL_GLContext glcontext;
 	struct simstate_t state;
-	u32 prevts, currts;
 	u32 program_shader;
+	struct lump_umesh_t *mesh;
 
 	u32 model_location, view_location, persp_loc;
-	s32 rc;
+	s32 rc, i, timesteps;
+	s64 meshlen;
+
+	ivec3_t meshdim;
 
 	u32 vbo, vao;
 
@@ -151,14 +174,26 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	hmm_mat4 model, view, proj, orig;
 
 	rc = 0, state.run = 1;
+	mesh = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
+	molt_cfg_parampull_xyz(cfg, meshdim, MOLT_PARAM_POINTS);
+	meshlen = meshdim[0] * meshdim[1] * meshdim[2];
+	timesteps = cfg->t_params[MOLT_PARAM_POINTS];
 
+	for (i = 0; i < timesteps; i++) {
+		viewer_bounds(mesh[i].data, meshlen, &state.lbound, &state.hbound);
+	}
+
+	printf("low : %lf, high : %lf\n", state.lbound, state.hbound);
+
+	// determine what the high and low values in ALL the meshes are
+	// this is for coloring the quads later in the program
 
 	if (SDL_Init(VIEWER_SDL_INITFLAGS) != 0) {
 		ERRLOG("Couldn't Init SDL", SDL_GetError());
 		return -1;
 	}
 
-	window = SDL_CreateWindow("MOLT Viewer",0, 0, 640, 480, VIEWER_SDL_WINFLAGS);
+	window = SDL_CreateWindow("MOLT Viewer",0, 0, WIDTH, HEIGHT, VIEWER_SDL_WINFLAGS);
 	if (window == NULL) {
 		ERRLOG("Couldn't Create Window", SDL_GetError());
 		return -1;
@@ -167,7 +202,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	// TODO (brian) check for window creation errors
 
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
 	glcontext = SDL_GL_CreateContext(window);
@@ -196,14 +231,13 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	f32 r_val;
 	r_val = 0;
-	prevts = SDL_GetTicks();
 
 	// setup original cube state
 	orig = HMM_Mat4d(1.0f);
 	orig = HMM_MultiplyMat4(orig, HMM_Rotate(90, HMM_Vec3(0.0f, 1.0f, 1.0f)));
 
 	while (state.run) {
-		prevts = SDL_GetTicks();
+		state.frametime[1] = SDL_GetTicks();
 
 		viewer_getinputs(&state);
 		viewer_handleinput(&state);
@@ -217,7 +251,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 			r_val = 0.0f;
 
 		// render
-		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+		glClearColor(0, 0, 0, 1);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glUseProgram(program_shader);
@@ -246,11 +280,19 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 		SDL_GL_SwapWindow(window);
 
-		// delay if needed
-		currts = prevts - SDL_GetTicks();
-		if (currts < TARGET_MS_FORFRAME) {
-			SDL_Delay(TARGET_MS_FORFRAME - currts);
+		state.frametime[2] = SDL_GetTicks();
+
+		// delay if diff between curr time and last drawn time is more
+		// than our target frame time
+		// NOTE (brian)
+		// time to draw frame, frametime[2] - frametime[1]
+		// rendering the scene actually needs to happen right in here
+		if (state.frametime[0] + TARGET_FRAMETIME < state.frametime[2]) {
+			SDL_Delay(state.frametime[2] - state.frametime[0]);
+			state.frametime[0] = SDL_GetTicks();
 		}
+
+		// printf("frame time : %d ms\n", state.frametime[2] - state.frametime[1]);
 	}
 
 	glDeleteVertexArrays(1, &vao);
@@ -376,5 +418,35 @@ u32 viewer_mkshader(char *vertex_file, char *fragment_file)
 	free(fragment);
 
 	return program_id;
+}
+
+/* viewer_bounds : gets the lowest and highest values of all values in the mesh */
+void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high)
+{
+	// WARN (Brian)
+	// this probably doesn't play nice if the algorithm isn't stable, meaning
+	// when you accidentally get -nans in your doubles, you're going to have
+	// issues (probably)
+
+	f64 llow, lhigh;
+	u64 i;
+
+	llow  = DBL_MAX;
+	lhigh = DBL_MIN;
+
+	for (i = 0; i < len; i++) {
+		if (p[i] < llow) {
+			llow = p[i];
+		}
+		if (p[i] > lhigh) {
+			lhigh = p[i];
+		}
+	}
+
+	// we only update them if the values REALLY ARE lower
+	if (*low > llow)
+		*low  = llow;
+	if (*high < lhigh)
+		*high = lhigh;
 }
 

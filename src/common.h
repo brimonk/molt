@@ -29,12 +29,26 @@ typedef ivec_t ivec4_t[4];
 typedef ivec_t ivec5_t[5];
 typedef ivec_t ivec6_t[6];
 
+typedef u32 uivec_t;
+typedef uivec_t uivec2_t[2];
+typedef uivec_t uivec3_t[3];
+typedef uivec_t uivec4_t[4];
+typedef uivec_t uivec5_t[5];
+typedef uivec_t uivec6_t[6];
+
 typedef s64 lvec_t;
 typedef lvec_t lvec2_t[2];
 typedef lvec_t lvec3_t[3];
 typedef lvec_t lvec4_t[4];
 typedef lvec_t lvec5_t[5];
 typedef lvec_t lvec6_t[6];
+
+typedef u64 ulvec_t;
+typedef ulvec_t ulvec2_t[2];
+typedef ulvec_t ulvec3_t[3];
+typedef ulvec_t ulvec4_t[4];
+typedef ulvec_t ulvec5_t[5];
+typedef ulvec_t ulvec6_t[6];
 
 typedef void * pvec_t;
 typedef pvec_t pvec2_t[2];

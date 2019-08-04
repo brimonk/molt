@@ -18,6 +18,7 @@
  *
  * TODO (Brian)
  * 1. Run a single simulation all the way through
+ * 2. Clean up how we load and begin simulations
  *
  * Get Information on EField and PField simulation from Causley
  *   Look in common.h:~250 for more details
@@ -85,6 +86,7 @@ int main(int argc, char **argv)
 	u64 hunksize;
 	s32 fd, longopt;
 	u32 flags;
+	struct molt_cfg_t *cfg;
 
 	flags = 0, targc = argc, targv = argv;
 
@@ -147,7 +149,8 @@ int main(int argc, char **argv)
 	}
 
 	if (flags & FLG_VIEWER) {
-		viewer_run(hunk, hunksize, fd, NULL);
+		cfg = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
+		viewer_run(hunk, hunksize, fd, cfg);
 	}
 
 	io_munmap(hunk);
