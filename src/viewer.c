@@ -8,9 +8,7 @@
  *
  * TODO (brian)
  * 1. Debug Info In Lower Left of Screen
- *
  *    Info to Display (through text)
- *
  *    * FPS, FrameTiming
  *    * (X,Y,Z,T) Player Position
  *    * (X,Y,Z,T,Magnitude) Selected Gridpoint
@@ -41,6 +39,9 @@
  *    * Texture Memory Limitations
  *
  * 5. Change how we get input, convert it to use SDL Events
+ *
+ * New Shader TODO
+ * Uniform with LowFloatingBound, HighFloatingBound
  *
  * TODO (brian, Eventually)
  * 1. SDL / OpenGL Error Handling
@@ -78,7 +79,7 @@
 #define VERTEX_SHADER_PATH   "src/vertex.glsl"
 #define FRAGMENT_SHADER_PATH "src/fragment.glsl"
 
-#define TARGET_FPS 90
+#define TARGET_FPS 144
 #define TARGET_FRAMETIME 1000 / TARGET_FPS
 #define WIDTH  1024
 #define HEIGHT  768
@@ -88,17 +89,19 @@ struct simstate_t {
 	ivec2_t mousepos;
 	ivec3_t mousebutton; // 0-left, 1-right, 2-middle
 
-	ivec4_t wasd;  // w-0, a-1, s-2, d-3
-	ivec2_t r_esc; // r-0, esc-1
-	ivec2_t pgup_pgdown; // pgup-0, pgdown-1, controls timestepping
+	s8 key_w, key_a, key_s, key_d;
+	s8 mouse_l, mouse_r, mouse_m;
+	s8 key_pgup, key_pgdown;
+	s8 key_esc;
 
 	// 0 - time we last drew a frame
 	// 1 - time at the start of the frame
 	// 2 - time at the end of the frame
 	uivec3_t frametime;
 
-	// viewer state last
+	// user state
 	fvec3_t userpos, usercam, uservel;
+
 	int run;
 
 	f64 lbound, hbound; // low and high range of values on ALL the meshes
@@ -106,7 +109,8 @@ struct simstate_t {
 
 void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high);
 
-void viewer_getinputs(struct simstate_t *state);
+void viewer_eventmouse(SDL_Event *event, struct simstate_t *state);
+void viewer_eventkey(SDL_Event *event, struct simstate_t *state);
 void viewer_handleinput(struct simstate_t *state);
 u32 viewer_mkshader(char *vertex, char *fragment);
 
@@ -115,6 +119,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 {
 	SDL_Window *window;
 	SDL_GLContext glcontext;
+	SDL_Event event;
 	struct simstate_t state;
 	u32 program_shader;
 	struct lump_umesh_t *mesh;
@@ -173,6 +178,8 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	hmm_mat4 model, view, proj, orig;
 
+	memset(&state, 0, sizeof state);
+
 	rc = 0, state.run = 1;
 	mesh = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
 	molt_cfg_parampull_xyz(cfg, meshdim, MOLT_PARAM_POINTS);
@@ -229,9 +236,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	glUseProgram(program_shader);
 
-	f32 r_val;
-	r_val = 0;
-
 	// setup original cube state
 	orig = HMM_Mat4d(1.0f);
 	orig = HMM_MultiplyMat4(orig, HMM_Rotate(90, HMM_Vec3(0.0f, 1.0f, 1.0f)));
@@ -239,16 +243,20 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	while (state.run) {
 		state.frametime[1] = SDL_GetTicks();
 
-		viewer_getinputs(&state);
+		while (SDL_PollEvent(&event)) {
+			switch (event.type) {
+			case SDL_MOUSEMOTION:
+				break;
+			case SDL_KEYDOWN:
+			case SDL_KEYUP:
+				viewer_eventkey(&event, &state);
+				break;
+			default:
+				break;
+			}
+		}
+
 		viewer_handleinput(&state);
-
-		state.run = !state.r_esc[1];
-
-		if (state.r_esc[0])
-			r_val += 1.0f;
-
-		if (r_val > 360.0f)
-			r_val = 0.0f;
 
 		// render
 		glClearColor(0, 0, 0, 1);
@@ -264,6 +272,8 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		model = HMM_Mat4d(1.0f);
 #endif
 		view = HMM_Translate(HMM_Vec3(0.0f, 0.0f, -3.0f));
+		view = HMM_MultiplyMat4(view, HMM_Translate(HMM_Vec3(state.userpos[0], state.userpos[1], state.userpos[2])));
+
 		proj = HMM_Perspective(45.0f, WIDTH / HEIGHT, 0.1f, 100.0f);
 
 		model_location = glGetUniformLocation(program_shader, "model");
@@ -279,6 +289,8 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		glDrawArrays(GL_TRIANGLES, 0, 36);
 
 		SDL_GL_SwapWindow(window);
+
+		printf("%f, %f, %f\n", state.userpos[0], state.userpos[1], state.userpos[2]);
 
 		state.frametime[2] = SDL_GetTicks();
 
@@ -308,52 +320,70 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	return rc;
 }
 
-/* viewer_getinputs : retrieve the SDL inputs when we're ready to shine */
-void viewer_getinputs(struct simstate_t *state)
+void viewer_eventmouse(SDL_Event *event, struct simstate_t *state)
 {
-	// DOC Scancodes - https://wiki.libsdl.org/SDL_Scancode
-	// DOC Keyboard modifiers - https://wiki.libsdl.org/SDL_Keymod
-	u32 mouse_mask;
-	const u8 *keystate;
-	int numkeys;
+}
 
-	SDL_PumpEvents(); // force the input polling
+/* viewer_getinputs : reads and toggles the internal keystate */
+void viewer_eventkey(SDL_Event *event, struct simstate_t *state)
+{
+	switch (event->key.keysym.sym) {
+		case SDLK_w:
+		   	state->key_w = !state->key_w;
+			break;
+		case SDLK_a:
+			state->key_a = !state->key_a;
+			break;
+		case SDLK_s:
+		   	state->key_s = !state->key_s;
+			break;
+		case SDLK_d:
+		   	state->key_d = !state->key_d;
+			break;
 
-	// retrieve the mouse info
-	mouse_mask = SDL_GetMouseState(&state->mousepos[0], &state->mousepos[1]);
-	if (mouse_mask & SDL_BUTTON(SDL_BUTTON_LEFT))
-		state->mousebutton[0] = 1;
-	else
-		state->mousebutton[0] = 0;
+		case SDLK_PAGEUP:
+			state->key_pgup = !state->key_pgup;
+			break;
+		case SDLK_PAGEDOWN:
+			state->key_pgdown = !state->key_pgdown;
+			break;
 
-	if (mouse_mask & SDL_BUTTON(SDL_BUTTON_RIGHT))
-		state->mousebutton[1] = 1;
-	else
-		state->mousebutton[1] = 0;
+		case SDLK_ESCAPE:
+			state->key_esc = !state->key_esc;
+			break;
 
-	if (mouse_mask & SDL_BUTTON(SDL_BUTTON_MIDDLE))
-		state->mousebutton[2] = 1;
-	else
-		state->mousebutton[2] = 0;
-
-	keystate = SDL_GetKeyboardState(&numkeys);
-
-	state->wasd[0] = keystate[SDL_SCANCODE_W];
-	state->wasd[1] = keystate[SDL_SCANCODE_A];
-	state->wasd[2] = keystate[SDL_SCANCODE_S];
-	state->wasd[3] = keystate[SDL_SCANCODE_D];
-
-	state->r_esc[0] = keystate[SDL_SCANCODE_R];
-	state->r_esc[1] = keystate[SDL_SCANCODE_ESCAPE];
-
-	state->pgup_pgdown[0] = keystate[SDL_SCANCODE_PAGEUP];
-	state->pgup_pgdown[1] = keystate[SDL_SCANCODE_PAGEDOWN];
+		default:
+			break;
+	}
 }
 
 /* viewer_handleinput : updates the gamestate from the */
 void viewer_handleinput(struct simstate_t *state)
 {
-	// games are hard
+	// handle the "quit" sequence
+	if (state->key_esc) {
+		state->run = 0;
+		return;
+	}
+
+	// HMM_Clamp(min, val, max)
+
+	// handle wasd controls
+	if (state->key_w)
+		state->userpos[2] -= 0.01;
+
+	if (state->key_s)
+		state->userpos[2] += 0.01;
+
+	if (state->key_a)
+		state->userpos[0] -= 0.01;
+
+	if (state->key_d)
+		state->userpos[0] += 0.01;
+
+	// handle mouse buttons
+
+	// handle mouse motion
 }
 
 u32 viewer_mkshader(char *vertex_file, char *fragment_file)

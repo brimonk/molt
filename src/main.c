@@ -30,8 +30,6 @@
  *
  * WISHLIST
  * 1. setuplump_* should really be "init" or "fillup" lump
- * 2. Perform real time interpolation in the viewer. OpenGL Shader.
- * 3. Output table of contents.
  */
 
 #include <stdio.h>
