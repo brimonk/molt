@@ -327,33 +327,43 @@ void viewer_eventmouse(SDL_Event *event, struct simstate_t *state)
 /* viewer_getinputs : reads and toggles the internal keystate */
 void viewer_eventkey(SDL_Event *event, struct simstate_t *state)
 {
+	s8 *ptr;
 	switch (event->key.keysym.sym) {
 		case SDLK_w:
-		   	state->key_w = !state->key_w;
+			ptr = &state->key_w;
 			break;
 		case SDLK_a:
-			state->key_a = !state->key_a;
+			ptr = &state->key_a;
 			break;
 		case SDLK_s:
-		   	state->key_s = !state->key_s;
+			ptr = &state->key_s;
 			break;
 		case SDLK_d:
-		   	state->key_d = !state->key_d;
+			ptr = &state->key_d;
 			break;
 
+#if 0
 		case SDLK_PAGEUP:
 			state->key_pgup = !state->key_pgup;
 			break;
 		case SDLK_PAGEDOWN:
 			state->key_pgdown = !state->key_pgdown;
 			break;
+#endif
 
 		case SDLK_ESCAPE:
-			state->key_esc = !state->key_esc;
+			ptr = &state->key_esc;
 			break;
 
 		default:
-			break;
+			// if we don't have a key, we can yeet outta here
+			return;
+	}
+
+	if (event->key.state == SDL_PRESSED) {
+		*ptr = 1;
+	} else {
+		*ptr = 0;
 	}
 }
 
@@ -370,16 +380,16 @@ void viewer_handleinput(struct simstate_t *state)
 
 	// handle wasd controls
 	if (state->key_w)
-		state->userpos[2] -= 0.01;
-
-	if (state->key_s)
 		state->userpos[2] += 0.01;
 
+	if (state->key_s)
+		state->userpos[2] -= 0.01;
+
 	if (state->key_a)
-		state->userpos[0] -= 0.01;
+		state->userpos[0] += 0.01;
 
 	if (state->key_d)
-		state->userpos[0] += 0.01;
+		state->userpos[0] -= 0.01;
 
 	// handle mouse buttons
 
@@ -474,6 +484,7 @@ void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high)
 	}
 
 	// we only update them if the values REALLY ARE lower
+	// hopefully they come in as zero
 	if (*low > llow)
 		*low  = llow;
 	if (*high < lhigh)
