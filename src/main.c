@@ -85,6 +85,7 @@ int main(int argc, char **argv)
 	s32 fd, longopt;
 	u32 flags;
 	struct molt_cfg_t *cfg;
+	struct run_t *run;
 
 	flags = 0, targc = argc, targv = argv;
 
@@ -127,14 +128,22 @@ int main(int argc, char **argv)
 
 	// create our disk-backed storage
 	fd = io_open(fname);
-	hunksize = sizeof(struct lump_header_t);
-	io_resize(fd, hunksize);
 
-	// mind the reader, setup_simulation remmaps the hunk into vmemory
-	// after figuring out how big it is
-	hunk = io_mmap(fd, hunksize);
-	setup_simulation(&hunk, &hunksize, fd);
-	io_mssync(hunk, hunk, hunksize);
+	// figure out if our disk-backed store is already good enough
+	// WARN (brian) not robust
+	hunksize = sizeof(struct lump_header_t);
+
+	if (hunksize < io_getsize()) {
+		hunksize = io_getsize();
+		hunk = io_mmap(fd, hunksize);
+	} else {
+		io_resize(fd, hunksize);
+		// mind the reader, setup_simulation remmaps the hunk into vmemory
+		// after figuring out how big it is
+		hunk = io_mmap(fd, hunksize);
+		setup_simulation(&hunk, &hunksize, fd);
+		io_mssync(hunk, hunk, hunksize);
+	}
 
 	if (flags & FLG_SIM) {
 		// do_simulation(hunk, hunksize);

@@ -7,6 +7,7 @@
  * This viewer, for ease of transport, requires SDL2 to operate.
  *
  * TODO (brian)
+ * 1. Camera Controls
  * 1. Debug Info In Lower Left of Screen
  *    Info to Display (through text)
  *    * FPS, FrameTiming
@@ -71,18 +72,24 @@
 	SDL_INIT_VIDEO | SDL_INIT_TIMER
 #define VIEWER_SDL_WINFLAGS SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
 
+#define VIEWER_FOV 45.0f
+
 #define ERRLOG(a,b)\
 	fprintf(stderr, "%s:%d %s %s\n", __FILE__, __LINE__, (a), (b))
+
+#define TORAD(x)   ((x) * (M_PI / 180.0))
 
 #define VIEWER_MAXVEL 1.0f
 
 #define VERTEX_SHADER_PATH   "src/vertex.glsl"
 #define FRAGMENT_SHADER_PATH "src/fragment.glsl"
 
+// #define TARGET_FPS 144
 #define TARGET_FPS 144
 #define TARGET_FRAMETIME 1000 / TARGET_FPS
 #define WIDTH  1024
 #define HEIGHT  768
+#define MOUSE_SENSITIVITY 1
 
 struct simstate_t {
 	// input goes first
@@ -94,13 +101,17 @@ struct simstate_t {
 	s8 key_pgup, key_pgdown;
 	s8 key_esc;
 
-	// 0 - time we last drew a frame
-	// 1 - time at the start of the frame
-	// 2 - time at the end of the frame
-	uivec3_t frametime;
+	// curr - current time in ms
+	// last - last time we drew a frame
+	// delta- difference between the two
 
 	// user state
-	fvec3_t userpos, usercam, uservel;
+	hmm_vec3 cam_pos, cam_front, cam_up, cam_look;
+	f32 cam_x, cam_y, cam_sens;
+	f32 cam_yaw, cam_pitch;
+	s32 first_mouse;
+
+	f32 frame_curr, frame_last, frame_diff;
 
 	int run;
 
@@ -109,6 +120,7 @@ struct simstate_t {
 
 void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high);
 
+void viewer_eventmotion(SDL_Event *event, struct simstate_t *state);
 void viewer_eventmouse(SDL_Event *event, struct simstate_t *state);
 void viewer_eventkey(SDL_Event *event, struct simstate_t *state);
 void viewer_handleinput(struct simstate_t *state);
@@ -180,6 +192,11 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	memset(&state, 0, sizeof state);
 
+	state.first_mouse = 1;
+	state.cam_pos = HMM_Vec3(0, 0, 3);
+	state.cam_front = HMM_Vec3(0, 0, -1);
+	state.cam_up = HMM_Vec3(0, 1, 0);
+
 	rc = 0, state.run = 1;
 	mesh = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
 	molt_cfg_parampull_xyz(cfg, meshdim, MOLT_PARAM_POINTS);
@@ -203,6 +220,16 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	window = SDL_CreateWindow("MOLT Viewer",0, 0, WIDTH, HEIGHT, VIEWER_SDL_WINFLAGS);
 	if (window == NULL) {
 		ERRLOG("Couldn't Create Window", SDL_GetError());
+		return -1;
+	}
+
+	state.cam_x = WIDTH;
+	state.cam_y = HEIGHT;
+	state.cam_sens = MOUSE_SENSITIVITY;
+	state.cam_yaw = -90;
+
+	if (SDL_SetRelativeMouseMode(SDL_TRUE) == -1) {
+		ERRLOG("Couldn't Set Relative Motion Mode", SDL_GetError());
 		return -1;
 	}
 
@@ -241,15 +268,21 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	orig = HMM_MultiplyMat4(orig, HMM_Rotate(90, HMM_Vec3(0.0f, 1.0f, 1.0f)));
 
 	while (state.run) {
-		state.frametime[1] = SDL_GetTicks();
-
 		while (SDL_PollEvent(&event)) {
 			switch (event.type) {
 			case SDL_MOUSEMOTION:
+				viewer_eventmotion(&event, &state);
+				break;
+			case SDL_MOUSEBUTTONDOWN:
+			case SDL_MOUSEBUTTONUP:
+				viewer_eventmouse(&event, &state);
 				break;
 			case SDL_KEYDOWN:
 			case SDL_KEYUP:
 				viewer_eventkey(&event, &state);
+				break;
+			case SDL_QUIT:
+				state.run = 0;
 				break;
 			default:
 				break;
@@ -259,22 +292,19 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		viewer_handleinput(&state);
 
 		// render
-		glClearColor(0, 0, 0, 1);
+		glClearColor(1, 1, 1, 1);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glUseProgram(program_shader);
 
 		// create our transformation
-#if 1
 		model = HMM_Rotate(SDL_GetTicks(), HMM_Vec3(1.0f, 0.0f, 0.0f));
 		model = HMM_MultiplyMat4(model, orig);
-#else
-		model = HMM_Mat4d(1.0f);
-#endif
-		view = HMM_Translate(HMM_Vec3(0.0f, 0.0f, -3.0f));
-		view = HMM_MultiplyMat4(view, HMM_Translate(HMM_Vec3(state.userpos[0], state.userpos[1], state.userpos[2])));
 
-		proj = HMM_Perspective(45.0f, WIDTH / HEIGHT, 0.1f, 100.0f);
+		state.cam_look = HMM_AddVec3(state.cam_pos, state.cam_front);
+		view = HMM_LookAt(state.cam_pos, state.cam_look, state.cam_up);
+
+		proj = HMM_Perspective(90.0f, WIDTH / HEIGHT, 0.1f, 100.0f);
 
 		model_location = glGetUniformLocation(program_shader, "model");
 		view_location = glGetUniformLocation(program_shader, "view");
@@ -290,21 +320,17 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 		SDL_GL_SwapWindow(window);
 
-		printf("%f, %f, %f\n", state.userpos[0], state.userpos[1], state.userpos[2]);
+		printf("cam,  %f, %f, %f\n", state.cam_front.x, state.cam_front.y, state.cam_front.z);
+		printf("pos,  %f, %f, %f\n", state.cam_pos.x, state.cam_pos.y, state.cam_pos.z);
+		printf("look, %f, %f, %f\n", state.cam_look.x, state.cam_look.y, state.cam_look.z);
 
-		state.frametime[2] = SDL_GetTicks();
+		state.frame_curr = ((f32)SDL_GetTicks()) / 1000.0f;
+		state.frame_diff = state.frame_curr - state.frame_last;
+		state.frame_last = state.frame_curr;
 
-		// delay if diff between curr time and last drawn time is more
-		// than our target frame time
-		// NOTE (brian)
-		// time to draw frame, frametime[2] - frametime[1]
-		// rendering the scene actually needs to happen right in here
-		if (state.frametime[0] + TARGET_FRAMETIME < state.frametime[2]) {
-			SDL_Delay(state.frametime[2] - state.frametime[0]);
-			state.frametime[0] = SDL_GetTicks();
+		if (state.frame_diff < TARGET_FRAMETIME) {
+			SDL_Delay(((f32)SDL_GetTicks() / 1000) - state.frame_diff);
 		}
-
-		// printf("frame time : %d ms\n", state.frametime[2] - state.frametime[1]);
 	}
 
 	glDeleteVertexArrays(1, &vao);
@@ -320,8 +346,59 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	return rc;
 }
 
+/* viewer_eventmotion : interprets and updates simstate from mouse motion */
+void viewer_eventmotion(SDL_Event *event, struct simstate_t *state)
+{
+	f32 xoff, yoff;
+	f32 rad_yaw, rad_pitch;
+	hmm_vec3 front;
+
+	xoff = event->motion.xrel;
+	yoff = event->motion.yrel;
+
+	state->cam_x += xoff;
+	state->cam_y += yoff;
+
+	// mul for sensitivity
+	xoff *= state->cam_sens;
+	yoff *= state->cam_sens;
+
+	state->cam_yaw   += xoff;
+	state->cam_pitch -= yoff;
+
+	// constrain the view so the user can't look 360 deg vertically
+	state->cam_pitch = HMM_Clamp(-89.0f, state->cam_pitch, 89.0f);
+
+	front.x = cos(HMM_ToRadians(state->cam_yaw)) * cos(HMM_ToRadians(state->cam_pitch));
+	front.y = sin(HMM_ToRadians(state->cam_pitch));
+	front.z = sin(HMM_ToRadians(state->cam_yaw)) * cos(HMM_ToRadians(state->cam_pitch));
+
+	state->cam_front = HMM_NormalizeVec3(front);
+}
+
 void viewer_eventmouse(SDL_Event *event, struct simstate_t *state)
 {
+	s8 *ptr;
+
+	switch (event->button.button) {
+	case SDL_BUTTON_LEFT:
+		ptr = &state->mouse_l;
+		break;
+	case SDL_BUTTON_RIGHT:
+		ptr = &state->mouse_r;
+		break;
+	case SDL_BUTTON_MIDDLE:
+		ptr = &state->mouse_m;
+		break;
+	default:
+		return;
+	}
+
+	if (event->button.state == SDL_PRESSED) {
+		*ptr = 1;
+	} else {
+		*ptr = 0;
+	}
 }
 
 /* viewer_getinputs : reads and toggles the internal keystate */
@@ -370,30 +447,40 @@ void viewer_eventkey(SDL_Event *event, struct simstate_t *state)
 /* viewer_handleinput : updates the gamestate from the */
 void viewer_handleinput(struct simstate_t *state)
 {
+	f32 camera_speed;
+	hmm_vec3 tmp;
+
 	// handle the "quit" sequence
 	if (state->key_esc) {
 		state->run = 0;
 		return;
 	}
 
-	// HMM_Clamp(min, val, max)
+	camera_speed = 2.5 * state->frame_diff;
 
-	// handle wasd controls
-	if (state->key_w)
-		state->userpos[2] += 0.01;
+	if (state->key_w) { // camera move forward
+		tmp = HMM_MultiplyVec3f(state->cam_front, camera_speed);
+		state->cam_pos = HMM_AddVec3(state->cam_pos, tmp);
+	}
 
-	if (state->key_s)
-		state->userpos[2] -= 0.01;
+	if (state->key_s) { // camera move backward
+		tmp = HMM_MultiplyVec3f(state->cam_front, camera_speed);
+		state->cam_pos = HMM_SubtractVec3(state->cam_pos, tmp);
+	}
 
-	if (state->key_a)
-		state->userpos[0] += 0.01;
+	if (state->key_a) { // camera move left
+		tmp = HMM_Cross(state->cam_front, state->cam_up);
+		tmp = HMM_NormalizeVec3(tmp);
+		tmp = HMM_MultiplyVec3f(tmp, camera_speed);
+		state->cam_pos = HMM_SubtractVec3(state->cam_pos, tmp);
+	}
 
-	if (state->key_d)
-		state->userpos[0] -= 0.01;
-
-	// handle mouse buttons
-
-	// handle mouse motion
+	if (state->key_d) { // camera move right
+		tmp = HMM_Cross(state->cam_front, state->cam_up);
+		tmp = HMM_NormalizeVec3(tmp);
+		tmp = HMM_MultiplyVec3f(tmp, camera_speed);
+		state->cam_pos = HMM_AddVec3(state->cam_pos, tmp);
+	}
 }
 
 u32 viewer_mkshader(char *vertex_file, char *fragment_file)
