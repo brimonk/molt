@@ -6,8 +6,7 @@
  *
  * This viewer, for ease of transport, requires SDL2 to operate.
  *
- * TODO (brian)
- * 1. Camera Controls
+ * TODO General (brian)
  * 1. Debug Info In Lower Left of Screen
  *    Info to Display (through text)
  *    * FPS, FrameTiming
@@ -39,12 +38,19 @@
  *    * Limitations of Fragment Programs (Shaders)
  *    * Texture Memory Limitations
  *
- * 5. Change how we get input, convert it to use SDL Events
+ * TODO MoLT Volume (brian)
+ * 1. Data Structure for prev, curr, next volumes
+ * 2. Setup Stride info based on 
  *
- * New Shader TODO
- * Uniform with LowFloatingBound, HighFloatingBound
+ * TODO MoLT Shader (brian)
+ * 1. Uniform with LowFloatingBound, HighFloatingBound
  *
- * TODO (brian, Eventually)
+ * TODO Oculus SDK
+ * 1. Get XYZ Player Movement
+ * 2. Get XYZ Controller Movement
+ * 3. 
+ *
+ * TODO Cleanup (brian)
  * 1. SDL / OpenGL Error Handling
  * 2. Cross Platform Include Headers
  */
@@ -74,8 +80,7 @@
 
 #define VIEWER_FOV 45.0f
 
-#define ERRLOG(a,b)\
-	fprintf(stderr, "%s:%d %s %s\n", __FILE__, __LINE__, (a), (b))
+#define ERRLOG(a,b) fprintf(stderr,"%s:%d %s %s\n",__FILE__,__LINE__,(a),(b))
 
 #define TORAD(x)   ((x) * (M_PI / 180.0))
 
@@ -292,7 +297,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		viewer_handleinput(&state);
 
 		// render
-		glClearColor(1, 1, 1, 1);
+		glClearColor(0, 0, 0, 1);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glUseProgram(program_shader);
@@ -350,7 +355,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 void viewer_eventmotion(SDL_Event *event, struct simstate_t *state)
 {
 	f32 xoff, yoff;
-	f32 rad_yaw, rad_pitch;
 	hmm_vec3 front;
 
 	xoff = event->motion.xrel;
