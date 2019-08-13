@@ -14,12 +14,10 @@
  *    * (X,Y,Z,T,Magnitude) Selected Gridpoint
  *    * Data Displayed
  *
- * 2. Refactor Run Loop
- *
- * 3. Implement a Loose Particle System, Like the one found here:
+ * 2. Implement a Loose Particle System, Like the one found here:
  *    http://www.opengl-tutorial.org/intermediate-tutorials/billboards-particles/particles-instancing/
  *
- * 4. Texture-Based 3d Volume Rendering
+ * 3. Texture-Based 3d Volume Rendering
  *
  *    Should the particle system become too slow, I could probably use a
  *    texture-based 3d volume rendering. Reason being that GPU fill-rate is
@@ -98,10 +96,10 @@
 #define MOUSE_SENSITIVITY 0.5f
 
 enum {
+	AXIS_CAMERA,
 	AXIS_X,
 	AXIS_Y,
-	AXIS_Z,
-	AXIS_TOTAL
+	AXIS_Z
 } SIM_CURRAXIS;
 
 struct simstate_t {
@@ -130,8 +128,8 @@ struct simstate_t {
 	// we update the uniforms for the volume every frame
 	hmm_vec3 sim_pos, sim_front;
 	fvec2_t control_left, control_right, control_trig; // 0 - x, 1 - y
-	f32 sim_rotx, sim_roty, sim_rotz; // in deg to simply call hmm_rotate
-	f32 sim_stretch;
+	fvec3_t sim_rotp;
+	f32 sim_stretch, sim_rotv;
 	s32 sim_curraxis, sim_rotatevol;
 
 	s32 sim_timeidx;
@@ -139,6 +137,11 @@ struct simstate_t {
 	int run;
 
 	f64 lbound, hbound; // low and high range of values on ALL the meshes
+};
+
+// NOTE (brian) all of the other geometry, that ISN'T the simulation
+// is defined by a series of 
+struct block_t {
 };
 
 void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high);
@@ -224,12 +227,12 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	// initialize the camera
 	state.first_mouse = 1;
-	state.cam_pos = HMM_Vec3(0, 0, 3);
+	state.cam_pos = HMM_Vec3(0, 3, 3);
 	state.cam_front = HMM_Vec3(0, 0, -1);
 	state.cam_up = HMM_Vec3(0, 1, 0);
 
 	// init the simulation rectangular prism in the same way
-	state.sim_pos = HMM_Vec3(0, 0, 0);
+	state.sim_pos = HMM_Vec3(0, 3, 0);
 	state.sim_front = HMM_Vec3(0, 0, -1);
 
 	rc = 0, state.run = 1;
@@ -305,7 +308,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	// setup original cube state
 	orig = HMM_Mat4d(1.0f);
-	model = orig;
+	model = HMM_MultiplyMat4(orig, HMM_Translate(state.sim_pos));
 
 	while (state.run) {
 		while (SDL_PollEvent(&event)) {
@@ -346,9 +349,9 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 		// rotate our volume
 		if (state.sim_rotatevol) {
-			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotx, HMM_Vec3(1, 0, 0)));
-			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_roty, HMM_Vec3(0, 1, 0)));
-			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotz, HMM_Vec3(0, 0, 1)));
+			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotp[0], HMM_Vec3(1, 0, 0)));
+			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotp[1], HMM_Vec3(0, 1, 0)));
+			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotp[2], HMM_Vec3(0, 0, 1)));
 		}
 
 		state.cam_look = HMM_AddVec3(state.cam_pos, state.cam_front);
@@ -408,7 +411,7 @@ void viewer_eventaxis(SDL_Event *event, struct simstate_t *state)
 
 	mapval = event->caxis.value / ((f32)SHRT_MAX);
 
-	if (-0.1 <= mapval && mapval < 0.1) // we don't want weird controller input
+	if (-0.2 <= mapval && mapval < 0.2) // we don't want weird controller input
 		return;
 
 	switch ((s16)event->caxis.axis) {
@@ -451,10 +454,12 @@ void viewer_eventbutton(SDL_Event *event, struct simstate_t *state)
 			// we need to set all of the rotations to zero to "pause"
 			state->control_left[1] = 0;
 			state->control_left[0] = 0;
-			state->sim_rotx = 0;
-			state->sim_roty = 0;
-			state->sim_rotz = 0;
-			state->sim_rotatevol = !state->sim_rotatevol;
+			state->sim_rotp[0] = 0;
+			state->sim_rotp[1] = 0;
+			state->sim_rotp[2] = 0;
+			state->sim_curraxis = (state->sim_curraxis+1) % (AXIS_Z+1);
+			state->sim_rotatevol = state->sim_curraxis != AXIS_CAMERA;
+			printf("state->sim_curraxis %d\n", state->sim_curraxis);
 		}
 		break;
 	}
@@ -605,10 +610,18 @@ void viewer_handleinput(struct simstate_t *state)
 
 	// update the cube position in 3d space
 	if (state->sim_rotatevol) {
-		state->sim_rotx += state->control_left[1] * camera_speed;
-		state->sim_roty += state->control_left[0] * camera_speed;
-		state->sim_rotz +=
-			camera_speed * (state->control_trig[1] - state->control_trig[0]);
+		state->sim_rotv = camera_speed * (state->control_left[1] - state->control_left[0]);
+		switch (state->sim_curraxis) {
+		case AXIS_X:
+			state->sim_rotp[0] += state->sim_rotv;
+			break;
+		case AXIS_Y:
+			state->sim_rotp[1] += state->sim_rotv;
+			break;
+		case AXIS_Z:
+			state->sim_rotp[2] += state->sim_rotv;
+			break;
+		}
 	}
 }
 
