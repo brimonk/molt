@@ -87,6 +87,7 @@
 
 #define VIEWER_MAXVEL 1.0f
 #define VIEWER_FOV 45.0f
+#define VIEWER_MAXBLOCKS ((2<<16)-1)
 
 // #define TARGET_FPS 144
 #define TARGET_FPS 144
@@ -124,6 +125,9 @@ struct simstate_t {
 
 	f32 frame_curr, frame_last, frame_diff;
 
+	struct block_t *blocks;
+	s32 block_cap, block_used;
+
 	// volume state
 	// we update the uniforms for the volume every frame
 	hmm_vec3 sim_pos, sim_front;
@@ -140,10 +144,16 @@ struct simstate_t {
 };
 
 // NOTE (brian) all of the other geometry, that ISN'T the simulation
-// is defined by a series of 
+// is defined by a series of colored, axis-aligned boxes with an XZ
+// checkerboard pattern applied
 struct block_t {
+	f32 x0, y0, z0;
+	f32 x1, y1, z1;
+	f32  r,  g,  b;
+	f32  s,  f,  k;
 };
 
+void viewer_loadgeom(struct simstate_t *state, char *geomfile);
 void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high);
 
 void viewer_eventaxis(SDL_Event *event, struct simstate_t *state);
@@ -234,6 +244,11 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	// init the simulation rectangular prism in the same way
 	state.sim_pos = HMM_Vec3(0, 3, 0);
 	state.sim_front = HMM_Vec3(0, 0, -1);
+
+	state.blocks = malloc(sizeof(*state.blocks) * (VIEWER_MAXBLOCKS));
+	state.block_cap = VIEWER_MAXBLOCKS;
+
+	viewer_loadgeom(&state, "viewer_geom.txt");
 
 	rc = 0, state.run = 1;
 	mesh = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
@@ -392,6 +407,8 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	SDL_GL_DeleteContext(glcontext);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
+
+	free(state.blocks);
 
 	return rc;
 }
@@ -623,6 +640,51 @@ void viewer_handleinput(struct simstate_t *state)
 			break;
 		}
 	}
+}
+
+/* viewer_loadgeom : loads level geometry from the given filename */
+void viewer_loadgeom(struct simstate_t *state, char *geomfile)
+{
+	s32 i;
+	FILE *fp;
+	char buf[BUFLARGE];
+
+	fp = fopen(geomfile, "r");
+	if (!fp) {
+		fprintf(stderr, "ERR : Couldn't load %s! No World Geometry!\n", geomfile);
+		return;
+	}
+
+	for (i = 0; i < state->block_cap && (fgets(buf, sizeof buf, fp)) == buf; i++) {
+		buf[strlen(buf) - 1] = 0;
+		sscanf(buf, "%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f",
+				&state->blocks[i].x0,
+				&state->blocks[i].y0,
+				&state->blocks[i].z0,
+				&state->blocks[i].x1,
+				&state->blocks[i].y1,
+				&state->blocks[i].z1,
+				&state->blocks[i].r,
+				&state->blocks[i].g,
+				&state->blocks[i].b,
+				&state->blocks[i].s,
+				&state->blocks[i].f,
+				&state->blocks[i].k);
+	}
+
+	state->block_used = i;
+
+	for (i = 0; i < state->block_used; i++) {
+		printf("%f %f %f\n",
+				state->blocks[i].x0,
+				state->blocks[i].y0,
+				state->blocks[i].z0);
+	}
+
+	if (i == state->block_cap)
+		printf("WARNING : reached block capacity!\n");
+
+	fclose(fp);
 }
 
 u32 viewer_mkshader(char *vertex_file, char *fragment_file)
