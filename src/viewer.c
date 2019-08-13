@@ -129,10 +129,12 @@ struct simstate_t {
 	// volume state
 	// we update the uniforms for the volume every frame
 	hmm_vec3 sim_pos, sim_front;
-	fvec2_t control_left, control_right, control_trigger; // 0 - x, 1 - y
+	fvec2_t control_left, control_right, control_trig; // 0 - x, 1 - y
 	f32 sim_rotx, sim_roty, sim_rotz; // in deg to simply call hmm_rotate
 	f32 sim_stretch;
 	s32 sim_curraxis, sim_rotatevol;
+
+	s32 sim_timeidx;
 
 	int run;
 
@@ -142,6 +144,8 @@ struct simstate_t {
 void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high);
 
 void viewer_eventaxis(SDL_Event *event, struct simstate_t *state);
+void viewer_eventbutton(SDL_Event *event, struct simstate_t *state);
+
 void viewer_eventmotion(SDL_Event *event, struct simstate_t *state);
 void viewer_eventmouse(SDL_Event *event, struct simstate_t *state);
 void viewer_eventkey(SDL_Event *event, struct simstate_t *state);
@@ -238,8 +242,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		viewer_bounds(mesh[i].data, meshlen, &state.lbound, &state.hbound);
 	}
 
-	printf("low : %lf, high : %lf\n", state.lbound, state.hbound);
-
 	// determine what the high and low values in ALL the meshes are
 	// this is for coloring the quads later in the program
 
@@ -303,12 +305,17 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	// setup original cube state
 	orig = HMM_Mat4d(1.0f);
+	model = orig;
 
 	while (state.run) {
 		while (SDL_PollEvent(&event)) {
 			switch (event.type) {
 			case SDL_CONTROLLERAXISMOTION:
 				viewer_eventaxis(&event, &state);
+				break;
+			case SDL_CONTROLLERBUTTONDOWN:
+			case SDL_CONTROLLERBUTTONUP:
+				viewer_eventbutton(&event, &state);
 				break;
 			case SDL_MOUSEMOTION:
 				viewer_eventmotion(&event, &state);
@@ -338,10 +345,11 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		glUseProgram(program_shader);
 
 		// rotate our volume
-		model = orig;
-		model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotx, HMM_Vec3(1, 0, 0)));
-		model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_roty, HMM_Vec3(0, 1, 0)));
-		model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotz, HMM_Vec3(0, 0, 1)));
+		if (state.sim_rotatevol) {
+			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotx, HMM_Vec3(1, 0, 0)));
+			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_roty, HMM_Vec3(0, 1, 0)));
+			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotz, HMM_Vec3(0, 0, 1)));
+		}
 
 		state.cam_look = HMM_AddVec3(state.cam_pos, state.cam_front);
 		view = HMM_LookAt(state.cam_pos, state.cam_look, state.cam_up);
@@ -361,10 +369,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		glDrawArrays(GL_TRIANGLES, 0, 36);
 
 		SDL_GL_SwapWindow(window);
-
-		printf("cam,  %f, %f, %f\n", state.cam_front.x, state.cam_front.y, state.cam_front.z);
-		printf("pos,  %f, %f, %f\n", state.cam_pos.x, state.cam_pos.y, state.cam_pos.z);
-		printf("look, %f, %f, %f\n", state.cam_look.x, state.cam_look.y, state.cam_look.z);
 
 		state.frame_curr = ((f32)SDL_GetTicks()) / 1000.0f;
 		state.frame_diff = state.frame_curr - state.frame_last;
@@ -399,10 +403,8 @@ void viewer_eventaxis(SDL_Event *event, struct simstate_t *state)
 
 	f32 mapval;
 
-#if 0 // PUT BACK WHEN WE CAN TOGGLE THE ROTATE VOLUME THING
 	if (!state->sim_rotatevol)
 		return;
-#endif
 
 	mapval = event->caxis.value / ((f32)SHRT_MAX);
 
@@ -426,10 +428,10 @@ void viewer_eventaxis(SDL_Event *event, struct simstate_t *state)
 		state->control_right[1] = mapval;
 		break;
 	case SDL_CONTROLLER_AXIS_TRIGGERLEFT: // X
-		state->control_trigger[0] = mapval;
+		state->control_trig[1] = mapval;
 		break;
 	case SDL_CONTROLLER_AXIS_TRIGGERRIGHT: // Y
-		state->control_trigger[1] = mapval;
+		state->control_trig[0] = mapval;
 		break;
 	default:
 		assert(0);
@@ -440,6 +442,22 @@ void viewer_eventaxis(SDL_Event *event, struct simstate_t *state)
 /* viewer_eventbutton : event handler for a controller button input */
 void viewer_eventbutton(SDL_Event *event, struct simstate_t *state)
 {
+	// NOTE https://wiki.libsdl.org/SDL_ControllerButtonEvent
+	// we mangle the boolean states here :)
+
+	switch (event->cbutton.button) {
+	case SDL_CONTROLLER_BUTTON_Y:
+		if (event->cbutton.state == SDL_PRESSED) {
+			// we need to set all of the rotations to zero to "pause"
+			state->control_left[1] = 0;
+			state->control_left[0] = 0;
+			state->sim_rotx = 0;
+			state->sim_roty = 0;
+			state->sim_rotz = 0;
+			state->sim_rotatevol = !state->sim_rotatevol;
+		}
+		break;
+	}
 }
 
 /* viewer_eventdevice : event handler for a controller device updates */
@@ -586,8 +604,12 @@ void viewer_handleinput(struct simstate_t *state)
 	}
 
 	// update the cube position in 3d space
-	state->sim_rotx += state->control_left[1];
-	state->sim_roty += state->control_left[0];
+	if (state->sim_rotatevol) {
+		state->sim_rotx += state->control_left[1] * camera_speed;
+		state->sim_roty += state->control_left[0] * camera_speed;
+		state->sim_rotz +=
+			camera_speed * (state->control_trig[1] - state->control_trig[0]);
+	}
 }
 
 u32 viewer_mkshader(char *vertex_file, char *fragment_file)
