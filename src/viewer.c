@@ -48,7 +48,10 @@
  * TODO Oculus SDK
  * 1. Get XYZ Player Movement
  * 2. Get XYZ Controller Movement
- * 3. 
+ *
+ * TODO Simulation Rotation
+ * 1. Read from XBOX Controller
+ * 2. Triggers Pull/Push the Mesh Apart/Together
  *
  * TODO Cleanup (brian)
  * 1. SDL / OpenGL Error Handling
@@ -60,6 +63,7 @@
 #include <string.h>
 #include <time.h>
 #include <assert.h>
+#include <limits.h>
 #include <float.h>
 
 #include <SDL2/SDL.h> // TODO (brian) check include path for other operating systems
@@ -75,26 +79,30 @@
 
 // get some other viewer flags out of the way
 #define VIEWER_SDL_INITFLAGS \
-	SDL_INIT_VIDEO | SDL_INIT_TIMER
+	SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER
 #define VIEWER_SDL_WINFLAGS SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
 
-#define VIEWER_FOV 45.0f
-
 #define ERRLOG(a,b) fprintf(stderr,"%s:%d %s %s\n",__FILE__,__LINE__,(a),(b))
-
-#define TORAD(x)   ((x) * (M_PI / 180.0))
-
-#define VIEWER_MAXVEL 1.0f
 
 #define VERTEX_SHADER_PATH   "src/vertex.glsl"
 #define FRAGMENT_SHADER_PATH "src/fragment.glsl"
 
+#define VIEWER_MAXVEL 1.0f
+#define VIEWER_FOV 45.0f
+
 // #define TARGET_FPS 144
 #define TARGET_FPS 144
-#define TARGET_FRAMETIME 1000 / TARGET_FPS
+#define TARGET_FRAMETIME 1000.0 / TARGET_FPS
 #define WIDTH  1024
 #define HEIGHT  768
-#define MOUSE_SENSITIVITY 1
+#define MOUSE_SENSITIVITY 0.5f
+
+enum {
+	AXIS_X,
+	AXIS_Y,
+	AXIS_Z,
+	AXIS_TOTAL
+} SIM_CURRAXIS;
 
 struct simstate_t {
 	// input goes first
@@ -118,6 +126,14 @@ struct simstate_t {
 
 	f32 frame_curr, frame_last, frame_diff;
 
+	// volume state
+	// we update the uniforms for the volume every frame
+	hmm_vec3 sim_pos, sim_front;
+	fvec2_t control_left, control_right, control_trigger; // 0 - x, 1 - y
+	f32 sim_rotx, sim_roty, sim_rotz; // in deg to simply call hmm_rotate
+	f32 sim_stretch;
+	s32 sim_curraxis, sim_rotatevol;
+
 	int run;
 
 	f64 lbound, hbound; // low and high range of values on ALL the meshes
@@ -125,10 +141,13 @@ struct simstate_t {
 
 void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high);
 
+void viewer_eventaxis(SDL_Event *event, struct simstate_t *state);
 void viewer_eventmotion(SDL_Event *event, struct simstate_t *state);
 void viewer_eventmouse(SDL_Event *event, struct simstate_t *state);
 void viewer_eventkey(SDL_Event *event, struct simstate_t *state);
+
 void viewer_handleinput(struct simstate_t *state);
+
 u32 viewer_mkshader(char *vertex, char *fragment);
 
 /* viewer_run : runs the molt graphical 3d simulation viewer */
@@ -137,6 +156,8 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	SDL_Window *window;
 	SDL_GLContext glcontext;
 	SDL_Event event;
+	SDL_GameController *controller;
+
 	struct simstate_t state;
 	u32 program_shader;
 	struct lump_umesh_t *mesh;
@@ -197,10 +218,15 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	memset(&state, 0, sizeof state);
 
+	// initialize the camera
 	state.first_mouse = 1;
 	state.cam_pos = HMM_Vec3(0, 0, 3);
 	state.cam_front = HMM_Vec3(0, 0, -1);
 	state.cam_up = HMM_Vec3(0, 1, 0);
+
+	// init the simulation rectangular prism in the same way
+	state.sim_pos = HMM_Vec3(0, 0, 0);
+	state.sim_front = HMM_Vec3(0, 0, -1);
 
 	rc = 0, state.run = 1;
 	mesh = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
@@ -228,17 +254,24 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		return -1;
 	}
 
+	controller = SDL_GameControllerOpen(0);
+	if (!controller) {
+		ERRLOG("Couldn't open Controller 0", SDL_GetError());
+		return -1;
+	}
+
+	// TODO (brian) check for window creation errors
+
 	state.cam_x = WIDTH;
 	state.cam_y = HEIGHT;
 	state.cam_sens = MOUSE_SENSITIVITY;
 	state.cam_yaw = -90;
 
+	// setup controller information
 	if (SDL_SetRelativeMouseMode(SDL_TRUE) == -1) {
 		ERRLOG("Couldn't Set Relative Motion Mode", SDL_GetError());
 		return -1;
 	}
-
-	// TODO (brian) check for window creation errors
 
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
@@ -270,11 +303,13 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	// setup original cube state
 	orig = HMM_Mat4d(1.0f);
-	orig = HMM_MultiplyMat4(orig, HMM_Rotate(90, HMM_Vec3(0.0f, 1.0f, 1.0f)));
 
 	while (state.run) {
 		while (SDL_PollEvent(&event)) {
 			switch (event.type) {
+			case SDL_CONTROLLERAXISMOTION:
+				viewer_eventaxis(&event, &state);
+				break;
 			case SDL_MOUSEMOTION:
 				viewer_eventmotion(&event, &state);
 				break;
@@ -302,9 +337,11 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 		glUseProgram(program_shader);
 
-		// create our transformation
-		model = HMM_Rotate(SDL_GetTicks(), HMM_Vec3(1.0f, 0.0f, 0.0f));
-		model = HMM_MultiplyMat4(model, orig);
+		// rotate our volume
+		model = orig;
+		model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotx, HMM_Vec3(1, 0, 0)));
+		model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_roty, HMM_Vec3(0, 1, 0)));
+		model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotz, HMM_Vec3(0, 0, 1)));
 
 		state.cam_look = HMM_AddVec3(state.cam_pos, state.cam_front);
 		view = HMM_LookAt(state.cam_pos, state.cam_look, state.cam_up);
@@ -344,11 +381,72 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	// clean up from our gl shenanigans
 	glDeleteProgram(program_shader);
 
+	SDL_GameControllerClose(controller);
 	SDL_GL_DeleteContext(glcontext);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
 
 	return rc;
+}
+
+/* viewer_eventaxis : event handler for a controller axis input */
+void viewer_eventaxis(SDL_Event *event, struct simstate_t *state)
+{
+	// NOTE https://wiki.libsdl.org/SDL_ControllerAxisEvent
+	// the values that we'll read from the axis is between (-2^16)-(2^16 - 1)
+	// so we have to map that into a -1 - 1 floating point range, to make the
+	// other f32 math nice
+
+	f32 mapval;
+
+#if 0 // PUT BACK WHEN WE CAN TOGGLE THE ROTATE VOLUME THING
+	if (!state->sim_rotatevol)
+		return;
+#endif
+
+	mapval = event->caxis.value / ((f32)SHRT_MAX);
+
+	if (-0.1 <= mapval && mapval < 0.1) // we don't want weird controller input
+		return;
+
+	switch ((s16)event->caxis.axis) {
+	case SDL_CONTROLLER_AXIS_INVALID:
+		ERRLOG("Invalid Axis!", SDL_GetError());
+		break;
+	case SDL_CONTROLLER_AXIS_LEFTX:
+		state->control_left[0] = mapval;
+		break;
+	case SDL_CONTROLLER_AXIS_LEFTY:
+		state->control_left[1] = mapval;
+		break;
+	case SDL_CONTROLLER_AXIS_RIGHTX:
+		state->control_right[0] = mapval;
+		break;
+	case SDL_CONTROLLER_AXIS_RIGHTY:
+		state->control_right[1] = mapval;
+		break;
+	case SDL_CONTROLLER_AXIS_TRIGGERLEFT: // X
+		state->control_trigger[0] = mapval;
+		break;
+	case SDL_CONTROLLER_AXIS_TRIGGERRIGHT: // Y
+		state->control_trigger[1] = mapval;
+		break;
+	default:
+		assert(0);
+		break;
+	}
+}
+
+/* viewer_eventbutton : event handler for a controller button input */
+void viewer_eventbutton(SDL_Event *event, struct simstate_t *state)
+{
+}
+
+/* viewer_eventdevice : event handler for a controller device updates */
+void viewer_eventdevice(SDL_Event *event, struct simstate_t *state)
+{
+	// TODO (brian) fill out if we actually need this
+	// (really, just don't unplug the controller, and we're fine)
 }
 
 /* viewer_eventmotion : interprets and updates simstate from mouse motion */
@@ -380,6 +478,7 @@ void viewer_eventmotion(SDL_Event *event, struct simstate_t *state)
 	state->cam_front = HMM_NormalizeVec3(front);
 }
 
+/* viewer_eventmouse : mouse button event handler */
 void viewer_eventmouse(SDL_Event *event, struct simstate_t *state)
 {
 	s8 *ptr;
@@ -485,6 +584,10 @@ void viewer_handleinput(struct simstate_t *state)
 		tmp = HMM_MultiplyVec3f(tmp, camera_speed);
 		state->cam_pos = HMM_AddVec3(state->cam_pos, tmp);
 	}
+
+	// update the cube position in 3d space
+	state->sim_rotx += state->control_left[1];
+	state->sim_roty += state->control_left[0];
 }
 
 u32 viewer_mkshader(char *vertex_file, char *fragment_file)
