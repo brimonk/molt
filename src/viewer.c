@@ -51,9 +51,13 @@
  * 1. Read from XBOX Controller
  * 2. Triggers Pull/Push the Mesh Apart/Together
  *
+ * TODO Simulation Environment
+ * 1. Debug Block Import & Render
+ *
  * TODO Cleanup (brian)
  * 1. SDL / OpenGL Error Handling
  * 2. Cross Platform Include Headers
+ * 3. Make some sub-structures. The Uber structure isn't a super great idea
  */
 
 #include <stdio.h>
@@ -96,12 +100,37 @@
 #define HEIGHT  768
 #define MOUSE_SENSITIVITY 0.5f
 
+typedef hmm_vec3 vec3;
+typedef hmm_vec4 vec4;
+
+vec3 v3(f32 a, f32 b, f32 c) { return HMM_Vec3(a, b, c); }
+vec4 v4(f32 a, f32 b, f32 c, f32 d) { return HMM_Vec4(a, b, c, d); }
+
 enum {
 	AXIS_CAMERA,
 	AXIS_X,
 	AXIS_Y,
 	AXIS_Z
 } SIM_CURRAXIS;
+
+// NOTE (brian) all of the other geometry, that ISN'T the simulation
+// is defined by a series of colored, axis-aligned boxes with an XZ
+// checkerboard pattern applied
+struct block_t {
+	f32 x0, y0, z0;
+	f32 x1, y1, z1;
+	f32  r,  g,  b;
+	f32  s,  f,  k; // checkerboard scale, fraction, brightness
+};
+
+// NOTE these are the INPUTS for the vertex shader, as processed from a single
+// block_t
+struct shadervert_t {
+	hmm_vec3 p; // position
+	hmm_vec3 n; // normal
+	hmm_vec3 c; // color
+	hmm_vec3 x; // the extra junk
+};
 
 struct simstate_t {
 	// input goes first
@@ -127,6 +156,16 @@ struct simstate_t {
 
 	struct block_t *blocks;
 	s32 block_cap, block_used;
+	struct shadervert_t *verts;
+	s32 vert_cap, vert_used;
+	GLuint w_prog, w_vao, w_vbo;
+	GLint w_uProj;
+	GLint w_uView;
+	GLint w_uModel;
+	GLint w_uLightPos;
+	GLint w_uAmbientLight;
+	vec3 w_ambient;
+	vec4 w_light;
 
 	// volume state
 	// we update the uniforms for the volume every frame
@@ -143,18 +182,11 @@ struct simstate_t {
 	f64 lbound, hbound; // low and high range of values on ALL the meshes
 };
 
-// NOTE (brian) all of the other geometry, that ISN'T the simulation
-// is defined by a series of colored, axis-aligned boxes with an XZ
-// checkerboard pattern applied
-struct block_t {
-	f32 x0, y0, z0;
-	f32 x1, y1, z1;
-	f32  r,  g,  b;
-	f32  s,  f,  k;
-};
+void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high);
 
 void viewer_loadgeom(struct simstate_t *state, char *geomfile);
-void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high);
+void viewer_processgeom(struct simstate_t *state);
+void viewer_loadworld(struct simstate_t *state);
 
 void viewer_eventaxis(SDL_Event *event, struct simstate_t *state);
 void viewer_eventbutton(SDL_Event *event, struct simstate_t *state);
@@ -231,7 +263,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		-0.5f,  0.5f, -0.5f,
 	};
 
-	hmm_mat4 model, view, proj, orig;
+	hmm_mat4 model, view, proj, orig, normal;
 
 	memset(&state, 0, sizeof state);
 
@@ -245,10 +277,15 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	state.sim_pos = HMM_Vec3(0, 3, 0);
 	state.sim_front = HMM_Vec3(0, 0, -1);
 
+	// load up the block geometry
 	state.blocks = malloc(sizeof(*state.blocks) * (VIEWER_MAXBLOCKS));
 	state.block_cap = VIEWER_MAXBLOCKS;
-
 	viewer_loadgeom(&state, "viewer_geom.txt");
+
+	// now, process that into specific vertices
+	state.vert_cap = state.block_used * 36;
+	state.verts = malloc(sizeof(*state.verts) * state.vert_cap);
+	viewer_processgeom(&state);
 
 	rc = 0, state.run = 1;
 	mesh = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
@@ -305,8 +342,14 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	}
 
 	glEnable(GL_DEPTH_TEST);
+	// glEnable(GL_CULL_FACE);
+
+	// load the worldstate
+	viewer_loadworld(&state);
 
 	program_shader = viewer_mkshader(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH);
+
+	glUseProgram(program_shader);
 
 	glGenVertexArrays(1, &vao);
 	glGenBuffers(1, &vbo);
@@ -318,8 +361,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	// position
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
 	glEnableVertexAttribArray(0);
-
-	glUseProgram(program_shader);
 
 	// setup original cube state
 	orig = HMM_Mat4d(1.0f);
@@ -360,6 +401,26 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		glClearColor(0, 0, 0, 1);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+		state.cam_look = HMM_AddVec3(state.cam_pos, state.cam_front);
+		view = HMM_LookAt(state.cam_pos, state.cam_look, state.cam_up);
+		proj = HMM_Perspective(90.0f, WIDTH / HEIGHT, 0.1f, 100.0f);
+
+		// RENDER WORLD
+		glUseProgram(state.w_prog);
+
+		hmm_vec4 tmp;
+		tmp = HMM_MultiplyMat4ByVec4(view, state.w_light);
+
+		glUniformMatrix4fv(state.w_uProj, 1, GL_TRUE, (f32 *)&proj);
+		glUniformMatrix4fv(state.w_uView, 1, GL_TRUE, (f32 *)&view);
+		glUniformMatrix4fv(state.w_uModel, 1, GL_TRUE, (f32 *)&orig);
+		glUniform4fv(state.w_uLightPos, 1, (f32 *)&tmp);
+		glUniform3fv(state.w_uAmbientLight, 1, (f32 *)&state.w_ambient);
+
+		glBindVertexArray(state.w_vao);
+		glDrawArrays(GL_TRIANGLES, 0, state.vert_used);
+
+		// RENDER SIMULATION
 		glUseProgram(program_shader);
 
 		// rotate our volume
@@ -368,11 +429,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotp[1], HMM_Vec3(0, 1, 0)));
 			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotp[2], HMM_Vec3(0, 0, 1)));
 		}
-
-		state.cam_look = HMM_AddVec3(state.cam_pos, state.cam_front);
-		view = HMM_LookAt(state.cam_pos, state.cam_look, state.cam_up);
-
-		proj = HMM_Perspective(90.0f, WIDTH / HEIGHT, 0.1f, 100.0f);
 
 		model_location = glGetUniformLocation(program_shader, "model");
 		view_location = glGetUniformLocation(program_shader, "view");
@@ -476,7 +532,6 @@ void viewer_eventbutton(SDL_Event *event, struct simstate_t *state)
 			state->sim_rotp[2] = 0;
 			state->sim_curraxis = (state->sim_curraxis+1) % (AXIS_Z+1);
 			state->sim_rotatevol = state->sim_curraxis != AXIS_CAMERA;
-			printf("state->sim_curraxis %d\n", state->sim_curraxis);
 		}
 		break;
 	}
@@ -674,17 +729,143 @@ void viewer_loadgeom(struct simstate_t *state, char *geomfile)
 
 	state->block_used = i;
 
-	for (i = 0; i < state->block_used; i++) {
-		printf("%f %f %f\n",
-				state->blocks[i].x0,
-				state->blocks[i].y0,
-				state->blocks[i].z0);
-	}
-
 	if (i == state->block_cap)
 		printf("WARNING : reached block capacity!\n");
 
 	fclose(fp);
+}
+
+/* viewer_loadworld : gets world geometry onto the graphics card */
+void viewer_loadworld(struct simstate_t *state)
+{
+	GLint locp, locn, locc, locx;
+	size_t stride = sizeof(vec3) * 4;
+
+	glGenVertexArrays(1, &state->w_vao);
+	glBindVertexArray(state->w_vao);
+
+	glGenBuffers(1, &state->w_vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, state->w_vbo);
+	glBufferData(GL_ARRAY_BUFFER, state->vert_used * stride, state->verts, GL_STATIC_DRAW);
+
+	state->w_prog = viewer_mkshader("src/world.vert", "src/world.frag");
+
+	if (state->w_prog) {
+		glUseProgram(state->w_prog);
+
+		state->w_uProj = glGetAttribLocation(state->w_prog, "ProjectionMatrix");
+		state->w_uView = glGetAttribLocation(state->w_prog, "ModelViewMatrix");
+		state->w_uModel = glGetAttribLocation(state->w_prog, "LightPosition");
+		state->w_uLightPos = glGetAttribLocation(state->w_prog, "AmbientLight");
+		state->w_uAmbientLight = glGetAttribLocation(state->w_prog, "AmbientLight");
+
+		locp = glGetAttribLocation(state->w_prog, "vPosition");
+		locn = glGetAttribLocation(state->w_prog, "vNormal");
+		locc = glGetAttribLocation(state->w_prog, "vColor");
+		locx = glGetAttribLocation(state->w_prog, "vChecker");
+
+		glEnableVertexAttribArray(locp);
+		glEnableVertexAttribArray(locn);
+		glEnableVertexAttribArray(locc);
+		glEnableVertexAttribArray(locx);
+
+		glVertexAttribPointer(locp, 3, GL_FLOAT, 0, stride, (const void *) 0);
+		glVertexAttribPointer(locn, 3, GL_FLOAT, 0, stride, (const void *)12);
+		glVertexAttribPointer(locc, 3, GL_FLOAT, 0, stride, (const void *)24);
+		glVertexAttribPointer(locx, 3, GL_FLOAT, 0, stride, (const void *)36);
+
+		glUseProgram(0);
+	}
+
+	glBindVertexArray(0);
+
+	state->w_ambient = v3(0.2, 0.2, 0.2);
+	state->w_light   = v4(0.0, 2.1, 0.0, 1.0);
+}
+
+/* viewer_loadsim : load/setup the simulation state */
+void viewer_loadsim(struct simstate_t *state)
+{
+}
+
+/* make_vert : appends the info to the vert structure, and increments the internal pointer */
+static void make_vert(struct simstate_t *state, vec3 p, vec3 n, vec3 c, vec3 x)
+{
+	state->verts[state->vert_used].p = p;
+	state->verts[state->vert_used].n = n;
+	state->verts[state->vert_used].c = c;
+	state->verts[state->vert_used].p = x;
+	state->vert_used++;
+}
+
+/* make_face : triangulates and appends the verts of a face to the vert arr */
+static void make_face(struct simstate_t *state, vec3 p0, vec3 p1, vec3 p2, vec3 p3, vec3 n, vec3 c, vec3 x)
+{
+	// NOTE each face has 6 vertices
+	// (rectangle made of two triangles)
+	make_vert(state, p0, n, c, x);
+	make_vert(state, p1, n, c, x);
+	make_vert(state, p2, n, c, x);
+
+	make_vert(state, p0, n, c, x);
+	make_vert(state, p2, n, c, x);
+	make_vert(state, p3, n, c, x);
+}
+
+/* make_face : appends the verts of a block to the vert arr */
+static void make_block(struct simstate_t *state, struct block_t *block)
+{
+	f32 x0, y0, z0;
+	f32 x1, y1, z1;
+	f32  r,  g,  b;
+	f32  s,  f,  k;
+
+	x0 = block->x0; y0 = block->y0; z0 = block->z0;
+	x1 = block->x1; y1 = block->y1; z1 = block->z1;
+	r = block->r;    g = block->g;    b = block->b;
+	s = block->s;    f = block->f;    k = block->k;
+
+	// NOTE a rectangular prism has 6 faces
+
+	make_face(state, v3(x1, y1, z1),
+					 v3(x1, y0, z1),
+					 v3(x1, y0, z0),
+					 v3(x1, y1, z0), v3(+1, 0, 0), v3(r, g, b), v3(s, f, k));
+
+	make_face(state, v3(x0, y1, z0),
+					 v3(x0, y0, z0),
+					 v3(x0, y0, z1),
+					 v3(x0, y1, z1), v3(-1, 0, 0), v3(r, g, b), v3(s, f, k));
+
+	make_face(state, v3(x0, y1, z0),
+					 v3(x0, y1, z1),
+					 v3(x1, y1, z1),
+					 v3(x1, y1, z0), v3(0, 1, 0), v3(r, g, b), v3(s, f, k));
+
+	make_face(state, v3(x0, y0, z1),
+					 v3(x0, y0, z0),
+					 v3(x1, y0, z0),
+					 v3(x1, y0, z1), v3(0,-1, 0), v3(r, g, b), v3(s, f, k));
+
+	make_face(state, v3(x0, y1, z1),
+					 v3(x0, y0, z1),
+					 v3(x1, y0, z1),
+					 v3(x1, y1, z1), v3(0, 0, 1), v3(r, g, b), v3(s, f, k));
+
+	make_face(state, v3(x1, y1, z1),
+					 v3(x1, y0, z0),
+					 v3(x0, y0, z0),
+					 v3(x0, y1, z0), v3(0, 0, -1), v3(r, g, b), v3(s, f, k));
+}
+
+/* viewer_processgeom : processes the geometry loaded from loadgeom */
+void viewer_processgeom(struct simstate_t *state)
+{
+	s32 i;
+
+	for (i = 0; i < state->block_used; i++) {
+		make_block(state, state->blocks + i);
+	}
 }
 
 u32 viewer_mkshader(char *vertex_file, char *fragment_file)
