@@ -129,6 +129,8 @@ int main(int argc, char **argv)
 	// create our disk-backed storage
 	fd = io_open(fname);
 
+#if 0
+
 	// figure out if our disk-backed store is already good enough
 	// WARN (brian) not robust
 	hunksize = sizeof(struct lump_header_t);
@@ -154,6 +156,8 @@ int main(int argc, char **argv)
 		lump_magiccheck(hunk);
 		setupstate_print(hunk);
 	}
+
+#endif
 
 	if (flags & FLG_VIEWER) {
 		cfg = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);

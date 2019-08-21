@@ -2,9 +2,10 @@
 #
 # MOLT Specific (GNU) Makefile
 
-CC = cc
-LINKER = -ldl -lm -lSDL2 -lGL
-FLAGS = -Wall -g3 -march=native
+CC = gcc
+# LINKER = -lm -lSDL2 -lGL
+LINKER = -LC:\users\brian\desktop\build\SDL\lib -LC:\MinGW\lib -LC:\users\brian\desktop\build\glew\lib -lmingw32 -lSDL2main -lSDL2 -lopengl32 -lglew32
+FLAGS = -Wall -g3 -march=native -IC:\Users\brian\Desktop\build\SDL\include -IC:\users\brian\desktop\build\glew\include
 TARGET = molt
 SRC = $(wildcard src/*.c)
 OBJ = $(SRC:.c=.o)

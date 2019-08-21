@@ -69,10 +69,12 @@
 #include <float.h>
 
 #include <SDL2/SDL.h> // TODO (brian) check include path for other operating systems
+#define GLEW_STATIC
+#include "glew.h"
 
 #define GL_GLEXT_PROTOTYPES
-#include <GL/gl.h>
-#include <GL/glext.h>
+// #include <GL/gl.h>
+// #include <GL/glext.h>
 
 #include "common.h"
 #include "molt.h"
@@ -199,6 +201,48 @@ void viewer_handleinput(struct simstate_t *state);
 
 u32 viewer_mkshader(char *vertex, char *fragment);
 
+
+
+// macro and functions to check for opengl errors
+void gl_check_errors(const char *file, int line);
+
+#ifdef DEBUG
+#define GL_ERROR_CHECK() gl_check_errors(__FILE__, __LINE__)
+#endif
+#ifndef DEBUG
+#define GL_ERROR_CHECK() 
+#endif
+
+void gl_check_errors(const char *file, int line)
+{
+	GLenum err;
+	_Bool errors_found = 0;
+	while((err = glGetError()) != GL_NO_ERROR) {
+		// Process/log the error.
+		// TODO: display the error in hex
+		errors_found = 1;
+		fprintf(stderr, "opengl error at %s:%i: %i\n", file, line, err);
+	}
+	// if(errors_found)
+	//   DBREAK();
+}
+
+
+f64 viewer_particular(ivec4_t i)
+{
+	f64 k, l, m, c;
+
+	k = 0.4;
+	l = 0.2;
+	m = 0.003;
+	c = 0.9;
+
+	return sin(k * M_PI * i[0]) *
+		   sin(l * M_PI * i[1]) *
+		   sin(m * M_PI * i[2]) *
+		   cos(c * M_PI * sqrt(pow(k,2) + pow(l,2) + pow(m,2)) * i[0]);
+}
+
 /* viewer_run : runs the molt graphical 3d simulation viewer */
 s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 {
@@ -209,7 +253,8 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	struct simstate_t state;
 	u32 program_shader;
-	struct lump_umesh_t *mesh;
+	// struct lump_umesh_t *mesh;
+	f64 *mesh;
 
 	u32 model_location, view_location, persp_loc;
 	s32 rc, i, timesteps;
@@ -288,14 +333,34 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	viewer_processgeom(&state);
 
 	rc = 0, state.run = 1;
-	mesh = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
-	molt_cfg_parampull_xyz(cfg, meshdim, MOLT_PARAM_POINTS);
+	// mesh = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
+	// molt_cfg_parampull_xyz(cfg, meshdim, MOLT_PARAM_POINTS);
+	meshdim[0] = 100;
+	meshdim[1] = 100;
+	meshdim[2] = 100;
 	meshlen = meshdim[0] * meshdim[1] * meshdim[2];
-	timesteps = cfg->t_params[MOLT_PARAM_POINTS];
+	// timesteps = cfg->t_params[MOLT_PARAM_POINTS];
+	timesteps = 4;
 
-	for (i = 0; i < timesteps; i++) {
-		viewer_bounds(mesh[i].data, meshlen, &state.lbound, &state.hbound);
+	// TODO remove this after demo
+	// This is a part of the particular solution for the summer 2019 vr midterm
+	// demo
+	mesh = malloc(sizeof(*mesh) * meshdim[0] * meshdim[1] * meshdim[2] * timesteps);
+	memset(mesh, 0, sizeof(*mesh) * meshdim[0] * meshdim[1] * meshdim[2] * timesteps);
+
+	ivec4_t bounds;
+	for (bounds[3] = 0; bounds[3] < 4; bounds[3]++) {
+		for (bounds[0] = 0; bounds[0] < 100; bounds[0]++) {
+			for (bounds[1] = 0; bounds[1] < 100; bounds[1]++) {
+				for (bounds[2] = 0; bounds[2] < 100; bounds[2]++) {
+					int lidx = IDX3D(bounds[0], bounds[1], bounds[2], 100, 100);
+					mesh[lidx] = viewer_particular(bounds);
+				}
+			}
+		}
 	}
+
+	viewer_bounds(mesh, meshlen, &state.lbound, &state.hbound);
 
 	// determine what the high and low values in ALL the meshes are
 	// this is for coloring the quads later in the program
@@ -305,7 +370,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		return -1;
 	}
 
-	window = SDL_CreateWindow("MOLT Viewer",0, 0, WIDTH, HEIGHT, VIEWER_SDL_WINFLAGS);
+	window = SDL_CreateWindow("MOLT Viewer", 0, 0, WIDTH, HEIGHT, VIEWER_SDL_WINFLAGS);
 	if (window == NULL) {
 		ERRLOG("Couldn't Create Window", SDL_GetError());
 		return -1;
@@ -339,6 +404,12 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	// set no vsync (??)
 	if (SDL_GL_SetSwapInterval(0) != 0) {
 		ERRLOG("Couldn't set the swap interval", SDL_GetError());
+	}
+
+	int glewrc = glewInit();
+	if (glewrc != GLEW_OK) {
+		ERRLOG("Don't have recent OpenGl stuff", glewGetErrorString(glewrc));
+		return -1;
 	}
 
 	glEnable(GL_DEPTH_TEST);
@@ -451,6 +522,9 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		if (state.frame_diff < TARGET_FRAMETIME) {
 			SDL_Delay(((f32)SDL_GetTicks() / 1000) - state.frame_diff);
 		}
+		printf("ftime : %f\n", state.frame_diff);
+
+		GL_ERROR_CHECK();
 	}
 
 	glDeleteVertexArrays(1, &vao);
