@@ -88,8 +88,8 @@
 
 #define ERRLOG(a,b) fprintf(stderr,"%s:%d %s %s\n",__FILE__,__LINE__,(a),(b))
 
-#define VERTEX_SHADER_PATH   "src/vertex.glsl"
-#define FRAGMENT_SHADER_PATH "src/fragment.glsl"
+#define VERTEX_SHADER_PATH   "src\\vertex.glsl"
+#define FRAGMENT_SHADER_PATH "src\\fragment.glsl"
 
 #define VIEWER_MAXVEL 1.0f
 #define VIEWER_FOV 45.0f
@@ -132,6 +132,10 @@ struct shadervert_t {
 	hmm_vec3 n; // normal
 	hmm_vec3 c; // color
 	hmm_vec3 x; // the extra junk
+};
+
+struct particle_t {
+	f32 x, y, z, w; // (x,y,z) -> w
 };
 
 struct simstate_t {
@@ -181,7 +185,7 @@ struct simstate_t {
 
 	int run;
 
-	f64 lbound, hbound; // low and high range of values on ALL the meshes
+	float uColorLow, uColorHigh;
 };
 
 void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high);
@@ -228,7 +232,7 @@ void gl_check_errors(const char *file, int line)
 }
 
 
-f64 viewer_particular(ivec4_t i)
+f64 viewer_particular(ivec3_t i)
 {
 	f64 k, l, m, c;
 
@@ -239,8 +243,7 @@ f64 viewer_particular(ivec4_t i)
 
 	return sin(k * M_PI * i[0]) *
 		   sin(l * M_PI * i[1]) *
-		   sin(m * M_PI * i[2]) *
-		   cos(c * M_PI * sqrt(pow(k,2) + pow(l,2) + pow(m,2)) * i[0]);
+		   sin(m * M_PI * i[2]);
 }
 
 /* viewer_run : runs the molt graphical 3d simulation viewer */
@@ -253,62 +256,27 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	struct simstate_t state;
 	u32 program_shader;
-	// struct lump_umesh_t *mesh;
-	f64 *mesh;
 
-	u32 model_location, view_location, persp_loc;
+	u32 locModel, locView, locProj;
+	u32 locColorLow, locColorHigh;
 	s32 rc, i, timesteps;
 	s64 meshlen;
 
 	ivec3_t meshdim;
 
-	u32 vbo, vao;
+	u32 vbo, vao, vbboard;
+	GLuint ppos_buf;
 
-	float vertices[] = {
-		-0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f, -0.5f,
-		 0.5f,  0.5f, -0.5f,
-		 0.5f,  0.5f, -0.5f,
-		-0.5f,  0.5f, -0.5f,
-		-0.5f, -0.5f, -0.5f,
+	struct particle_t *parts;
 
-		-0.5f, -0.5f,  0.5f,
-		 0.5f, -0.5f,  0.5f,
-		 0.5f,  0.5f,  0.5f,
-		 0.5f,  0.5f,  0.5f,
-		-0.5f,  0.5f,  0.5f,
-		-0.5f, -0.5f,  0.5f,
+	hmm_mat4 model, view, proj, orig;
 
-		-0.5f,  0.5f,  0.5f,
-		-0.5f,  0.5f, -0.5f,
-		-0.5f, -0.5f, -0.5f,
-		-0.5f, -0.5f, -0.5f,
-		-0.5f, -0.5f,  0.5f,
-		-0.5f,  0.5f,  0.5f,
-
-		 0.5f,  0.5f,  0.5f,
-		 0.5f,  0.5f, -0.5f,
-		 0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f,  0.5f,
-		 0.5f,  0.5f,  0.5f,
-
-		-0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f,  0.5f,
-		 0.5f, -0.5f,  0.5f,
-		-0.5f, -0.5f,  0.5f,
-		-0.5f, -0.5f, -0.5f,
-
-		-0.5f,  0.5f, -0.5f,
-		 0.5f,  0.5f, -0.5f,
-		 0.5f,  0.5f,  0.5f,
-		 0.5f,  0.5f,  0.5f,
-		-0.5f,  0.5f,  0.5f,
-		-0.5f,  0.5f, -0.5f,
+	static const GLfloat vbboarddata[] = {
+		-0.5f, -0.5f, 0.0f,
+		 0.5f, -0.5f, 0.0f,
+		-0.5f,  0.5f, 0.0f,
+		 0.5f,  0.5f, 0.0f,
 	};
-
-	hmm_mat4 model, view, proj, orig, normal;
 
 	memset(&state, 0, sizeof state);
 
@@ -345,22 +313,32 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	// TODO remove this after demo
 	// This is a part of the particular solution for the summer 2019 vr midterm
 	// demo
-	mesh = malloc(sizeof(*mesh) * meshdim[0] * meshdim[1] * meshdim[2] * timesteps);
-	memset(mesh, 0, sizeof(*mesh) * meshdim[0] * meshdim[1] * meshdim[2] * timesteps);
+	parts = malloc(sizeof(*parts) * meshlen);
+
+	state.uColorLow = DBL_MAX;
+	state.uColorHigh = DBL_MIN;
 
 	ivec4_t bounds;
-	for (bounds[3] = 0; bounds[3] < 4; bounds[3]++) {
-		for (bounds[0] = 0; bounds[0] < 100; bounds[0]++) {
-			for (bounds[1] = 0; bounds[1] < 100; bounds[1]++) {
-				for (bounds[2] = 0; bounds[2] < 100; bounds[2]++) {
-					int lidx = IDX3D(bounds[0], bounds[1], bounds[2], 100, 100);
-					mesh[lidx] = viewer_particular(bounds);
+	for (bounds[0] = 0; bounds[0] < 100; bounds[0]++) {
+		for (bounds[1] = 0; bounds[1] < 100; bounds[1]++) {
+			for (bounds[2] = 0; bounds[2] < 100; bounds[2]++) {
+				u64 lidx = IDX3D(bounds[0], bounds[1], bounds[2], 100, 100);
+				parts[lidx].x = bounds[0];
+				parts[lidx].y = bounds[1];
+				parts[lidx].z = bounds[2];
+				parts[lidx].w = viewer_particular(bounds);
+
+				if (state.uColorLow < parts[lidx].w) {
+					state.uColorLow = parts[lidx].w;
+				}
+				if (state.uColorHigh > parts[lidx].w) {
+					state.uColorHigh = parts[lidx].w;
 				}
 			}
 		}
 	}
 
-	viewer_bounds(mesh, meshlen, &state.lbound, &state.hbound);
+	// viewer_bounds(parts, meshlen, &state.color_bounds[0], &state.color_bounds[1]);
 
 	// determine what the high and low values in ALL the meshes are
 	// this is for coloring the quads later in the program
@@ -395,7 +373,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		return -1;
 	}
 
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
@@ -406,6 +384,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		ERRLOG("Couldn't set the swap interval", SDL_GetError());
 	}
 
+	glewExperimental = 1;
 	int glewrc = glewInit();
 	if (glewrc != GLEW_OK) {
 		ERRLOG("Don't have recent OpenGl stuff", glewGetErrorString(glewrc));
@@ -413,7 +392,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	}
 
 	glEnable(GL_DEPTH_TEST);
-	// glEnable(GL_CULL_FACE);
+	glEnable(GL_CULL_FACE);
 
 	// load the worldstate
 	viewer_loadworld(&state);
@@ -422,16 +401,15 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	glUseProgram(program_shader);
 
-	glGenVertexArrays(1, &vao);
-	glGenBuffers(1, &vbo);
-	glBindVertexArray(vao);
+	// fill out the VBO with the billboard data
+	glGenBuffers(1, &vbboard);
+	glBindBuffer(GL_ARRAY_BUFFER, vbboard);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vbboard), vbboarddata, GL_STATIC_DRAW);
 
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	// position
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
-	glEnableVertexAttribArray(0);
+	// fill out the vbo containing positions and sizes of the particles
+	glGenBuffers(1, &ppos_buf);
+	glBindBuffer(GL_ARRAY_BUFFER, ppos_buf);
+	glBufferData(GL_ARRAY_BUFFER, meshlen * sizeof(*parts), NULL, GL_STREAM_DRAW);
 
 	// setup original cube state
 	orig = HMM_Mat4d(1.0f);
@@ -468,31 +446,9 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 		viewer_handleinput(&state);
 
-		// render
-		glClearColor(0, 0, 0, 1);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
 		state.cam_look = HMM_AddVec3(state.cam_pos, state.cam_front);
 		view = HMM_LookAt(state.cam_pos, state.cam_look, state.cam_up);
 		proj = HMM_Perspective(90.0f, WIDTH / HEIGHT, 0.1f, 100.0f);
-
-		// RENDER WORLD
-		glUseProgram(state.w_prog);
-
-		hmm_vec4 tmp;
-		tmp = HMM_MultiplyMat4ByVec4(view, state.w_light);
-
-		glUniformMatrix4fv(state.w_uProj, 1, GL_TRUE, (f32 *)&proj);
-		glUniformMatrix4fv(state.w_uView, 1, GL_TRUE, (f32 *)&view);
-		glUniformMatrix4fv(state.w_uModel, 1, GL_TRUE, (f32 *)&orig);
-		glUniform4fv(state.w_uLightPos, 1, (f32 *)&tmp);
-		glUniform3fv(state.w_uAmbientLight, 1, (f32 *)&state.w_ambient);
-
-		glBindVertexArray(state.w_vao);
-		glDrawArrays(GL_TRIANGLES, 0, state.vert_used);
-
-		// RENDER SIMULATION
-		glUseProgram(program_shader);
 
 		// rotate our volume
 		if (state.sim_rotatevol) {
@@ -501,17 +457,41 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotp[2], HMM_Vec3(0, 0, 1)));
 		}
 
-		model_location = glGetUniformLocation(program_shader, "model");
-		view_location = glGetUniformLocation(program_shader, "view");
-		persp_loc = glGetUniformLocation(program_shader, "proj");
+		glUseProgram(program_shader);
+
+		locModel = glGetUniformLocation(program_shader, "uModel");
+		locView  = glGetUniformLocation(program_shader, "uView");
+		locProj  = glGetUniformLocation(program_shader, "uProj");
+		locColorLow = glGetUniformLocation(program_shader, "uCLo");
+		locColorHigh = glGetUniformLocation(program_shader, "uCHi");
 
 		// send them to the shader
-		glUniformMatrix4fv(model_location, 1, GL_FALSE, (f32 *)&model);
-		glUniformMatrix4fv(view_location, 1, GL_FALSE, (f32 *)&view);
-		glUniformMatrix4fv(persp_loc, 1, GL_FALSE, (f32 *)&proj);
+		glUniformMatrix4fv(locModel, 1, GL_FALSE, (f32 *)&model);
+		glUniformMatrix4fv(locView,  1, GL_FALSE, (f32 *)&view);
+		glUniformMatrix4fv(locProj,  1, GL_FALSE, (f32 *)&proj);
+		glUniformMatrix4fv(locColorLow,  1, GL_FALSE, (f32 *)&state.uColorLow);
+		glUniformMatrix4fv(locColorHigh,  1, GL_FALSE, (f32 *)&state.uColorHigh);
 
-		glBindVertexArray(vao);
-		glDrawArrays(GL_TRIANGLES, 0, 36);
+		// update the state of the particles
+		glEnableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, vbboard);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(*parts), (void *)0);
+
+		glEnableVertexAttribArray(1);
+		glBindBuffer(GL_ARRAY_BUFFER, ppos_buf);
+		glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, (void *)0);
+
+		// render
+		glClearColor(0, 0, 0, 1);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		glVertexAttribDivisor(0, 0);
+		glVertexAttribDivisor(1, 1);
+
+		glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, meshlen);
+
+		glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(1);
 
 		SDL_GL_SwapWindow(window);
 
@@ -522,9 +502,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		if (state.frame_diff < TARGET_FRAMETIME) {
 			SDL_Delay(((f32)SDL_GetTicks() / 1000) - state.frame_diff);
 		}
-		printf("ftime : %f\n", state.frame_diff);
-
-		GL_ERROR_CHECK();
 	}
 
 	glDeleteVertexArrays(1, &vao);
@@ -822,7 +799,7 @@ void viewer_loadworld(struct simstate_t *state)
 	glBindBuffer(GL_ARRAY_BUFFER, state->w_vbo);
 	glBufferData(GL_ARRAY_BUFFER, state->vert_used * stride, state->verts, GL_STATIC_DRAW);
 
-	state->w_prog = viewer_mkshader("src/world.vert", "src/world.frag");
+	state->w_prog = viewer_mkshader("src\\world.vert", "src\\world.frag");
 
 	if (state->w_prog) {
 		glUseProgram(state->w_prog);
