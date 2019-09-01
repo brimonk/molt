@@ -8,6 +8,8 @@
 #define IDX3D(x, y, z, ylen, zlen) ((x) + (y) * (ylen) + (z) * (zlen) * (ylen))
 
 #define SWAP(x, y, T) do { T SWAP = x; x = y; y = SWAP; } while (0)
+	
+#define ARRSIZE(x)   (sizeof((x))/sizeof((x)[0]))
 
 /* quick and dirty, cleaner typedefs */
 typedef uint8_t  u8;

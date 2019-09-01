@@ -4,12 +4,51 @@
 
 CC = gcc
 # LINKER = -lm -lSDL2 -lGL
-LINKER = -LC:\users\brian\desktop\build\SDL\lib -LC:\MinGW\lib -LC:\users\brian\desktop\build\glew\lib -lmingw32 -lSDL2main -lSDL2 -lopengl32 -lglew32
-FLAGS = -Wall -g3 -march=native -IC:\Users\brian\Desktop\build\SDL\include -IC:\users\brian\desktop\build\glew\include
+LINKER = -lmingw32 -lSDL2main -lSDL2 -lopengl32
+FLAGS = -Wall -g3 -march=native
 TARGET = molt
 SRC = $(wildcard src/*.c)
 OBJ = $(SRC:.c=.o)
 DEP = $(OBJ:.o=.d) # one dependency file for each source
+
+ifeq ($(OS),Windows_NT)
+	# windows is special :)
+	RMCMD := del
+	PATHD := \\
+    CCFLAGS += -D WIN32
+	TARGET := $(TARGET).exe
+	LINKER = -lm -lmingw32 -lSDL2main -lSDL2 -lopengl32
+    ifeq ($(PROCESSOR_ARCHITEW6432),AMD64)
+        CCFLAGS += -D AMD64
+    else
+        ifeq ($(PROCESSOR_ARCHITECTURE),AMD64)
+            CCFLAGS += -D AMD64
+        endif
+        ifeq ($(PROCESSOR_ARCHITECTURE),x86)
+            CCFLAGS += -D IA32
+        endif
+    endif
+else
+	RMCMD := rm
+	PATHD := /
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S),Linux)
+        CCFLAGS += -D LINUX
+    endif
+    ifeq ($(UNAME_S),Darwin)
+        CCFLAGS += -D OSX
+    endif
+    UNAME_P := $(shell uname -p)
+    ifeq ($(UNAME_P),x86_64)
+        CCFLAGS += -D AMD64
+    endif
+    ifneq ($(filter %86,$(UNAME_P)),)
+        CCFLAGS += -D IA32
+    endif
+    ifneq ($(filter arm%,$(UNAME_P)),)
+        CCFLAGS += -D ARM
+    endif
+endif
 
 all: $(TARGET)
 
@@ -27,8 +66,8 @@ $(TARGET): $(OBJ)
 clean: clean-obj clean-bin
 
 clean-obj:
-	rm -f $(OBJ) $(DEP)
+	$(RMCMD) src$(PATHD)*.o src$(PATHD)*.d $(RESO)
 	
 clean-bin:
-	rm -f $(shell find . -maxdepth 1 -executable -type f)
+	$(RMCMD) $(TARGET)
 

@@ -74,12 +74,7 @@ static int io_msync(void *base, void *ptr, size_t len, int flags);
 /* io_errnohandle : nicely gets the errno message and prints it */
 static void io_errnohandle()
 {
-	char buf[128];
-
-	memset(buf, 0, 128);
-
-	strerror_r(errno, buf, sizeof(buf));
-	fprintf(stderr, "%s\n", buf);
+	fprintf(stderr, "%s", strerror(errno));
 }
 
 #ifdef _WIN32
