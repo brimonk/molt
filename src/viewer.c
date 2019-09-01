@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <float.h>
+#include <stdarg.h>
 
 #include <SDL2/SDL.h> // TODO (brian) check include path for other operating systems
 
@@ -30,6 +31,7 @@
 #include "molt.h"
 #include "io.h"
 #include "handmademath.h"
+#include "viewer.h"
 
 // get some other viewer flags out of the way
 #define VIEWER_SDL_INITFLAGS \
@@ -50,29 +52,6 @@
 #define MAX_PARTICLES 1000
 #define VOL_BOUND (2 * M_PI)
 
-enum {
-	AXIS_CAMERA,
-	AXIS_X,
-	AXIS_Y,
-	AXIS_Z
-} SIM_CURRAXIS;
-
-enum {
-	KEY_BOARD_W,
-	KEY_BOARD_A,
-	KEY_BOARD_S,
-	KEY_BOARD_D,
-	KEY_BOARD_ESC,
-	KEY_BOARD_F,
-	KEY_BOARD_SPACE,
-	KEY_BOARD_SHIFT,
-	KEY_MOUSE_LEFT,
-	KEY_MOUSE_RIGHT,
-	KEY_MOUSE_CENTER,
-	KEY_CONTROL_Y,
-	KEY_COUNT
-};
-
 // shader container
 struct shader_cont_t {
 	char *str;
@@ -84,8 +63,71 @@ struct shader_cont_t {
 	u32 loc_model;
 };
 
+struct intmap_t {
+	int from;
+	int to;
+};
+
+static struct intmap_t sdlkey_to_inputkey[] = {
+	// numerics
+	{ SDLK_0, INPUT_KEY_0 },
+	{ SDLK_1, INPUT_KEY_1 },
+	{ SDLK_2, INPUT_KEY_2 },
+	{ SDLK_3, INPUT_KEY_3 },
+	{ SDLK_4, INPUT_KEY_4 },
+	{ SDLK_5, INPUT_KEY_5 },
+	{ SDLK_6, INPUT_KEY_6 },
+	{ SDLK_7, INPUT_KEY_7 },
+	{ SDLK_8, INPUT_KEY_8 },
+	{ SDLK_9, INPUT_KEY_9 },
+
+	// a-z keys in qwerty layout
+	{ SDLK_q, INPUT_KEY_Q },
+	{ SDLK_w, INPUT_KEY_W },
+	{ SDLK_e, INPUT_KEY_E },
+	{ SDLK_r, INPUT_KEY_R },
+	{ SDLK_t, INPUT_KEY_T },
+	{ SDLK_y, INPUT_KEY_Y },
+	{ SDLK_u, INPUT_KEY_U },
+	{ SDLK_i, INPUT_KEY_I },
+	{ SDLK_o, INPUT_KEY_O },
+	{ SDLK_p, INPUT_KEY_P },
+	{ SDLK_a, INPUT_KEY_A },
+	{ SDLK_s, INPUT_KEY_S },
+	{ SDLK_d, INPUT_KEY_D },
+	{ SDLK_f, INPUT_KEY_F },
+	{ SDLK_g, INPUT_KEY_G },
+	{ SDLK_h, INPUT_KEY_H },
+	{ SDLK_j, INPUT_KEY_J },
+	{ SDLK_k, INPUT_KEY_K },
+	{ SDLK_l, INPUT_KEY_L },
+	{ SDLK_z, INPUT_KEY_Z },
+	{ SDLK_x, INPUT_KEY_X },
+	{ SDLK_c, INPUT_KEY_C },
+	{ SDLK_v, INPUT_KEY_V },
+	{ SDLK_b, INPUT_KEY_B },
+	{ SDLK_n, INPUT_KEY_N },
+	{ SDLK_m, INPUT_KEY_M },
+
+	// modifier keys
+	{ SDLK_LSHIFT, INPUT_KEY_SHIFT },
+	{ SDLK_TAB, INPUT_KEY_TAB },
+
+	{ SDLK_UP,    INPUT_KEY_UARROW },
+	{ SDLK_RIGHT, INPUT_KEY_RARROW },
+	{ SDLK_DOWN,  INPUT_KEY_DARROW },
+	{ SDLK_LEFT,  INPUT_KEY_LARROW },
+
+	// extras
+	{ SDLK_ESCAPE, INPUT_KEY_ESC },
+	{ SDLK_SPACE,  INPUT_KEY_SPACE },
+	{ SDLK_HOME,   INPUT_KEY_HOME },
+	{ SDLK_END,    INPUT_KEY_END }
+};
+
+
 struct input_t {
-	s8 key[KEY_COUNT];
+	s8 key[INPUT_KEY_TOTAL];
 	ivec2_t mousepos;
 	fvec2_t control_left, control_right, control_trig;
 };
@@ -99,23 +141,15 @@ struct simstate_t {
 	struct input_t input;
 	struct output_t output;
 
-	// curr - current time in ms
-	// last - last time we drew a frame
-	// delta- difference between the two
-
 	// user state
 	hmm_vec3 cam_pos, cam_front, cam_up, cam_look;
 	f32 cam_x, cam_y, cam_sens;
 	f32 cam_yaw, cam_pitch;
 
 	f32 frame_curr, frame_last, frame_diff;
-
-	// volume state
-	// we update the uniforms for the volume every frame
-	hmm_vec3 sim_pos;
-	fvec3_t sim_rotp;
-	f32 sim_stretch, sim_rotv;
-	s32 sim_curraxis, sim_rotatevol;
+	// curr - current time in ms
+	// last - last time we drew a frame
+	// delta- difference between the two
 
 	int run;
 };
@@ -129,12 +163,15 @@ void viewer_eventmotion(SDL_Event *event, struct simstate_t *state);
 void viewer_eventmouse(SDL_Event *event, struct simstate_t *state);
 void viewer_eventkey(SDL_Event *event, struct simstate_t *state);
 void viewer_eventwindow(SDL_Event *event, struct simstate_t *state);
+void v_keystatecycle(struct simstate_t *state);
 
 void viewer_handleinput(struct simstate_t *state);
 
 u32 viewer_mkshader(char *vertex, char *fragment);
 
-int viewer_loadopenglfuncs();
+int v_loadopenglfuncs();
+int v_instatecheck(struct simstate_t *state, int kstate, int amt, ...);
+int v_iteminlist(int v, int n, ...);
 
 struct openglfuncs_t {
 	char *str;
@@ -336,9 +373,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	state.cam_front = HMM_MultiplyVec3f(state.cam_pos, -1);
 	state.cam_up = HMM_Vec3(0, 1, 0);
 
-	// init the simulation rectangular prism in the same way
-	state.sim_pos = HMM_Vec3(0, 3, 0);
-
 	rc = 0, state.run = 1;
 
 	if (SDL_Init(VIEWER_SDL_INITFLAGS) != 0) {
@@ -347,7 +381,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	}
 
 	state.output.window =
-		SDL_CreateWindow("MOLT Viewer",0, 0, WIDTH, HEIGHT, VIEWER_SDL_WINFLAGS);
+		SDL_CreateWindow("MOLT Viewer", 64, 64, WIDTH, HEIGHT, VIEWER_SDL_WINFLAGS);
 	if (state.output.window == NULL) {
 		ERRLOG("Couldn't Create Window", SDL_GetError());
 		return -1;
@@ -378,7 +412,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	glcontext = SDL_GL_CreateContext(state.output.window);
 
-	viewer_loadopenglfuncs();
+	v_loadopenglfuncs();
 
 	// set no vsync (??)
 	if (SDL_GL_SetSwapInterval(0) != 0) {
@@ -407,7 +441,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	// setup original cube state
 	orig = HMM_Mat4d(1.0f);
-	model = HMM_MultiplyMat4(orig, HMM_Translate(state.sim_pos));
 	part_model = HMM_MultiplyMat4(orig, HMM_Translate(HMM_Vec3(0, 5, 0)));
 
 	while (state.run) {
@@ -442,7 +475,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 			}
 		}
 
-		if (state.input.key[KEY_BOARD_F]) {
+		if (state.input.key[INPUT_KEY_F]) {
 			// TODO move the fullscreen call
 			// TODO change gl settings and resolution when this happens
 			SDL_SetWindowFullscreen(state.output.window, SDL_WINDOW_FULLSCREEN);
@@ -453,13 +486,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		// render
 		glClearColor(0, 0, 0, 1);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		// rotate our volume
-		if (state.sim_rotatevol) {
-			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotp[0], HMM_Vec3(1, 0, 0)));
-			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotp[1], HMM_Vec3(0, 1, 0)));
-			model = HMM_MultiplyMat4(model, HMM_Rotate(state.sim_rotp[2], HMM_Vec3(0, 0, 1)));
-		}
 
 		state.cam_look = HMM_AddVec3(state.cam_pos, state.cam_front);
 		view = HMM_LookAt(state.cam_pos, state.cam_look, state.cam_up);
@@ -495,6 +521,8 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 		vglUseProgram(0);
 
+		v_keystatecycle(&state);
+
 		// get time to draw frame, wait if needed
 		state.frame_curr = ((f32)SDL_GetTicks()) / 1000.0f;
 		state.frame_diff = state.frame_curr - state.frame_last;
@@ -513,7 +541,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	// clean up from our gl shenanigans
 	vglDeleteProgram(shaders[0].shader);
-	vglDeleteProgram(shaders[1].shader);
 
 	SDL_GameControllerClose(controller);
 	SDL_GL_DeleteContext(glcontext);
@@ -532,9 +559,6 @@ void viewer_eventaxis(SDL_Event *event, struct simstate_t *state)
 	// other f32 math nice
 
 	f32 mapval;
-
-	if (!state->sim_rotatevol)
-		return;
 
 	mapval = event->caxis.value / ((f32)SHRT_MAX);
 
@@ -577,17 +601,6 @@ void viewer_eventbutton(SDL_Event *event, struct simstate_t *state)
 
 	switch (event->cbutton.button) {
 	case SDL_CONTROLLER_BUTTON_Y:
-		if (event->cbutton.state == SDL_PRESSED) {
-			// we need to set all of the rotations to zero to "pause"
-			state->input.control_left[1] = 0;
-			state->input.control_left[0] = 0;
-			state->sim_rotp[0] = 0;
-			state->sim_rotp[1] = 0;
-			state->sim_rotp[2] = 0;
-			state->sim_curraxis = (state->sim_curraxis+1) % (AXIS_Z+1);
-			state->sim_rotatevol = state->sim_curraxis != AXIS_CAMERA;
-			printf("state->sim_curraxis %d\n", state->sim_curraxis);
-		}
 		break;
 	}
 }
@@ -635,13 +648,13 @@ void viewer_eventmouse(SDL_Event *event, struct simstate_t *state)
 
 	switch (event->button.button) {
 	case SDL_BUTTON_LEFT:
-		ptr = &state->input.key[KEY_MOUSE_LEFT];
+		ptr = &state->input.key[INPUT_KEY_MLEFT];
 		break;
 	case SDL_BUTTON_RIGHT:
-		ptr = &state->input.key[KEY_MOUSE_RIGHT];
+		ptr = &state->input.key[INPUT_KEY_MRIGHT];
 		break;
 	case SDL_BUTTON_MIDDLE:
-		ptr = &state->input.key[KEY_MOUSE_CENTER];
+		ptr = &state->input.key[INPUT_KEY_MCENTER];
 		break;
 	default:
 		return;
@@ -657,36 +670,40 @@ void viewer_eventmouse(SDL_Event *event, struct simstate_t *state)
 /* viewer_getinputs : reads and toggles the internal keystate */
 void viewer_eventkey(SDL_Event *event, struct simstate_t *state)
 {
-	s8 *ptr;
-	switch (event->key.keysym.sym) {
-		case SDLK_w:
-			ptr = &state->input.key[KEY_BOARD_W];
-			break;
-		case SDLK_a:
-			ptr = &state->input.key[KEY_BOARD_A];
-			break;
-		case SDLK_s:
-			ptr = &state->input.key[KEY_BOARD_S];
-			break;
-		case SDLK_d:
-			ptr = &state->input.key[KEY_BOARD_D];
-			break;
-		case SDLK_f:
-			ptr = &state->input.key[KEY_BOARD_F];
-			break;
-		case SDLK_ESCAPE:
-			ptr = &state->input.key[KEY_BOARD_ESC];
-			break;
+	int items, i;
 
-		default:
-			// if we don't have a key, we can yeet outta here
-			return;
+	items = sizeof(sdlkey_to_inputkey) / sizeof(sdlkey_to_inputkey[0]);
+
+	for (i = 0; i < items; i++) {
+		if (event->key.keysym.sym == sdlkey_to_inputkey[i].from) {
+			if (event->key.state == SDL_PRESSED) {
+				state->input.key[sdlkey_to_inputkey[i].to] = 1;
+			} else {
+				state->input.key[sdlkey_to_inputkey[i].to] = 0;
+			}
+			break;
+		}
 	}
+}
 
-	if (event->key.state == SDL_PRESSED) {
-		*ptr = 1;
-	} else {
-		*ptr = 0;
+/* v_keystatecycle : cycles the keystate array */
+void v_keystatecycle(struct simstate_t *state)
+{
+	// PRESSED -> HELD
+	// RELEASED -> NOTHING
+	int i;
+
+	for (i = 0; i < INPUT_KEY_TOTAL; i++) {
+		switch (state->input.key[i]) {
+			case INSTATE_PRESSED:
+				state->input.key[i] = INSTATE_HELD;
+				break;
+			case INSTATE_RELEASED:
+				state->input.key[i] = INSTATE_NOTHING;
+				break;
+			default:
+				continue;
+		}
 	}
 }
 
@@ -726,53 +743,48 @@ void viewer_handleinput(struct simstate_t *state)
 	f32 camera_speed;
 	hmm_vec3 tmp;
 
+#define IN_MOVEF     INPUT_KEY_W
+#define IN_MOVEB     INPUT_KEY_S
+#define IN_MOVEL     INPUT_KEY_A
+#define IN_MOVER     INPUT_KEY_D
+#define IN_FAST      INPUT_KEY_SHIFT
+#define IN_QUIT      INPUT_KEY_ESC, INPUT_KEY_Q
+
 	// handle the "quit" sequence
-	if (state->input.key[KEY_BOARD_ESC]) {
+	if (v_instatecheck(state, INSTATE_PRESSED, PP_NARG(IN_QUIT), IN_QUIT)) {
 		state->run = 0;
 		return;
 	}
 
 	camera_speed = 1.4 * state->frame_diff;
 
-	if (state->input.key[KEY_BOARD_W]) { // camera move forward
+	if (v_instatecheck(state, INSTATE_DOWN, PP_NARG(IN_FAST), IN_FAST)) {
+		camera_speed *= 4;
+	}
+
+	if (v_instatecheck(state, INSTATE_DOWN, PP_NARG(IN_MOVEF), IN_MOVEF)) {
 		tmp = HMM_MultiplyVec3f(state->cam_front, camera_speed);
 		state->cam_pos = HMM_AddVec3(state->cam_pos, tmp);
 	}
 
-	if (state->input.key[KEY_BOARD_S]) { // camera move backward
+	if (v_instatecheck(state, INSTATE_DOWN, PP_NARG(IN_MOVEB), IN_MOVEB)) {
 		tmp = HMM_MultiplyVec3f(state->cam_front, camera_speed);
 		state->cam_pos = HMM_SubtractVec3(state->cam_pos, tmp);
 	}
 
-	if (state->input.key[KEY_BOARD_A]) { // camera move left
+	if (v_instatecheck(state, INSTATE_DOWN, PP_NARG(IN_MOVEL), IN_MOVEL)) {
 		tmp = HMM_Cross(state->cam_front, state->cam_up);
 		tmp = HMM_NormalizeVec3(tmp);
 		tmp = HMM_MultiplyVec3f(tmp, camera_speed);
 		state->cam_pos = HMM_SubtractVec3(state->cam_pos, tmp);
+
 	}
 
-	if (state->input.key[KEY_BOARD_D]) { // camera move right
+	if (v_instatecheck(state, INSTATE_DOWN, PP_NARG(IN_MOVER), IN_MOVER)) {
 		tmp = HMM_Cross(state->cam_front, state->cam_up);
 		tmp = HMM_NormalizeVec3(tmp);
 		tmp = HMM_MultiplyVec3f(tmp, camera_speed);
 		state->cam_pos = HMM_AddVec3(state->cam_pos, tmp);
-	}
-
-	// update the cube position in 3d space
-	if (state->sim_rotatevol) {
-		// state->sim_rotv = camera_speed * (state->input.control_left[1] - state->input.control_left[0]);
-		state->sim_rotv = camera_speed * state->input.control_left[0];
-		switch (state->sim_curraxis) {
-		case AXIS_X:
-			state->sim_rotp[0] += state->sim_rotv;
-			break;
-		case AXIS_Y:
-			state->sim_rotp[1] += state->sim_rotv;
-			break;
-		case AXIS_Z:
-			state->sim_rotp[2] += state->sim_rotv;
-			break;
-		}
 	}
 }
 
@@ -882,7 +894,7 @@ void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high)
 }
 
 /* viewer_loadopenglfuncs : load the opengl functions that we need */
-int viewer_loadopenglfuncs()
+int v_loadopenglfuncs()
 {
 	struct openglfuncs_t *tab;
 	int rc, i;
@@ -906,6 +918,70 @@ int viewer_loadopenglfuncs()
 		}
 	}
 	
+	return rc;
+}
+
+/* v_instatecheck : Check variable amounts of keys for a specific state */
+int v_instatecheck(struct simstate_t *state, int kstate, int amt, ...)
+{
+	// NOTE	(brian) returns true if any key is in the state
+	// returns 1 on "some keys are in teh state", 0 on others
+	va_list list;
+	int keyval, val, i, rc;
+
+	rc = 0;
+	va_start(list, amt);
+
+	for (i = 0; i < amt && rc == 0; i++) {
+		val = va_arg(list, int);
+		keyval = state->input.key[val];
+		switch (kstate) {
+			case INSTATE_DOWN:
+				if (v_iteminlist(keyval, 2, INSTATE_PRESSED, INSTATE_HELD)) {
+					rc = 1;
+				}
+				break;
+			case INSTATE_UP:
+				if (v_iteminlist(keyval, 2, INSTATE_NOTHING, INSTATE_RELEASED)) {
+					rc = 1;
+				}
+				break;
+
+			case INSTATE_NOTHING:
+			case INSTATE_RELEASED:
+			case INSTATE_PRESSED:
+			case INSTATE_HELD:
+				if (keyval == kstate) {
+					rc = 1;
+				}
+				break;
+		}
+	}
+
+	va_end(list);
+
+	return rc;
+}
+
+/* v_iteminlist : checks if v appears in the n item list of args */
+int v_iteminlist(int v, int n, ...)
+{
+	va_list list;
+	int i, val, rc;
+	rc = 0;
+
+	va_start(list, n);
+
+	for (i = 0; i < n; i++) {
+		val = va_arg(list, int);
+		if (val == v) {
+			rc = 1;
+			break;
+		}
+	}
+
+	va_end(list);
+
 	return rc;
 }
 
