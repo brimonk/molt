@@ -68,6 +68,104 @@ struct intmap_t {
 	int to;
 };
 
+enum {
+	INSTATE_NOTHING,
+	INSTATE_PRESSED,
+	INSTATE_HELD,
+	INSTATE_RELEASED,
+	// down -> PRESSED & HELD
+	// up   -> NOTHING & RELEASED
+	INSTATE_DOWN,
+	INSTATE_UP,
+	INSTATE_TOTAL
+};
+
+enum {
+	INPUT_KEY__START,
+	// numerics
+	INPUT_KEY_0,
+	INPUT_KEY_1,
+	INPUT_KEY_2,
+	INPUT_KEY_3,
+	INPUT_KEY_4,
+	INPUT_KEY_5,
+	INPUT_KEY_6,
+	INPUT_KEY_7,
+	INPUT_KEY_8,
+	INPUT_KEY_9,
+
+	// a-z keys in qwerty layout
+	INPUT_KEY_Q,
+	INPUT_KEY_W,
+	INPUT_KEY_E,
+	INPUT_KEY_R,
+	INPUT_KEY_T,
+	INPUT_KEY_Y,
+	INPUT_KEY_U,
+	INPUT_KEY_I,
+	INPUT_KEY_O,
+	INPUT_KEY_P,
+	INPUT_KEY_A,
+	INPUT_KEY_S,
+	INPUT_KEY_D,
+	INPUT_KEY_F,
+	INPUT_KEY_G,
+	INPUT_KEY_H,
+	INPUT_KEY_J,
+	INPUT_KEY_K,
+	INPUT_KEY_L,
+	INPUT_KEY_Z,
+	INPUT_KEY_X,
+	INPUT_KEY_C,
+	INPUT_KEY_V,
+	INPUT_KEY_B,
+	INPUT_KEY_N,
+	INPUT_KEY_M,
+
+	INPUT_KEY_UARROW,
+	INPUT_KEY_RARROW,
+	INPUT_KEY_DARROW,
+	INPUT_KEY_LARROW,
+
+	// modifier keys
+	INPUT_KEY_SHIFT,
+	INPUT_KEY_TAB,
+
+	// extras
+	INPUT_KEY_ESC,
+	INPUT_KEY_SPACE,
+	INPUT_KEY_HOME,
+	INPUT_KEY_END,
+	INPUT_KEY_CTRL,
+	INPUT_KEY__DONE,
+
+	// mouse "keys"
+	INPUT_MOUSE__START,
+	INPUT_MOUSE_LEFT,
+	INPUT_MOUSE_RIGHT,
+	INPUT_MOUSE_CENTER,
+	INPUT_MOUSE__DONE,
+
+	// controller "keys"
+	INPUT_CTRLLR__START,
+	INPUT_CTRLLR_A,
+	INPUT_CTRLLR_B,
+	INPUT_CTRLLR_X,
+	INPUT_CTRLLR_Y,
+	INPUT_CTRLLR_BACK,
+	INPUT_CTRLLR_START,
+	INPUT_CTRLLR_LSTICK,
+	INPUT_CTRLLR_RSTICK,
+	INPUT_CTRLLR_LSHOULDER,
+	INPUT_CTRLLR_RSHOULDER,
+	INPUT_CTRLLR_DPAD_U,
+	INPUT_CTRLLR_DPAD_D,
+	INPUT_CTRLLR_DPAD_L,
+	INPUT_CTRLLR_DPAD_R,
+	INPUT_CTRLLR__DONE,
+
+	INPUT_KEY_TOTAL
+};
 static struct intmap_t sdlkey_to_inputkey[] = {
 	// numerics
 	{ SDLK_0, INPUT_KEY_0 },
@@ -123,9 +221,29 @@ static struct intmap_t sdlkey_to_inputkey[] = {
 	{ SDLK_SPACE,  INPUT_KEY_SPACE },
 	{ SDLK_HOME,   INPUT_KEY_HOME },
 	{ SDLK_END,    INPUT_KEY_END },
-	{ SDLK_LCTRL,  INPUT_KEY_CTRL }
-};
+	{ SDLK_LCTRL,  INPUT_KEY_CTRL },
 
+	// mouse
+	{ SDL_BUTTON_LEFT, INPUT_MOUSE_LEFT },
+	{ SDL_BUTTON_MIDDLE, INPUT_MOUSE_CENTER },
+	{ SDL_BUTTON_RIGHT, INPUT_MOUSE_RIGHT },
+
+	// controller
+	{ SDL_CONTROLLER_BUTTON_A, INPUT_CTRLLR_A },
+	{ SDL_CONTROLLER_BUTTON_B, INPUT_CTRLLR_B },
+	{ SDL_CONTROLLER_BUTTON_X, INPUT_CTRLLR_X },
+	{ SDL_CONTROLLER_BUTTON_Y, INPUT_CTRLLR_Y },
+	{ SDL_CONTROLLER_BUTTON_BACK, INPUT_CTRLLR_BACK },
+	{ SDL_CONTROLLER_BUTTON_START, INPUT_CTRLLR_START },
+	{ SDL_CONTROLLER_BUTTON_LEFTSTICK, INPUT_CTRLLR_LSTICK },
+	{ SDL_CONTROLLER_BUTTON_RIGHTSTICK, INPUT_CTRLLR_RSTICK },
+	{ SDL_CONTROLLER_BUTTON_LEFTSHOULDER, INPUT_CTRLLR_LSHOULDER },
+	{ SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, INPUT_CTRLLR_RSHOULDER },
+	{ SDL_CONTROLLER_BUTTON_DPAD_UP, INPUT_CTRLLR_DPAD_U },
+	{ SDL_CONTROLLER_BUTTON_DPAD_DOWN, INPUT_CTRLLR_DPAD_D },
+	{ SDL_CONTROLLER_BUTTON_DPAD_LEFT, INPUT_CTRLLR_DPAD_L },
+	{ SDL_CONTROLLER_BUTTON_DPAD_RIGHT, INPUT_CTRLLR_DPAD_R },
+};
 
 struct input_t {
 	s8 key[INPUT_KEY_TOTAL];
@@ -159,10 +277,7 @@ void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high);
 
 void viewer_eventaxis(SDL_Event *event, struct simstate_t *state);
 void viewer_eventbutton(SDL_Event *event, struct simstate_t *state);
-
 void viewer_eventmotion(SDL_Event *event, struct simstate_t *state);
-void viewer_eventmouse(SDL_Event *event, struct simstate_t *state);
-void viewer_eventkey(SDL_Event *event, struct simstate_t *state);
 void viewer_eventwindow(SDL_Event *event, struct simstate_t *state);
 void v_keystatecycle(struct simstate_t *state);
 
@@ -452,18 +567,15 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 				break;
 			case SDL_CONTROLLERBUTTONDOWN:
 			case SDL_CONTROLLERBUTTONUP:
+			case SDL_MOUSEBUTTONDOWN:
+			case SDL_MOUSEBUTTONUP:
+			case SDL_KEYDOWN:
+			case SDL_KEYUP:
+				// that's right, one function does all the buttons :)
 				viewer_eventbutton(&event, &state);
 				break;
 			case SDL_MOUSEMOTION:
 				viewer_eventmotion(&event, &state);
-				break;
-			case SDL_MOUSEBUTTONDOWN:
-			case SDL_MOUSEBUTTONUP:
-				viewer_eventmouse(&event, &state);
-				break;
-			case SDL_KEYDOWN:
-			case SDL_KEYUP:
-				viewer_eventkey(&event, &state);
 				break;
 			case SDL_WINDOWEVENT:
 				viewer_eventwindow(&event, &state);
@@ -527,8 +639,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		// get time to draw frame, wait if needed
 		state.frame_curr = ((f32)SDL_GetTicks()) / 1000.0f;
 		state.frame_diff = state.frame_curr - state.frame_last;
-
-		printf("Frame : %4.3fms\n", state.frame_diff);
 
 		if (state.frame_diff < TARGET_FRAMETIME) {
 			SDL_Delay(((f32)SDL_GetTicks()) / 1000 - state.frame_curr);
@@ -594,18 +704,6 @@ void viewer_eventaxis(SDL_Event *event, struct simstate_t *state)
 	}
 }
 
-/* viewer_eventbutton : event handler for a controller button input */
-void viewer_eventbutton(SDL_Event *event, struct simstate_t *state)
-{
-	// NOTE https://wiki.libsdl.org/SDL_ControllerButtonEvent
-	// we mangle the boolean states here :)
-
-	switch (event->cbutton.button) {
-	case SDL_CONTROLLER_BUTTON_Y:
-		break;
-	}
-}
-
 /* viewer_eventdevice : event handler for a controller device updates */
 void viewer_eventdevice(SDL_Event *event, struct simstate_t *state)
 {
@@ -649,38 +747,65 @@ void viewer_eventmouse(SDL_Event *event, struct simstate_t *state)
 
 	switch (event->button.button) {
 	case SDL_BUTTON_LEFT:
-		ptr = &state->input.key[INPUT_KEY_MLEFT];
+		ptr = &state->input.key[INPUT_MOUSE_LEFT];
 		break;
 	case SDL_BUTTON_RIGHT:
-		ptr = &state->input.key[INPUT_KEY_MRIGHT];
+		ptr = &state->input.key[INPUT_MOUSE_RIGHT];
 		break;
 	case SDL_BUTTON_MIDDLE:
-		ptr = &state->input.key[INPUT_KEY_MCENTER];
+		ptr = &state->input.key[INPUT_MOUSE_CENTER];
 		break;
 	default:
 		return;
 	}
 
 	if (event->button.state == SDL_PRESSED) {
-		*ptr = 1;
+		*ptr = INSTATE_PRESSED;
 	} else {
-		*ptr = 0;
+		*ptr = INSTATE_RELEASED;
 	}
 }
 
 /* viewer_getinputs : reads and toggles the internal keystate */
-void viewer_eventkey(SDL_Event *event, struct simstate_t *state)
+void viewer_eventbutton(SDL_Event *event, struct simstate_t *state)
 {
-	int items, i;
+	int start, end, bval, bstate, i;
 
-	items = sizeof(sdlkey_to_inputkey) / sizeof(sdlkey_to_inputkey[0]);
+	switch (event->type) {
+	case SDL_KEYDOWN:
+	case SDL_KEYUP:
+		start = INPUT_KEY__START;
+		end = INPUT_KEY__DONE;
+		bval = event->key.keysym.sym;
+		bstate = event->key.state;
+		break;
 
-	for (i = 0; i < items; i++) {
-		if (event->key.keysym.sym == sdlkey_to_inputkey[i].from) {
-			if (event->key.state == SDL_PRESSED) {
-				state->input.key[sdlkey_to_inputkey[i].to] = 1;
+	case SDL_MOUSEBUTTONDOWN:
+	case SDL_MOUSEBUTTONUP:
+		start = INPUT_MOUSE__START;
+		end = INPUT_MOUSE__DONE;
+		bval = event->button.button;
+		bstate = event->button.state;
+		break;
+
+	case SDL_CONTROLLERBUTTONDOWN:
+	case SDL_CONTROLLERBUTTONUP:
+		start = INPUT_CTRLLR__START;
+		end = INPUT_CTRLLR__DONE;
+		bval = event->cbutton.button;
+		bstate = event->cbutton.state;
+		break;
+	default:
+		fprintf(stderr, "Bad event type [%d] for viewer_eventbutton\n", event->type);
+		return;
+	}
+
+	for (i = start; i < end; i++) {
+		if (bval == sdlkey_to_inputkey[i].from) {
+			if (bstate == SDL_PRESSED) {
+				state->input.key[sdlkey_to_inputkey[i].to] = INSTATE_PRESSED;
 			} else {
-				state->input.key[sdlkey_to_inputkey[i].to] = 0;
+				state->input.key[sdlkey_to_inputkey[i].to] = INSTATE_RELEASED;
 			}
 			break;
 		}
@@ -690,6 +815,8 @@ void viewer_eventkey(SDL_Event *event, struct simstate_t *state)
 /* v_keystatecycle : cycles the keystate array */
 void v_keystatecycle(struct simstate_t *state)
 {
+	// bonus benefit to thinking that all buttons are in this keystate arr
+	// is that this modifies the state for the mouse, gamepad, etc
 	// PRESSED -> HELD
 	// RELEASED -> NOTHING
 	int i;
@@ -744,13 +871,12 @@ void viewer_handleinput(struct simstate_t *state)
 	f32 camera_speed;
 	hmm_vec3 tmp;
 
-#define IN_MOVEF     INPUT_KEY_W
-#define IN_MOVEB     INPUT_KEY_S
-#define IN_MOVEL     INPUT_KEY_A
-#define IN_MOVER     INPUT_KEY_D
-#define IN_MOVEU     INPUT_KEY_SPACE
-#define IN_MOVED     INPUT_KEY_SHIFT
-// #define IN_FAST      INPUT_KEY_SHIFT
+#define IN_MOVEF     INPUT_KEY_W, INPUT_CTRLLR_DPAD_U
+#define IN_MOVEB     INPUT_KEY_S, INPUT_CTRLLR_DPAD_D
+#define IN_MOVEL     INPUT_KEY_A, INPUT_CTRLLR_DPAD_L
+#define IN_MOVER     INPUT_KEY_D, INPUT_CTRLLR_DPAD_R
+#define IN_MOVEU     INPUT_KEY_SPACE, INPUT_CTRLLR_RSHOULDER
+#define IN_MOVED     INPUT_KEY_SHIFT, INPUT_CTRLLR_LSHOULDER
 #define IN_QUIT      INPUT_KEY_ESC, INPUT_KEY_Q
 
 	// handle the "quit" sequence
