@@ -160,7 +160,8 @@ int main(int argc, char **argv)
 #endif
 
 	if (flags & FLG_VIEWER) {
-		cfg = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
+		// cfg = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
+		cfg = NULL;
 		viewer_run(hunk, hunksize, fd, cfg);
 	}
 

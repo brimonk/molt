@@ -325,7 +325,8 @@ struct openglfuncs_t openglfunc_table[] = {
 	OGLFUNCMK(glLinkProgram),
 	OGLFUNCMK(glGetProgramiv),
 	OGLFUNCMK(glGetProgramInfoLog),
-	OGLFUNCMK(glDeleteShader)
+	OGLFUNCMK(glDeleteShader),
+	OGLFUNCMK(glUniformMatrix4fv)
 };
 
 // macro and functions to check for opengl errors
@@ -395,8 +396,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	};
 
 	memset(&state, 0, sizeof state);
-
-	viewer_loadopenglfuncs();
 
 	// initialize the camera
 	state.first_mouse = 1;
@@ -496,6 +495,8 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
 	glcontext = SDL_GL_CreateContext(window);
+
+	viewer_loadopenglfuncs();
 
 	// set no vsync (??)
 	if (SDL_GL_SetSwapInterval(0) != 0) {
