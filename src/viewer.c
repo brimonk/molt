@@ -84,14 +84,20 @@ struct shader_cont_t {
 	u32 loc_model;
 };
 
-struct siminput_t {
+struct input_t {
 	s8 key[KEY_COUNT];
 	ivec2_t mousepos;
 	fvec2_t control_left, control_right, control_trig;
 };
 
+struct output_t {
+	SDL_Window *window;
+	s32 win_w, win_h;
+};
+
 struct simstate_t {
-	struct siminput_t input;
+	struct input_t input;
+	struct output_t output;
 
 	// curr - current time in ms
 	// last - last time we drew a frame
@@ -114,19 +120,6 @@ struct simstate_t {
 	int run;
 };
 
-// RETRIEVED FROM http://www.pcg-random.org/using-pcg-c.html
-struct pcgrand_t {
-	u64 state;
-	u64 inc;
-	s32 init;
-};
-
-/* pcg_rand : get a random num from the pcgrand state */
-unsigned long pcg_rand(struct pcgrand_t *rng);
-
-/* pcg_seed : seed the random structure with some junk data */
-void pcg_seed(struct pcgrand_t *rng, u64 initstate, u64 initseq);
-
 void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high);
 
 void viewer_eventaxis(SDL_Event *event, struct simstate_t *state);
@@ -135,6 +128,7 @@ void viewer_eventbutton(SDL_Event *event, struct simstate_t *state);
 void viewer_eventmotion(SDL_Event *event, struct simstate_t *state);
 void viewer_eventmouse(SDL_Event *event, struct simstate_t *state);
 void viewer_eventkey(SDL_Event *event, struct simstate_t *state);
+void viewer_eventwindow(SDL_Event *event, struct simstate_t *state);
 
 void viewer_handleinput(struct simstate_t *state);
 
@@ -227,10 +221,18 @@ typedef void (APIENTRY * GL_GetProgramInfoLog_Func)(GLuint program, GLsizei maxl
 GL_GetProgramInfoLog_Func vglGetProgramInfoLog;
 typedef void (APIENTRY * GL_DeleteShader_Func)(GLuint shader);
 GL_DeleteShader_Func vglDeleteShader;
+typedef void (APIENTRY * GL_Viewport_Func)(GLint x, GLint y, GLsizei width, GLsizei height);
+GL_Viewport_Func vglViewport;
 
 // some uniform functions
 typedef void (APIENTRY * GL_UniformMatrix4fv_Func)(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 GL_UniformMatrix4fv_Func vglUniformMatrix4fv;
+typedef void (APIENTRY * GL_Uniform1f_Func)(GLint location, GLfloat v0);
+GL_Uniform1f_Func vglUniform1f;
+typedef void (APIENTRY * GL_Uniform2f_Func)(GLint location, GLfloat v0, GLfloat v1);
+GL_Uniform2f_Func vglUniform2f;
+typedef void (APIENTRY * GL_Uniform3f_Func)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
+GL_Uniform3f_Func vglUniform3f;
 typedef void (APIENTRY * GL_Uniform4f_Func)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
 GL_Uniform4f_Func vglUniform4f;
 
@@ -267,7 +269,11 @@ struct openglfuncs_t openglfunc_table[] = {
 	OGLFUNCMK(glGetProgramInfoLog),
 	OGLFUNCMK(glDeleteShader),
 	OGLFUNCMK(glUniformMatrix4fv),
-	OGLFUNCMK(glUniform4f)
+	OGLFUNCMK(glUniform1f),
+	OGLFUNCMK(glUniform2f),
+	OGLFUNCMK(glUniform3f),
+	OGLFUNCMK(glUniform4f),
+	OGLFUNCMK(glViewport)
 };
 
 // macro and functions to check for opengl errors
@@ -289,6 +295,8 @@ void gl_check_errors(const char *file, int line)
 	}
 }
 
+// particular_soln : computes the particular solution for a wave in 3d
+// TODO remove and use real MOLT computations
 f32 particular_soln(f32 x, f32 y, f32 z, f32 t)
 {
 	const f32 k = 0.4f;
@@ -303,59 +311,13 @@ f32 particular_soln(f32 x, f32 y, f32 z, f32 t)
 /* viewer_run : runs the molt graphical 3d simulation viewer */
 s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 {
-	SDL_Window *window;
 	SDL_GLContext glcontext;
 	SDL_Event event;
 	SDL_GameController *controller;
 
-	struct pcgrand_t rands;
 	struct simstate_t state;
 	struct shader_cont_t shaders[2];
 	s32 rc, i;
-
-	float vertices[] = {
-		-0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f, -0.5f,
-		 0.5f,  0.5f, -0.5f,
-		 0.5f,  0.5f, -0.5f,
-		-0.5f,  0.5f, -0.5f,
-		-0.5f, -0.5f, -0.5f,
-
-		-0.5f, -0.5f,  0.5f,
-		 0.5f, -0.5f,  0.5f,
-		 0.5f,  0.5f,  0.5f,
-		 0.5f,  0.5f,  0.5f,
-		-0.5f,  0.5f,  0.5f,
-		-0.5f, -0.5f,  0.5f,
-
-		-0.5f,  0.5f,  0.5f,
-		-0.5f,  0.5f, -0.5f,
-		-0.5f, -0.5f, -0.5f,
-		-0.5f, -0.5f, -0.5f,
-		-0.5f, -0.5f,  0.5f,
-		-0.5f,  0.5f,  0.5f,
-
-		 0.5f,  0.5f,  0.5f,
-		 0.5f,  0.5f, -0.5f,
-		 0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f,  0.5f,
-		 0.5f,  0.5f,  0.5f,
-
-		-0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f,  0.5f,
-		 0.5f, -0.5f,  0.5f,
-		-0.5f, -0.5f,  0.5f,
-		-0.5f, -0.5f, -0.5f,
-
-		-0.5f,  0.5f, -0.5f,
-		 0.5f,  0.5f, -0.5f,
-		 0.5f,  0.5f,  0.5f,
-		 0.5f,  0.5f,  0.5f,
-		-0.5f,  0.5f,  0.5f,
-		-0.5f,  0.5f, -0.5f,
-	};
 
 	float bbverts[] = {
 		-0.5f, -0.5f, 0.0f,
@@ -379,15 +341,14 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	rc = 0, state.run = 1;
 
-	pcg_seed(&rands, time(NULL) ^ (long)printf, (unsigned long)viewer_run);
-
 	if (SDL_Init(VIEWER_SDL_INITFLAGS) != 0) {
 		ERRLOG("Couldn't Init SDL", SDL_GetError());
 		return -1;
 	}
 
-	window = SDL_CreateWindow("MOLT Viewer",0, 0, WIDTH, HEIGHT, VIEWER_SDL_WINFLAGS);
-	if (window == NULL) {
+	state.output.window =
+		SDL_CreateWindow("MOLT Viewer",0, 0, WIDTH, HEIGHT, VIEWER_SDL_WINFLAGS);
+	if (state.output.window == NULL) {
 		ERRLOG("Couldn't Create Window", SDL_GetError());
 		return -1;
 	}
@@ -415,7 +376,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
-	glcontext = SDL_GL_CreateContext(window);
+	glcontext = SDL_GL_CreateContext(state.output.window);
 
 	viewer_loadopenglfuncs();
 
@@ -426,15 +387,15 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	glEnable(GL_DEPTH_TEST);
 
-	// setup our shaders in our shader container
-	shaders[0].shader = viewer_mkshader("src/simvol.vert", "src/simvol.frag");
-	shaders[0].str = "cube_shader";
+	// setup our particle shader
+	shaders[0].shader = viewer_mkshader("src/particle.vert", "src/particle.frag");
+	shaders[0].str = "particle_shader";
 
 	vglGenVertexArrays(1, &shaders[0].vao);
 	vglGenBuffers(1, &shaders[0].vbo);
 
 	vglBindBuffer(GL_ARRAY_BUFFER, shaders[0].vbo);
-	vglBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+	vglBufferData(GL_ARRAY_BUFFER, sizeof(bbverts), bbverts, GL_STATIC_DRAW);
 
 	vglBindVertexArray(shaders[0].vao);
 	vglVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
@@ -443,24 +404,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	shaders[0].loc_model = vglGetUniformLocation(shaders[0].shader, "uModel");
 	shaders[0].loc_view  = vglGetUniformLocation(shaders[0].shader, "uView");
 	shaders[0].loc_proj  = vglGetUniformLocation(shaders[0].shader, "uProj");
-
-	// create and setup data for billboarding
-	shaders[1].shader = viewer_mkshader("src/particle.vert", "src/particle.frag");
-	shaders[0].str = "particle_shader";
-
-	vglGenVertexArrays(1, &shaders[1].vao);
-	vglGenBuffers(1, &shaders[1].vbo);
-
-	vglBindBuffer(GL_ARRAY_BUFFER, shaders[1].vbo);
-	vglBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	vglBindVertexArray(shaders[1].vao);
-	vglVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
-	vglEnableVertexAttribArray(0);
-
-	shaders[1].loc_model = vglGetUniformLocation(shaders[1].shader, "uModel");
-	shaders[1].loc_view  = vglGetUniformLocation(shaders[1].shader, "uView");
-	shaders[1].loc_proj  = vglGetUniformLocation(shaders[1].shader, "uProj");
 
 	// setup original cube state
 	orig = HMM_Mat4d(1.0f);
@@ -488,6 +431,9 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 			case SDL_KEYUP:
 				viewer_eventkey(&event, &state);
 				break;
+			case SDL_WINDOWEVENT:
+				viewer_eventwindow(&event, &state);
+				break;
 			case SDL_QUIT:
 				state.run = 0;
 				break;
@@ -499,7 +445,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		if (state.input.key[KEY_BOARD_F]) {
 			// TODO move the fullscreen call
 			// TODO change gl settings and resolution when this happens
-			SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+			SDL_SetWindowFullscreen(state.output.window, SDL_WINDOW_FULLSCREEN);
 		}
 
 		viewer_handleinput(&state);
@@ -521,32 +467,31 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		proj = HMM_Perspective(90.0f, WIDTH / HEIGHT, 0.1f, 100.0f);
 
 		// draw the particles
-		vglUseProgram(shaders[1].shader);
+		vglUseProgram(shaders[0].shader);
 
 		vglUniformMatrix4fv(shaders[0].loc_model, 1, GL_FALSE, (f32 *)&part_model);
-		vglUniformMatrix4fv(shaders[1].loc_view,  1, GL_FALSE, (f32 *)&view);
-		vglUniformMatrix4fv(shaders[1].loc_proj,  1, GL_FALSE, (f32 *)&proj);
+		vglUniformMatrix4fv(shaders[0].loc_view,  1, GL_FALSE, (f32 *)&view);
+		vglUniformMatrix4fv(shaders[0].loc_proj,  1, GL_FALSE, (f32 *)&proj);
 
-		vglBindVertexArray(shaders[1].vao);
+		vglBindVertexArray(shaders[0].vao);
 
-		u32 locPos, locMag;
-		locPos = vglGetUniformLocation(shaders[1].shader, "uPos");
-		locMag = vglGetUniformLocation(shaders[1].shader, "uMag");
+		u32 locPos, locMag, locRes;
+		locPos = vglGetUniformLocation(shaders[0].shader, "uPos");
+		locMag = vglGetUniformLocation(shaders[0].shader, "uMag");
+		locRes = vglGetUniformLocation(shaders[0].shader, "uRes");
+		vglUniform2f(locRes, state.output.win_w, state.output.win_h);
 
-		for (i = 0; i < MAX_PARTICLES; i++) {
-			f32 lx, ly, lz, lw;
-			lx = ((f32)pcg_rand(&rands) * 1.0f / (f32)(RAND_MAX)) * VOL_BOUND - VOL_BOUND;
-			ly = ((f32)pcg_rand(&rands) * 1.0f / (f32)(RAND_MAX)) * VOL_BOUND - VOL_BOUND;
-			lz = ((f32)pcg_rand(&rands) * 1.0f / (f32)(RAND_MAX)) * VOL_BOUND - VOL_BOUND;
+		f32 lx, ly, lz, lw;
+		for (lx = -VOL_BOUND; lx < VOL_BOUND; lx += 0.5)
+		for (ly = -VOL_BOUND; ly < VOL_BOUND; ly += 0.5)
+		for (lz = -VOL_BOUND; lz < VOL_BOUND; lz += 0.5) {
 			lw = particular_soln(lx, ly, lz, state.frame_curr);
-
 			vglUniform4f(locPos, lx, ly, lz, lw);
-
 			glDrawArrays(GL_TRIANGLE_STRIP, 0, 6);
 		}
 
 		// redraw the screen
-		SDL_GL_SwapWindow(window);
+		SDL_GL_SwapWindow(state.output.window);
 
 		vglUseProgram(0);
 
@@ -564,8 +509,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	}
 
 	vglDeleteVertexArrays(1, &shaders[0].vao);
-	vglDeleteVertexArrays(1, &shaders[1].vao);
-	vglDeleteBuffers(1, &shaders[0].vbo);
 	vglDeleteBuffers(1, &shaders[0].vbo);
 
 	// clean up from our gl shenanigans
@@ -574,7 +517,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	SDL_GameControllerClose(controller);
 	SDL_GL_DeleteContext(glcontext);
-	SDL_DestroyWindow(window);
+	SDL_DestroyWindow(state.output.window);
 	SDL_Quit();
 
 	return rc;
@@ -747,6 +690,36 @@ void viewer_eventkey(SDL_Event *event, struct simstate_t *state)
 	}
 }
 
+/* viewer_eventwindow : handles SDL window events */
+void viewer_eventwindow(SDL_Event *event, struct simstate_t *state)
+{
+	switch (event->window.event) {
+	case SDL_WINDOWEVENT_SHOWN:
+	case SDL_WINDOWEVENT_HIDDEN:
+	case SDL_WINDOWEVENT_EXPOSED:
+	case SDL_WINDOWEVENT_MOVED:
+	case SDL_WINDOWEVENT_MINIMIZED:
+	case SDL_WINDOWEVENT_MAXIMIZED:
+	case SDL_WINDOWEVENT_RESTORED:
+	case SDL_WINDOWEVENT_ENTER:
+	case SDL_WINDOWEVENT_LEAVE:
+	case SDL_WINDOWEVENT_FOCUS_GAINED:
+	case SDL_WINDOWEVENT_FOCUS_LOST:
+		break;
+	case SDL_WINDOWEVENT_RESIZED:
+	case SDL_WINDOWEVENT_SIZE_CHANGED:
+		state->output.win_w = event->window.data1;
+		state->output.win_h = event->window.data2;
+		vglViewport(0, 0, state->output.win_w, state->output.win_h);
+		break;
+	case SDL_WINDOWEVENT_CLOSE:
+		state->run = 0;
+		break;
+	default:
+		break;
+	}
+}
+
 /* viewer_handleinput : updates the gamestate from the */
 void viewer_handleinput(struct simstate_t *state)
 {
@@ -908,36 +881,6 @@ void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high)
 		*high = lhigh;
 }
 
-/* pcg_rand : get a random num from the pcgrand state */
-unsigned long pcg_rand(struct pcgrand_t *rng)
-{
-	unsigned long old;
-	unsigned int xorshift, rot;
-
-	old = rng->state;
-
-	/* advance internal state */
-	rng->state = old * 6364136223846793005ULL + (rng->inc | 1);
-
-	/* calculate output function (XSH RR), uses old state for max ILP */
-	xorshift = ((old >> 18u) ^ old) >> 27u;
-	rot = old >> 59u;
-
-	return (xorshift >> rot) | (xorshift << ((-rot) & 31));
-}
-
-/* pcg_seed : seed the random structure with some junk data */
-void pcg_seed(struct pcgrand_t *rng, u64 initstate, u64 initseq)
-{
-	if (rng->init) return;
-
-    rng->state = 0U;
-    rng->inc = (initseq << 1u) | 1u;
-    pcg_rand(rng);
-    rng->state += initstate;
-    pcg_rand(rng);
-}
-
 /* viewer_loadopenglfuncs : load the opengl functions that we need */
 int viewer_loadopenglfuncs()
 {
@@ -956,7 +899,11 @@ int viewer_loadopenglfuncs()
 	}
 
 	for (i = 0; i < ARRSIZE(openglfunc_table); i++) {
-		printf("%s : %p\n", tab[i].str, tab[i].ptr);
+		// check for any issues in our UNLOADED functions here
+		if (tab[i].status == VGLSTAT_UNLOADED) {
+			fprintf(stderr, "ERROR : [%s] Couldn't be found!\n", tab[i].str);
+			exit(0);
+		}
 	}
 	
 	return rc;
