@@ -312,6 +312,9 @@ char *io_readfile(char *path)
 	char *buf;
 
 	fp = fopen(path, "r");
+	if (!fp) {
+		return NULL;
+	}
 
 	// get the file's size
 	fseek(fp, 0, SEEK_END);
