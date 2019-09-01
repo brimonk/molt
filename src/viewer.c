@@ -122,7 +122,8 @@ static struct intmap_t sdlkey_to_inputkey[] = {
 	{ SDLK_ESCAPE, INPUT_KEY_ESC },
 	{ SDLK_SPACE,  INPUT_KEY_SPACE },
 	{ SDLK_HOME,   INPUT_KEY_HOME },
-	{ SDLK_END,    INPUT_KEY_END }
+	{ SDLK_END,    INPUT_KEY_END },
+	{ SDLK_LCTRL,  INPUT_KEY_CTRL }
 };
 
 
@@ -747,7 +748,9 @@ void viewer_handleinput(struct simstate_t *state)
 #define IN_MOVEB     INPUT_KEY_S
 #define IN_MOVEL     INPUT_KEY_A
 #define IN_MOVER     INPUT_KEY_D
-#define IN_FAST      INPUT_KEY_SHIFT
+#define IN_MOVEU     INPUT_KEY_SPACE
+#define IN_MOVED     INPUT_KEY_SHIFT
+// #define IN_FAST      INPUT_KEY_SHIFT
 #define IN_QUIT      INPUT_KEY_ESC, INPUT_KEY_Q
 
 	// handle the "quit" sequence
@@ -756,11 +759,7 @@ void viewer_handleinput(struct simstate_t *state)
 		return;
 	}
 
-	camera_speed = 1.4 * state->frame_diff;
-
-	if (v_instatecheck(state, INSTATE_DOWN, PP_NARG(IN_FAST), IN_FAST)) {
-		camera_speed *= 4;
-	}
+	camera_speed = 3 * state->frame_diff;
 
 	if (v_instatecheck(state, INSTATE_DOWN, PP_NARG(IN_MOVEF), IN_MOVEF)) {
 		tmp = HMM_MultiplyVec3f(state->cam_front, camera_speed);
@@ -777,13 +776,22 @@ void viewer_handleinput(struct simstate_t *state)
 		tmp = HMM_NormalizeVec3(tmp);
 		tmp = HMM_MultiplyVec3f(tmp, camera_speed);
 		state->cam_pos = HMM_SubtractVec3(state->cam_pos, tmp);
-
 	}
 
 	if (v_instatecheck(state, INSTATE_DOWN, PP_NARG(IN_MOVER), IN_MOVER)) {
 		tmp = HMM_Cross(state->cam_front, state->cam_up);
 		tmp = HMM_NormalizeVec3(tmp);
 		tmp = HMM_MultiplyVec3f(tmp, camera_speed);
+		state->cam_pos = HMM_AddVec3(state->cam_pos, tmp);
+	}
+
+	if (v_instatecheck(state, INSTATE_DOWN, PP_NARG(IN_MOVEU), IN_MOVEU)) {
+		tmp = HMM_Vec3(0, camera_speed, 0);
+		state->cam_pos = HMM_AddVec3(state->cam_pos, tmp);
+	}
+
+	if (v_instatecheck(state, INSTATE_DOWN, PP_NARG(IN_MOVED), IN_MOVED)) {
+		tmp = HMM_Vec3(0, -camera_speed, 0);
 		state->cam_pos = HMM_AddVec3(state->cam_pos, tmp);
 	}
 }

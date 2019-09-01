@@ -73,6 +73,7 @@ enum {
 	INPUT_KEY_SPACE,
 	INPUT_KEY_HOME,
 	INPUT_KEY_END,
+	INPUT_KEY_CTRL,
 
 	// mouse "keys"
 	INPUT_KEY_MLEFT,
