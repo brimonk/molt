@@ -28,7 +28,7 @@
 #include "io.h"
 #include "common.h"
 
-#if 0 // LINUX MODE
+#if 1 // LINUX MODE
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>

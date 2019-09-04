@@ -10,7 +10,8 @@
  * 1. Array Instancing for Particle System
  *
  * Thoughts about Oculus Integration
- * - 
+ * - #ifdef OCULUS_SUPPORT
+ *   this should be included from the WinMakefile
  */
 
 #include <stdio.h>
@@ -518,7 +519,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	controller = SDL_GameControllerOpen(0);
 	if (!controller) {
 		ERRLOG("Couldn't open Controller 0", SDL_GetError());
-		return -1;
 	}
 
 	// TODO (brian) check for window creation errors
@@ -531,7 +531,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	// setup controller information
 	if (SDL_SetRelativeMouseMode(SDL_TRUE) == -1) {
 		ERRLOG("Couldn't Set Relative Motion Mode", SDL_GetError());
-		return -1;
 	}
 
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
