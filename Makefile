@@ -5,7 +5,7 @@
 CC = gcc
 # LINKER = -lm -lSDL2 -lGL
 LINKER = -lmingw32 -lSDL2main -lSDL2 -lopengl32
-FLAGS = -Wall -g3 -march=native
+FLAGS = -Wall -O3 -g3 -march=native
 TARGET = molt
 SRC = $(wildcard src/*.c)
 OBJ = $(SRC:.c=.o)

@@ -188,6 +188,8 @@ s32 hunklog_3ord(char *file, int line, char *msg, ivec3_t dim, f64 *p, cvec3_t o
 	 (c)[2]=(a)[0]*(b)[1]-(a)[1]*(b)[0])
 #define VectorClear(a) ((a)[0]=0,(a)[1]=0,(a)[2]=0)
 #define VectorPrint(a) (printf("%lf, %lf, %lf\n", (a)[0], (a)[1], (a)[2]))
+
+// now for some of my own
 #define Vec2Set(v,a,b)   ((v)[0]=(a),(v)[1]=(b))
 #define Vec3Set(v,a,b,c) ((v)[0]=(a),(v)[1]=(b),(v)[2]=(c))
 

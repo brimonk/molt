@@ -7,9 +7,10 @@
  * This viewer, for ease of transport, requires SDL2 to operate.
  *
  * TODO
- * 1. Single Particle
- * 2. Multiple Particle
- * 3. Array Instancing for Particle System
+ * 1. Array Instancing for Particle System
+ *
+ * Thoughts about Oculus Integration
+ * - 
  */
 
 #include <stdio.h>
@@ -256,6 +257,11 @@ struct output_t {
 	s32 win_w, win_h;
 };
 
+struct quad_t {
+	fvec3_t verts[4];
+	fvec3_t color;
+};
+
 struct simstate_t {
 	struct input_t input;
 	struct output_t output;
@@ -269,6 +275,9 @@ struct simstate_t {
 	// curr - current time in ms
 	// last - last time we drew a frame
 	// delta- difference between the two
+
+	struct quad_t *quads;
+	int quadlen;
 
 	int run;
 };
@@ -288,6 +297,8 @@ u32 viewer_mkshader(char *vertex, char *fragment);
 int v_loadopenglfuncs();
 int v_instatecheck(struct simstate_t *state, int kstate, int amt, ...);
 int v_iteminlist(int v, int n, ...);
+int v_loadworld(struct simstate_t *state, char *file);
+u64 v_timer();
 
 struct openglfuncs_t {
 	char *str;
@@ -470,6 +481,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	struct simstate_t state;
 	struct shader_cont_t shaders[2];
+	u64 lasttimer;
 	s32 rc, i;
 
 	float bbverts[] = {
@@ -555,9 +567,16 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	shaders[0].loc_view  = vglGetUniformLocation(shaders[0].shader, "uView");
 	shaders[0].loc_proj  = vglGetUniformLocation(shaders[0].shader, "uProj");
 
+	// load our world geometry
+	if (v_loadworld(&state, "worldgeom.txt")) {
+		fprintf(stderr, "Couldn't load world geometry\n");
+	}
+
 	// setup original cube state
 	orig = HMM_Mat4d(1.0f);
 	part_model = HMM_MultiplyMat4(orig, HMM_Translate(HMM_Vec3(0, 5, 0)));
+
+	lasttimer = v_timer();
 
 	while (state.run) {
 		while (SDL_PollEvent(&event)) {
@@ -645,6 +664,11 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		}
 
 		state.frame_last = state.frame_curr;
+
+		u64 cputimer;
+		cputimer = v_timer();
+		printf("ticks %llu\n", cputimer - lasttimer);
+		lasttimer = cputimer;
 	}
 
 	vglDeleteVertexArrays(1, &shaders[0].vao);
@@ -1117,5 +1141,53 @@ int v_iteminlist(int v, int n, ...)
 	va_end(list);
 
 	return rc;
+}
+
+/* v_loadworld : loads world geometry from the file "file" */
+int v_loadworld(struct simstate_t *state, char *file)
+{
+	FILE *fp;
+	char buf[BUFLARGE];
+	int rc, i, retrieved;
+	fvec3_t color, pos;
+	char plane1, plane2;
+	f32 radius;
+
+	fp = fopen(file, "r");
+	rc = 0;
+
+	if (fp) {
+		state->quads = malloc(sizeof(*state->quads) * BUFLARGE);
+		state->quadlen = BUFLARGE;
+		for (i = 0; (fgets(buf, sizeof buf, fp)) == buf; i++) {
+			// parse the 3 v3s into the tmp buffers
+			retrieved = sscanf(buf, "%f, %f, %f, %f, %c%c, %f, %f, %f",
+					&pos[0], &pos[1], &pos[2], &radius,
+					&color[0], &color[1], &color[2]);
+
+			assert(retrieved == 9);
+
+			VectorCopy(state->quads[i].color, color);
+		}
+
+		fclose(fp);
+	} else {
+		rc = 1;
+	}
+
+	return rc;
+}
+
+/* v_timer : high precision timer fun */
+u64 v_timer()
+{
+	u64 tick;
+	u32 a, d;
+
+	asm volatile("rdtsc" : "=a" (a), "=d" (d));
+
+	tick = (((u64)a) | ((u64)d << 32));
+
+	return tick;
 }
 
