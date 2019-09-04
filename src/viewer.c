@@ -251,6 +251,8 @@ struct input_t {
 	s8 key[INPUT_KEY_TOTAL];
 	ivec2_t mousepos;
 	fvec2_t control_left, control_right, control_trig;
+	SDL_GameController *controller;
+	s32 controllerid;
 };
 
 struct output_t {
@@ -288,6 +290,7 @@ void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high);
 void viewer_eventaxis(SDL_Event *event, struct simstate_t *state);
 void viewer_eventbutton(SDL_Event *event, struct simstate_t *state);
 void viewer_eventmotion(SDL_Event *event, struct simstate_t *state);
+void viewer_eventdevice(SDL_Event *event, struct simstate_t *state);
 void viewer_eventwindow(SDL_Event *event, struct simstate_t *state);
 void v_keystatecycle(struct simstate_t *state);
 
@@ -478,7 +481,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 {
 	SDL_GLContext glcontext;
 	SDL_Event event;
-	SDL_GameController *controller;
 
 	struct simstate_t state;
 	struct shader_cont_t shaders[2];
@@ -516,9 +518,9 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		return -1;
 	}
 
-	controller = SDL_GameControllerOpen(0);
-	if (!controller) {
-		ERRLOG("Couldn't open Controller 0", SDL_GetError());
+	state.input.controller = SDL_GameControllerOpen(0);
+	if (!state.input.controller) {
+		ERRLOG("Couldn't open Controller", SDL_GetError());
 	}
 
 	// TODO (brian) check for window creation errors
@@ -676,7 +678,7 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	// clean up from our gl shenanigans
 	vglDeleteProgram(shaders[0].shader);
 
-	SDL_GameControllerClose(controller);
+	SDL_GameControllerClose(state.input.controller);
 	SDL_GL_DeleteContext(glcontext);
 	SDL_DestroyWindow(state.output.window);
 	SDL_Quit();
@@ -730,8 +732,20 @@ void viewer_eventaxis(SDL_Event *event, struct simstate_t *state)
 /* viewer_eventdevice : event handler for a controller device updates */
 void viewer_eventdevice(SDL_Event *event, struct simstate_t *state)
 {
-	// TODO (brian) fill out if we actually need this
-	// (really, just don't unplug the controller, and we're fine)
+	// if we get that we get a controller that plugs in after
+	// the program starts up, we just load it right on in
+	switch (event->cdevice.type) {
+		case SDL_CONTROLLERDEVICEADDED:
+			state->input.controllerid = event->cdevice.which;
+			state->input.controller = SDL_GameControllerOpen(state->input.controllerid);
+			break;
+		case SDL_CONTROLLERDEVICEREMOVED:
+			SDL_GameControllerClose(state->input.controller);
+			state->input.controller = -1;
+			break;
+		case SDL_CONTROLLERDEVICEREMAPPED:
+			break;
+	}
 }
 
 /* viewer_eventmotion : interprets and updates simstate from mouse motion */
