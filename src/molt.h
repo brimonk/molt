@@ -763,6 +763,8 @@ void molt_sweep(struct molt_cfg_t *cfg, f64 *dst, f64 *src, pdvec4_t params, cve
 	}
 }
 
+int quad_count = 0;
+
 /* molt_gfquad_m : green's function quadriture on the input vector */
 void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, cvec3_t order)
 {
@@ -791,6 +793,8 @@ void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, c
 	f64 *wl = params[2];
 	f64 *wr = params[3];
 
+	printf("quad num : %d\n", quad_count++);
+
 	rowlen = molt_cfg_parampull_gen(cfg, 0, MOLT_PARAM_PINC, order);
 	orderm = cfg->spaceacc;
 
@@ -805,6 +809,45 @@ void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, c
 	iC = -M2;
 	iR = rowlen - orderm;
 
+	/* left sweep */
+	for (i = 0; i < M2; i++) {
+		// printf("left sweep, left edge, i = %d\n", i);
+		IL = d * IL + molt_vect_mul(&wl[i * orderm] , &in[iL], orderm);
+		out[i + 1] = out[i + 1] + IL;
+	}
+
+	for (; i < N - M2; i++) {
+		// printf("left sweep, middle, i = %d\n", i);
+		IL = d * IL + molt_vect_mul(&wl[i * orderm], &in[i + 1 + iC], orderm);
+		out[i + 1] = out[i + 1] + IL;
+	}
+
+	for (; i < N; i++) {
+		// printf("left sweep, right edge, i = %d\n", i);
+		IL = d * IL + molt_vect_mul(&wl[i * orderm], &in[iR], orderm);
+		out[i + 1] = out[i + 1] + IL;
+	}
+
+	for (i = N - 1; i > N - 1 - M2; i--) {
+		// printf("right sweep, right edge, i = %d\n", i);
+		IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[iL], orderm);
+		out[i] = out[i] + IR;
+	}
+
+	for (; i > M2; i--) {
+		// printf("right sweep, middle, i = %d\n", i);
+		IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[i + 1 + iC], orderm);
+		out[i] = out[i] + IR;
+	}
+
+	for (; i >= 0; i--) {
+		// printf("right sweep, left, i = %d\n", i);
+		IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[iR], orderm);
+		out[i] = out[i] + IR;
+	}
+
+
+#if 0
 	for (i = 0; i < N; i++) { /* left */
 		bound = molt_gfquad_bound(i, M2, N);
 
@@ -840,6 +883,7 @@ void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, c
 
 		out[i] = out[i] + IR;
 	}
+#endif
 
 	for (i = 0; i < rowlen; i++)
 		out[i] /= 2;
