@@ -47,6 +47,7 @@ enum {
 };
 
 #define MOLT_FLAG_FIRSTSTEP 0x01
+#define MOLT_WORKSTORE_AMT  8
 
 struct molt_cfg_t {
 	// simulation values are kept as integers, and are scaled by the
@@ -76,7 +77,7 @@ struct molt_cfg_t {
 	dvec3_t dnu;
 
 	// working storage for simulation
-	f64 *workstore[8];
+	f64 *workstore[MOLT_WORKSTORE_AMT];
 	f64 *worksweep;
 };
 
@@ -271,16 +272,18 @@ void molt_cfg_set_workstore(struct molt_cfg_t *cfg)
 	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_PINC);
 	elems = ((s64)dim[0]) * dim[1] * dim[2];
 
+	// find the largest dimension
 	for (i = 0, len = dim[0]; i < 3; i++) {
 		if (len < dim[i])
 			len = dim[i];
 	}
 
 	for (i = 0; i < 8; i++) {
-		cfg->workstore[i] = malloc(sizeof(f64) * elems);
+		cfg->workstore[i] = calloc(elems, sizeof(f64));
+		printf("workstore[%d] : 0x%p\n", i, cfg->workstore[i]);
 	}
 
-	cfg->worksweep = malloc(sizeof(f64) * len);
+	cfg->worksweep = calloc(len, sizeof(f64));
 }
 
 /* molt_cfg_free_workstore : frees all of the working storage */
@@ -290,11 +293,10 @@ void molt_cfg_free_workstore(struct molt_cfg_t *cfg)
 
 	for (i = 0; i < 8; i++) {
 		free(cfg->workstore[i]);
+		cfg->workstore[i] = NULL;
 	}
 
 	free(cfg->worksweep);
-
-	memset(cfg->workstore, 0, sizeof cfg->workstore);
 	cfg->worksweep = NULL;
 }
 
@@ -435,6 +437,21 @@ void molt_step2v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec4_t vw, pdvec4_t ww,
 	outww[3] = ww[3];
 
 	molt_step3v(cfg, vol, vw, ww, flags);
+}
+
+void molt_cfg_print(struct molt_cfg_t *cfg)
+{
+	s32 i;
+	printf("int_scale : %lf", cfg->int_scale);
+	printf("t_params : "); for (i = 0; i < 5; i++) { printf("%ld", cfg->t_params[i]); } printf("\n");
+	printf("x_params : "); for (i = 0; i < 5; i++) { printf("%ld", cfg->x_params[i]); } printf("\n");
+	printf("y_params : "); for (i = 0; i < 5; i++) { printf("%ld", cfg->y_params[i]); } printf("\n");
+	printf("z_params : "); for (i = 0; i < 5; i++) { printf("%ld", cfg->z_params[i]); } printf("\n");
+
+	printf("workstore :\n");
+	for (i = 0; i < MOLT_WORKSTORE_AMT; i++) {
+		printf("\t0x%p\n", cfg->workstore[i]);
+	}
 }
 
 /* molt_step3v : the actual MOLT function, everything else is sugar */
@@ -658,14 +675,23 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 	z_sweep_params[2] = ww[4];
 	z_sweep_params[3] = ww[5];
 
+	// TEMPORARY
+	// work_ix = calloc(totalelem, sizeof (double));
 	work_ix   = cfg->workstore[3];
 	work_iy   = cfg->workstore[4];
 	work_iz   = cfg->workstore[5];
 	work_tmp  = cfg->workstore[6];
 	work_tmp_ = cfg->workstore[7];
 
+	printf("work_ix   : 0x%p\n", work_ix);
+	printf("work_iy   : 0x%p\n", work_iy);
+	printf("work_iz   : 0x%p\n", work_iz);
+	printf("work_tmp  : 0x%p\n", work_tmp);
+	printf("work_tmp_ : 0x%p\n", work_tmp_);
+
 	// sweep in x, y, z
 	molt_sweep(cfg, work_ix,     src, x_sweep_params, molt_ord_xyz);
+	printf("work_ix   : 0x%p\n", work_ix);
 	for (i = 0; i < totalelem; i++) {
 		work_ix[i] -= src[i];
 	}
@@ -941,6 +967,9 @@ void molt_reorg(struct molt_cfg_t *cfg, f64 *dst, f64 *src, f64 *work, cvec3_t s
 	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_PINC);
 
 	total = ((u64)dim[0]) * dim[1] * dim[2];
+
+	printf("reorg (%d,%d,%d)\tdst 0x%p work 0x%p src 0x%p\n",
+			dim[0], dim[1], dim[2], dst, work, src);
 
 	for (idx[2] = 0; idx[2] < dim[2]; idx[2]++) {
 		for (idx[1] = 0; idx[1] < dim[1]; idx[1]++) {
