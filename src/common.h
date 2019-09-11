@@ -112,7 +112,7 @@ typedef cvec_t cvec4_t[4];
 typedef cvec_t cvec5_t[5];
 typedef cvec_t cvec6_t[6];
 
-#define BUFSMALL 32
+#define BUFSMALL 256
 #define BUFLARGE 4096
 
 void print_err_and_die(char *msg, char *file, int line);
@@ -124,6 +124,22 @@ s32 hunklog_1(char *file, int line, char *msg, ivec_t dim, f64 *p);
 s32 hunklog_2(char *file, int line, char *msg, ivec2_t dim, f64 *p);
 s32 hunklog_3(char *file, int line, char *msg, ivec3_t dim, f64 *p);
 s32 hunklog_3ord(char *file, int line, char *msg, ivec3_t dim, f64 *p, cvec3_t ord);
+void perflog_append(char *file, char *func, char *str, s32 line);
+void perflog_print(s32 from, s32 to);
+void perflog_print_mostrecent();
+
+#define PERFLOG_ADD(s)\
+	perflog_append(__FILE__, (char *)__FUNCTION__, (s), __LINE__)
+#define PERFLOG_PRINT(s)\
+	printf("PerfLog - %s:%d [%s] %s\n", __FILE__, __LINE__, (char *)__FUNCTION__, (s))
+#define PERFLOG_SPRINTF(b,s,...)\
+	snprintf((b), sizeof((b)), (s), __VA_ARGS__);\
+	PERFLOG_PRINT(b)
+#define PERFLOG_APP_AND_PRINT(b,s,...)\
+	snprintf((b), sizeof((b)), (s), __VA_ARGS__);\
+	PERFLOG_PRINT(b);\
+	PERFLOG_ADD(s)
+
 
 #define LOG1D(p, d, m) hunklog_1(__FILE__, __LINE__, (m), (d), (p))
 #define LOG2D(p, d, m) hunklog_2(__FILE__, __LINE__, (m), (d), (p))

@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "common.h"
 
@@ -228,5 +229,45 @@ s32 hunklog_3ord(char *file, int line, char *msg, ivec3_t dim, f64 *p, cvec3_t o
 #endif
 
 	return lines;
+}
+
+/* 
+ * NOTE (brian)
+ * For performance metrics
+ * For debugging, and performance metrics, we can use something like the following
+ */
+struct perflog_t {
+	char *file;
+	char *func;
+	u64 clocks; // to be semi-portable, use clock_t and clock()
+	s32 line;
+	char str[BUFSMALL];
+};
+
+#define PERFLOG_INIT 4096
+static struct perflog_t *perflog = NULL;
+static s32 perflog_num = 0;
+static s32 perflog_cap = 0;
+
+/* perflog_append : appends */
+void perflog_append(char *file, char *func, char *str, s32 line)
+{
+	// NOTE (brian) just a simple array resize
+	if (!perflog) {
+		perflog = malloc(sizeof(struct perflog_t) * PERFLOG_INIT);
+	}
+
+	if (perflog_num == perflog_cap) {
+		perflog_cap = perflog_cap ? perflog_cap * 2 : PERFLOG_INIT;
+		perflog = realloc(perflog, sizeof(struct perflog_t) * perflog_cap);
+	}
+
+	perflog[perflog_num].file = file;
+	perflog[perflog_num].func = func;
+	perflog[perflog_num].clocks = clock();
+	perflog[perflog_num].line = line;
+	strncpy(perflog[perflog_num].str, str, BUFSMALL);
+
+	perflog_num++;
 }
 

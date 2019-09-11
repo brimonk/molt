@@ -49,6 +49,8 @@ enum {
 #define MOLT_FLAG_FIRSTSTEP 0x01
 #define MOLT_WORKSTORE_AMT  8
 
+static char molt_staticbuf[BUFSMALL];
+
 struct molt_cfg_t {
 	// simulation values are kept as integers, and are scaled by the
 	// following value
@@ -79,6 +81,7 @@ struct molt_cfg_t {
 	// working storage for simulation
 	f64 *workstore[MOLT_WORKSTORE_AMT];
 	f64 *worksweep;
+
 };
 
 // molt_cfg dimension intializer functions
@@ -267,7 +270,8 @@ void molt_cfg_set_workstore(struct molt_cfg_t *cfg)
 	 */
 
 	ivec3_t dim;
-	s64 elems, len, i;
+	s64 elems, len;
+	s32 i;
 
 	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_PINC);
 	elems = ((s64)dim[0]) * dim[1] * dim[2];
@@ -280,7 +284,7 @@ void molt_cfg_set_workstore(struct molt_cfg_t *cfg)
 
 	for (i = 0; i < 8; i++) {
 		cfg->workstore[i] = calloc(elems, sizeof(f64));
-		printf("workstore[%d] : 0x%p\n", i, cfg->workstore[i]);
+		// PERFLOG_APP_AND_PRINT(molt_staticbuf, "workstore[%d] : %p", i, cfg->workstore[i]);
 	}
 
 	cfg->worksweep = calloc(len, sizeof(f64));
@@ -626,11 +630,6 @@ void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 	for (i = 0; i < totalelem; i++) {
 		dst[i] = (work_ix[i] + work_iy[i] + work_iz[i]) / 3 - src[i];
 	}
-
-	free(work_ix);
-	free(work_iy);
-	free(work_iz);
-	free(work_tmp);
 }
 
 /* molt_c_op : MOLT's C Convolution Operator*/
@@ -683,15 +682,8 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 	work_tmp  = cfg->workstore[6];
 	work_tmp_ = cfg->workstore[7];
 
-	printf("work_ix   : 0x%p\n", work_ix);
-	printf("work_iy   : 0x%p\n", work_iy);
-	printf("work_iz   : 0x%p\n", work_iz);
-	printf("work_tmp  : 0x%p\n", work_tmp);
-	printf("work_tmp_ : 0x%p\n", work_tmp_);
-
 	// sweep in x, y, z
 	molt_sweep(cfg, work_ix,     src, x_sweep_params, molt_ord_xyz);
-	printf("work_ix   : 0x%p\n", work_ix);
 	for (i = 0; i < totalelem; i++) {
 		work_ix[i] -= src[i];
 	}
@@ -727,12 +719,6 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 	for (i = 0; i < totalelem; i++) {
 		dst[i] = (work_ix[i] + work_iy[i] + work_iz[i]) / 3 - src[i];
 	}
-
-	free(work_ix);
-	free(work_iy);
-	free(work_iz);
-	free(work_tmp);
-	free(work_tmp_);
 }
 
 /* molt_sweep : performs a sweep across the mesh in the dimension specified */
@@ -793,7 +779,8 @@ void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, c
 	f64 *wl = params[2];
 	f64 *wr = params[3];
 
-	printf("quad num : %d\n", quad_count++);
+	// PERFLOG_APP_AND_PRINT(molt_staticbuf, "quadnum %d", quad_count);
+	quad_count++;
 
 	rowlen = molt_cfg_parampull_gen(cfg, 0, MOLT_PARAM_PINC, order);
 	orderm = cfg->spaceacc;
@@ -811,41 +798,40 @@ void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, c
 
 	/* left sweep */
 	for (i = 0; i < M2; i++) {
-		// printf("left sweep, left edge, i = %d\n", i);
+		// PERFLOG_SPRINTF(molt_staticbuf, "M %d, i %d", orderm, i);
 		IL = d * IL + molt_vect_mul(&wl[i * orderm] , &in[iL], orderm);
 		out[i + 1] = out[i + 1] + IL;
 	}
 
 	for (; i < N - M2; i++) {
-		// printf("left sweep, middle, i = %d\n", i);
+		// PERFLOG_SPRINTF(molt_staticbuf, "M %d, i %d", orderm, i);
 		IL = d * IL + molt_vect_mul(&wl[i * orderm], &in[i + 1 + iC], orderm);
 		out[i + 1] = out[i + 1] + IL;
 	}
 
 	for (; i < N; i++) {
-		// printf("left sweep, right edge, i = %d\n", i);
+		// PERFLOG_SPRINTF(molt_staticbuf, "M %d, i %d", orderm, i);
 		IL = d * IL + molt_vect_mul(&wl[i * orderm], &in[iR], orderm);
 		out[i + 1] = out[i + 1] + IL;
 	}
 
 	for (i = N - 1; i > N - 1 - M2; i--) {
-		// printf("right sweep, right edge, i = %d\n", i);
+		// PERFLOG_SPRINTF(molt_staticbuf, "M %d, i %d", orderm, i);
 		IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[iL], orderm);
 		out[i] = out[i] + IR;
 	}
 
 	for (; i > M2; i--) {
-		// printf("right sweep, middle, i = %d\n", i);
+		// PERFLOG_SPRINTF(molt_staticbuf, "M %d, i %d", orderm, i);
 		IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[i + 1 + iC], orderm);
 		out[i] = out[i] + IR;
 	}
 
 	for (; i >= 0; i--) {
-		// printf("right sweep, left, i = %d\n", i);
+		// PERFLOG_SPRINTF(molt_staticbuf, "M %d, i %d", orderm, i);
 		IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[iR], orderm);
 		out[i] = out[i] + IR;
 	}
-
 
 #if 0
 	for (i = 0; i < N; i++) { /* left */
@@ -1012,8 +998,8 @@ void molt_reorg(struct molt_cfg_t *cfg, f64 *dst, f64 *src, f64 *work, cvec3_t s
 
 	total = ((u64)dim[0]) * dim[1] * dim[2];
 
-	printf("reorg (%d,%d,%d)\tdst 0x%p work 0x%p src 0x%p\n",
-			dim[0], dim[1], dim[2], dst, work, src);
+	// PERFLOG_APP_AND_PRINT(molt_staticbuf, "REORG (%d,%d,%d) : DST %p, WORK %p, SRC %p",
+			// dim[0], dim[1], dim[2], dst, work, src);
 
 	for (idx[2] = 0; idx[2] < dim[2]; idx[2]++) {
 		for (idx[1] = 0; idx[1] < dim[1]; idx[1]++) {
