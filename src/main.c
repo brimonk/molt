@@ -19,17 +19,6 @@
  * TODO (Brian)
  * 1. Run a single simulation all the way through
  * 2. Clean up how we load and begin simulations
- *
- * Get Information on EField and PField simulation from Causley
- *   Look in common.h:~250 for more details
- *
- * Viewer
- * 3. Frame Timing Controls
- * 4. Display 3d Room
- * 5. Display Simulation Bounded Cube (Perform in-sim Rotations)
- *
- * WISHLIST
- * 1. setuplump_* should really be "init" or "fillup" lump
  */
 
 #include <stdio.h>

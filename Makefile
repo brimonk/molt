@@ -3,8 +3,7 @@
 # MOLT Specific (GNU) Makefile
 
 CC = gcc
-# LINKER = -lm -lSDL2 -lGL
-LINKER = -lefence -lm -lSDL2 -lGL
+LINKER = -lm -lSDL2 -lGL
 FLAGS = -Wall -g3 -march=native
 TARGET = molt
 SRC = $(wildcard src/*.c)
