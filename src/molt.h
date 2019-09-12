@@ -54,7 +54,8 @@ static char molt_staticbuf[BUFSMALL];
 struct molt_cfg_t {
 	// simulation values are kept as integers, and are scaled by the
 	// following value
-	f64 int_scale;
+	f64 time_scale;
+	f64 space_scale;
 
 	// the dimensionality of the simulation is stored in s64 arrays for the
 	// dimensionality we care about, time, then pos_x, pos_y, pos_z
@@ -207,10 +208,16 @@ s64 molt_cfg_parampull_gen(struct molt_cfg_t *cfg, s32 oidx, s32 cfgidx, cvec3_t
 	return -1;
 }
 
-/* molt_cfg_set_intscale : sets the integer scale value (trivial) */
-void molt_cfg_set_intscale(struct molt_cfg_t *cfg, f64 scale)
+/* molt_cfg_set_timescale : sets the integer scale value (trivial) */
+void molt_cfg_set_timescale(struct molt_cfg_t *cfg, f64 scale)
 {
-	cfg->int_scale = scale;
+	cfg->time_scale = scale;
+}
+
+/* molt_cfg_set_spacescale : sets the integer scale value (trivial) */
+void molt_cfg_set_spacescale(struct molt_cfg_t *cfg, f64 scale)
+{
+	cfg->space_scale = scale;
 }
 
 /* molt_cfg_set_accparams : set MOLT accuracy parameters */
@@ -246,9 +253,9 @@ void molt_cfg_set_nu(struct molt_cfg_t *cfg)
 {
 	assert(cfg->alpha);
 
-	cfg->nu[0] = cfg->int_scale * cfg->x_params[MOLT_PARAM_STEP] * cfg->alpha;
-	cfg->nu[1] = cfg->int_scale * cfg->y_params[MOLT_PARAM_STEP] * cfg->alpha;
-	cfg->nu[2] = cfg->int_scale * cfg->z_params[MOLT_PARAM_STEP] * cfg->alpha;
+	cfg->nu[0] = cfg->space_scale * cfg->x_params[MOLT_PARAM_STEP] * cfg->alpha;
+	cfg->nu[1] = cfg->space_scale * cfg->y_params[MOLT_PARAM_STEP] * cfg->alpha;
+	cfg->nu[2] = cfg->space_scale * cfg->z_params[MOLT_PARAM_STEP] * cfg->alpha;
 	cfg->dnu[0] = exp(-cfg->nu[0]);
 	cfg->dnu[1] = exp(-cfg->nu[1]);
 	cfg->dnu[2] = exp(-cfg->nu[2]);
@@ -446,7 +453,8 @@ void molt_step2v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec4_t vw, pdvec4_t ww,
 void molt_cfg_print(struct molt_cfg_t *cfg)
 {
 	s32 i;
-	printf("int_scale : %lf", cfg->int_scale);
+	printf("space_scale : %lf", cfg->space_scale);
+	printf("time_scale  : %lf", cfg->time_scale);
 	printf("t_params : "); for (i = 0; i < 5; i++) { printf("%ld", cfg->t_params[i]); } printf("\n");
 	printf("x_params : "); for (i = 0; i < 5; i++) { printf("%ld", cfg->x_params[i]); } printf("\n");
 	printf("y_params : "); for (i = 0; i < 5; i++) { printf("%ld", cfg->y_params[i]); } printf("\n");
@@ -483,7 +491,7 @@ void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww,
 
 	if (flags & MOLT_FLAG_FIRSTSTEP) {
 		// u1 = 2 * (u0 + d1 * v0)
-		tmp = cfg->int_scale * cfg->t_params[MOLT_PARAM_STEP];
+		tmp = cfg->time_scale * cfg->t_params[MOLT_PARAM_STEP];
 		for (i = 0; i < totalelem; i++) {
 			next[i] = 2 * (curr[i] + tmp * prev[i]);
 		}

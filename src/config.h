@@ -42,7 +42,8 @@
 
 /* MESH PARAMETERS */
 
-#define MOLT_INTSCALE      0.01
+#define MOLT_TIMESCALE       1e-9
+#define MOLT_SPACESCALE      1e-2
 
 /*
  * There are 3 pieces of information to know about the dimensionality of the
