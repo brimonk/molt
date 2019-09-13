@@ -43,7 +43,7 @@
 
 /* lump setup functions */
 void setup_simulation(void **base, u64 *size, int fd);
-u64 setup_lumps(void *base);
+u64 setup_lumptable(struct lump_header_t *hdr);
 void setuplump_cfg(struct lump_header_t *hdr, struct molt_cfg_t *cfg);
 void setuplump_run(struct lump_runinfo_t *run);
 void setuplump_efield(struct lump_header_t *hdr, struct lump_efield_t *efield);
@@ -74,6 +74,10 @@ int main(int argc, char **argv)
 	u32 flags;
 	struct molt_cfg_t *cfg;
 	struct run_t *run;
+
+	hunk = NULL;
+	hunksize = 0;
+	fd = 0;
 
 	flags = 0, targc = argc, targv = argv;
 
@@ -117,24 +121,12 @@ int main(int argc, char **argv)
 	// create our disk-backed storage
 	fd = io_open(fname);
 
-	// figure out if our disk-backed store is already good enough
-	// WARN (brian) not robust
-	hunksize = sizeof(struct lump_header_t);
-
-	if (hunksize < io_getsize()) {
-		hunksize = io_getsize();
-		hunk = io_mmap(fd, hunksize);
-	} else {
-		io_resize(fd, hunksize);
-		// mind the reader, setup_simulation remmaps the hunk into vmemory
-		// after figuring out how big it is
-		hunk = io_mmap(fd, hunksize);
-		setup_simulation(&hunk, &hunksize, fd);
-		io_mssync(hunk, hunk, hunksize);
-	}
+	// resize the disk store and map the disk file into virtual memory
+	setup_simulation(&hunk, &hunksize, fd);
+	io_mssync(hunk, hunk, hunksize);
 
 	if (flags & FLG_SIM) {
-		// do_simulation(hunk, hunksize);
+		do_simulation(hunk, hunksize);
 		io_mssync(hunk, hunk, hunksize);
 	}
 
@@ -225,13 +217,12 @@ void setup_simulation(void **base, u64 *size, int fd)
 {
 	void *newblk;
 	u64 oldsize;
-
-	io_lumpcheck(*base);
+	struct lump_header_t tmpheader;
 
 	oldsize = *size;
-	*size = setup_lumps(*base);
+	*size = setup_lumptable(&tmpheader);
 
-	/* resize the file (if needed) to get enough simulation space */
+	// resize the file (if needed (probably always needed))
 	if (io_getsize() < *size) {
 		if (io_resize(fd, *size) < 0) {
 			fprintf(stderr, "Couldn't get space. Quitting\n");
@@ -239,13 +230,16 @@ void setup_simulation(void **base, u64 *size, int fd)
 		}
 	}
 
-	/* remmap it to the correct size */
-	if ((newblk = io_mremap(*base, oldsize, *size)) == ((void *)-1)) {
-		fprintf(stderr, "ERR: Couldn't remap the file to the correct size!\n");
-		exit(1);
-	} else {
-		*base = newblk;
-	}
+	// finally, memory map the file
+	*base = io_mmap(fd, *size);
+
+	// zero the file to get it to a known state (for valgrind and friends)
+	memset(*base, 0, *size);
+
+	io_lumpcheck(*base);
+
+	// ensure we copy our lump header into the mapped memory
+	memcpy(*base, &tmpheader, sizeof(tmpheader));
 
 	printf("file size %ld\n", *size);
 
@@ -258,16 +252,15 @@ void setup_simulation(void **base, u64 *size, int fd)
 	setuplump_umesh(*base, io_lumpgetbase(*base, MOLTLUMP_UMESH));
 }
 
-/* setup_lumps : returns size of file after lumpsystem setup */
-u64 setup_lumps(void *base)
+/* setup_lumptable : fills out the lump_header_t that gets passed in */
+u64 setup_lumptable(struct lump_header_t *hdr)
 {
-	struct lump_header_t *hdr;
+	// NOTE (brian) returns the size, in bytes, the file needs to be
 	s32 curr_lump;
 	u64 curr_offset;
 
 	/* begin the setup by setting up our lump header and our lump directory */
 
-	hdr = base;
 	curr_offset = sizeof(struct lump_header_t);
 
 	/* setup the lump header with the little run-time data we have */
@@ -503,7 +496,8 @@ void setuplump_umesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 				fz = pow(initial_scale(cfg, z, zpoints), 2);
 
 				umesh->data[i] = exp(-13.0 * (fx + fy + fz));
-				vmesh->data[i] = MOLT_TISSUESPEED * 2 * 13.0 * 2 / (xpoints * cfg->space_scale) * initial_scale(cfg, x, xpoints) * umesh->data[i];
+				vmesh->data[i] = MOLT_TISSUESPEED * 2 * 13.0 * 2 / (xpoints * cfg->space_scale)
+					* initial_scale(cfg, x, xpoints) * umesh->data[i];
 			}
 		}
 	}
