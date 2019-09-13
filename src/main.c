@@ -18,7 +18,6 @@
  *
  * TODO (Brian)
  * 1. Run a single simulation all the way through
- * 2. Clean up how we load and begin simulations
  */
 
 #include <stdio.h>
@@ -288,7 +287,7 @@ u64 setup_lumptable(struct lump_header_t *hdr)
 	curr_lump = MOLTLUMP_WWEIGHT;
 	hdr->lump[curr_lump].offset = curr_offset;
 	hdr->lump[curr_lump].elemsize = sizeof(struct lump_wweight_t);
-	hdr->lump[curr_lump].lumpsize = hdr->lump[4].elemsize;
+	hdr->lump[curr_lump].lumpsize = hdr->lump[curr_lump].elemsize;
 	curr_offset += hdr->lump[curr_lump].lumpsize;
 
 	/* setup our efield information */
@@ -548,9 +547,15 @@ void setupstate_print(void *hunk)
 	ww = io_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
 
 	// setup the weights for passing
+#if 0
+	Vec2Set(xweight_dim, cfg->spaceacc + 1, cfg->x_params[MOLT_PARAM_POINTS]);
+	Vec2Set(yweight_dim, cfg->spaceacc + 1, cfg->y_params[MOLT_PARAM_POINTS]);
+	Vec2Set(zweight_dim, cfg->spaceacc + 1, cfg->z_params[MOLT_PARAM_POINTS]);
+#else
 	Vec2Set(xweight_dim, cfg->x_params[MOLT_PARAM_POINTS], cfg->spaceacc + 1);
 	Vec2Set(yweight_dim, cfg->y_params[MOLT_PARAM_POINTS], cfg->spaceacc + 1);
 	Vec2Set(zweight_dim, cfg->z_params[MOLT_PARAM_POINTS], cfg->spaceacc + 1);
+#endif
 
 	LOG2D(ww->xl_weight, xweight_dim, "WWEIGHT-XL");
 	LOG2D(ww->xr_weight, xweight_dim, "WWEIGHT-XR");

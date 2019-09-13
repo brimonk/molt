@@ -1019,7 +1019,7 @@ void molt_reorg(struct molt_cfg_t *cfg, f64 *dst, f64 *src, f64 *work, cvec3_t s
 		}
 	}
 
-	memcpy(dst, src, sizeof(*dst) * total);
+	memcpy(dst, work, sizeof(*dst) * total);
 }
 
 /* molt_vect_mul : perform element-wise vector multiplication */
