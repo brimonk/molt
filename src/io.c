@@ -37,6 +37,7 @@
 
 #define MMAP_FLAGS MAP_SHARED
 #else
+#define MAP_FAILED ((void*)-1)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <fcntl.h>
@@ -61,7 +62,6 @@ int munmap(void *start, size_t length);
 
 #endif
 
-#define MAP_FAILED ((void*)-1)
 
 static size_t mapping_len;
 char io_filename[256];
