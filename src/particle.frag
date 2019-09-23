@@ -14,16 +14,11 @@ in float fMag;
 
 out vec4 oColor;
 
-vec3 colorLo = vec3(0, 0, 1);
-vec3 colorHi = vec3(1, 0, 0);
-
 void main()
 {
-	vec3 tmpColor;
+	float alpha;
 
-	tmpColor = vec3(0.0);
-	tmpColor = mix(colorLo, colorHi, fMag);
-
-	oColor = vec4(tmpColor, 1);
+	alpha = mix(-1.0, 1.0, fMag);
+	oColor = vec4(1.0f, 0.0f, 0.0f, alpha);
 }
 

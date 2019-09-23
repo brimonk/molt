@@ -279,6 +279,13 @@ struct simstate_t {
 	// last - last time we drew a frame
 	// delta- difference between the two
 
+	s32 updatedata;
+
+	fvec4_t *volstore; // one stores the real data
+	fvec4_t *voldraw;  // memcpy and sort, then draw (every frame, yikes)
+	s32 volbytes;
+	s32 particles;
+
 	struct quad_t *quads;
 	int quadlen;
 
@@ -303,6 +310,7 @@ int v_instatecheck(struct simstate_t *state, int kstate, int amt, ...);
 int v_iteminlist(int v, int n, ...);
 int v_loadworld(struct simstate_t *state, char *file);
 u64 v_timer();
+void v_updatestate(struct simstate_t *state, f64 *src);
 
 struct openglfuncs_t {
 	char *str;
@@ -403,6 +411,14 @@ typedef void (APIENTRY * GL_Uniform3f_Func)(GLint location, GLfloat v0, GLfloat 
 GL_Uniform3f_Func vglUniform3f;
 typedef void (APIENTRY * GL_Uniform4f_Func)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
 GL_Uniform4f_Func vglUniform4f;
+typedef void (APIENTRY * GL_Uniform1fv_Func)(GLint, GLsizei count, const GLfloat *value);
+GL_Uniform1fv_Func vglUniform1fv;
+typedef void (APIENTRY * GL_Uniform2fv_Func)(GLint, GLsizei count, const GLfloat *value);
+GL_Uniform1fv_Func vglUniform2fv;
+typedef void (APIENTRY * GL_Uniform3fv_Func)(GLint, GLsizei count, const GLfloat *value);
+GL_Uniform1fv_Func vglUniform3fv;
+typedef void (APIENTRY * GL_Uniform4fv_Func)(GLint, GLsizei count, const GLfloat *value);
+GL_Uniform1fv_Func vglUniform4fv;
 
 // "OpenGL Function Make"
 #define PP_CONCAT(x,y)   x##y
@@ -441,6 +457,10 @@ struct openglfuncs_t openglfunc_table[] = {
 	OGLFUNCMK(glUniform2f),
 	OGLFUNCMK(glUniform3f),
 	OGLFUNCMK(glUniform4f),
+	OGLFUNCMK(glUniform1fv),
+	OGLFUNCMK(glUniform2fv),
+	OGLFUNCMK(glUniform3fv),
+	OGLFUNCMK(glUniform4fv),
 	OGLFUNCMK(glViewport)
 };
 
@@ -472,8 +492,12 @@ f32 particular_soln(f32 x, f32 y, f32 z, f32 t)
 	const f32 m = 0.4f;
 	const f32 c = 1;
 
+#if 0
 	return sin(k * M_PI * x) * sin(l * M_PI * y) * sin(m * M_PI * z) *
 		cos(c * M_PI * sqrt(pow(k,2) + pow(l,2) + pow(m,2)) * t);
+#else
+	return sin(M_PI * x + t * 0.2);
+#endif
 }
 
 /* viewer_run : runs the molt graphical 3d simulation viewer */
@@ -484,18 +508,16 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	struct simstate_t state;
 	struct shader_cont_t shaders[2];
-	u64 lasttimer;
 	s32 rc, i;
 
 	float bbverts[] = {
-		-0.5f, -0.5f, 0.0f,
-		 0.5f, -0.5f, 0.0f,
-		-0.5f,  0.5f, 0.0f,
-		 0.5f,  0.5f, 0.0f
+		-1.0f, -1.0f, 0.0f,
+		 1.0f, -1.0f, 0.0f,
+		-1.0f,  1.0f, 0.0f,
+		 1.0f,  1.0f, 0.0f
 	};
 
 	hmm_mat4 model, view, proj, orig;
-	hmm_mat4 part_model;
 
 	memset(&state, 0, sizeof state);
 
@@ -503,6 +525,17 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	state.cam_pos = HMM_Vec3(-12, 12, 12);//0, 3, 9);
 	state.cam_front = HMM_MultiplyVec3f(state.cam_pos, -1);
 	state.cam_up = HMM_Vec3(0, 1, 0);
+
+	state.particles = pow(VOL_BOUND * 2 / 0.5, 3);
+	state.volbytes = state.particles * sizeof(*state.volstore);
+	state.volstore = malloc(state.volbytes);
+	state.voldraw  = malloc(state.volbytes);
+
+	memset(state.volstore, 0, state.volbytes);
+	memset(state.voldraw,  0, state.volbytes);
+
+	state.updatedata++;
+	v_updatestate(&state, hunk); // or something
 
 	rc = 0, state.run = 1;
 
@@ -549,6 +582,9 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	}
 
 	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
+
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	// setup our particle shader
 	shaders[0].shader = viewer_mkshader("src/particle.vert", "src/particle.frag");
@@ -561,10 +597,9 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	vglBufferData(GL_ARRAY_BUFFER, sizeof(bbverts), bbverts, GL_STATIC_DRAW);
 
 	vglBindVertexArray(shaders[0].vao);
-	vglVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+	vglVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
 	vglEnableVertexAttribArray(0);
 
-	shaders[0].loc_model = vglGetUniformLocation(shaders[0].shader, "uModel");
 	shaders[0].loc_view  = vglGetUniformLocation(shaders[0].shader, "uView");
 	shaders[0].loc_proj  = vglGetUniformLocation(shaders[0].shader, "uProj");
 
@@ -575,9 +610,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 	// setup original cube state
 	orig = HMM_Mat4d(1.0f);
-	part_model = HMM_MultiplyMat4(orig, HMM_Translate(HMM_Vec3(0, 5, 0)));
-
-	lasttimer = v_timer();
 
 	while (state.run) {
 		while (SDL_PollEvent(&event)) {
@@ -616,6 +648,9 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 
 		viewer_handleinput(&state);
 
+		// merge sort with the output being our draw state
+		v_updatestate(&state, NULL);
+
 		// render
 		glClearColor(0, 0, 0, 1);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -628,24 +663,20 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		// draw the particles
 		vglUseProgram(shaders[0].shader);
 
-		vglUniformMatrix4fv(shaders[0].loc_model, 1, GL_FALSE, (f32 *)&part_model);
 		vglUniformMatrix4fv(shaders[0].loc_view,  1, GL_FALSE, (f32 *)&view);
 		vglUniformMatrix4fv(shaders[0].loc_proj,  1, GL_FALSE, (f32 *)&proj);
 
 		vglBindVertexArray(shaders[0].vao);
 
-		u32 locPos, locMag, locRes;
+		u32 locPos, locRes;
 		locPos = vglGetUniformLocation(shaders[0].shader, "uPos");
-		locMag = vglGetUniformLocation(shaders[0].shader, "uMag");
 		locRes = vglGetUniformLocation(shaders[0].shader, "uRes");
 		vglUniform2f(locRes, state.output.win_w, state.output.win_h);
 
-		f32 lx, ly, lz, lw;
-		for (lx = -VOL_BOUND; lx < VOL_BOUND; lx += 0.5)
-		for (ly = -VOL_BOUND; ly < VOL_BOUND; ly += 0.5)
-		for (lz = -VOL_BOUND; lz < VOL_BOUND; lz += 0.5) {
-			lw = particular_soln(lx, ly, lz, state.frame_curr);
-			vglUniform4f(locPos, lx, ly, lz, lw);
+		s32 i;
+
+		for (i = 0; i < state.particles; i++) {
+			vglUniform4fv(locPos, 1, state.voldraw + i);
 			glDrawArrays(GL_TRIANGLE_STRIP, 0, 6);
 		}
 
@@ -660,16 +691,13 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		state.frame_curr = ((f32)SDL_GetTicks()) / 1000.0f;
 		state.frame_diff = state.frame_curr - state.frame_last;
 
+#if 0
 		if (state.frame_diff < TARGET_FRAMETIME) {
 			SDL_Delay(((f32)SDL_GetTicks()) / 1000 - state.frame_curr);
 		}
+#endif
 
 		state.frame_last = state.frame_curr;
-
-		u64 cputimer;
-		cputimer = v_timer();
-		printf("ticks %llu\n", cputimer - lasttimer);
-		lasttimer = cputimer;
 	}
 
 	vglDeleteVertexArrays(1, &shaders[0].vao);
@@ -1202,5 +1230,36 @@ u64 v_timer()
 	tick = (((u64)a) | ((u64)d << 32));
 
 	return tick;
+}
+
+/* v_updatestate : update the */
+void v_updatestate(struct simstate_t *state, f64 *src)
+{
+	/*
+	 * NOTE (brian) in the _real_ program, we'll read from f64 src and
+	 * stuff that information into our state->volstore, then merge sort
+	 * it into our voldraw buffer
+	 */
+	// NOTE (brian) we currently don't read from src, we precompute it
+	f32 lx, ly, lz, lw;
+	s32 i;
+
+	i = 0;
+
+	// fill in our data
+	if (state->updatedata) {
+		for (lx = -VOL_BOUND; lx < VOL_BOUND; lx += 0.5)
+		for (ly = -VOL_BOUND; ly < VOL_BOUND; ly += 0.5)
+		for (lz = -VOL_BOUND; lz < VOL_BOUND; lz += 0.5) {
+			i++;
+			state->volstore[i][0] = lx;
+			state->volstore[i][1] = ly;
+			state->volstore[i][2] = lz;
+			state->volstore[i][3] = particular_soln(lx, ly, lz, state->frame_curr);
+		}
+	}
+
+	// now sort it into our draw buffer (we always have to do this)
+	memcpy(state->voldraw, state->volstore, state->volbytes);
 }
 
