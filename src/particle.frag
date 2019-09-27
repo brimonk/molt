@@ -10,15 +10,14 @@
 
 #version 330
 
-in float fMag;
-
+in  vec3 fColor;
 out vec4 oColor;
 
 void main()
 {
-	float alpha;
+	vec3 lColor;
 
-	alpha = mix(-1.0, 1.0, fMag);
-	oColor = vec4(1.0f, 0.0f, 0.0f, alpha);
+	// oColor = vec4(1, 0, 0, 1);
+	oColor = vec4(fColor, 1);
 }
 

@@ -178,14 +178,17 @@ static int io_msync(void *base, void *ptr, size_t len, int flags)
 
 	// sync the entire page
 #ifdef WIN32
-	ret = FlushViewOfFile(ptr, len);
+	ret = FlushViewOfFile(ptr, len); // returns nonzero on success, or zero
+	if (!ret) {
+		fprintf(stderr, "io_msync failed : %s\n", "some error");
+		ret = 1;
+	}
 #else
 	ret = msync(((char *)ptr) - addlsize, len + addlsize, flags);
-#endif
-
 	if (ret) {
 		io_errnohandle();
 	}
+#endif
 
 	return ret;
 }

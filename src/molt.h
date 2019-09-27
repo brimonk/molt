@@ -49,7 +49,7 @@ enum {
 #define MOLT_FLAG_FIRSTSTEP 0x01
 #define MOLT_WORKSTORE_AMT  8
 
-static char molt_staticbuf[BUFSMALL];
+// static char molt_staticbuf[BUFSMALL];
 
 struct molt_cfg_t {
 	// simulation values are kept as integers, and are scaled by the
