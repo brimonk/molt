@@ -206,8 +206,9 @@ void perflog_print_mostrecent();
 #define VectorPrint(a) (printf("%lf, %lf, %lf\n", (a)[0], (a)[1], (a)[2]))
 
 // now for some of my own
-#define Vec2Set(v,a,b)   ((v)[0]=(a),(v)[1]=(b))
-#define Vec3Set(v,a,b,c) ((v)[0]=(a),(v)[1]=(b),(v)[2]=(c))
+#define Vec2Set(v,a,b)     ((v)[0]=(a),(v)[1]=(b))
+#define Vec3Set(v,a,b,c)   ((v)[0]=(a),(v)[1]=(b),(v)[2]=(c))
+#define Vec4Set(v,a,b,c,d) ((v)[0]=(a),(v)[1]=(b),(v)[2]=(c),(v)[3]=(d))
 
 /* simulation information */
 

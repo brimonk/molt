@@ -4,14 +4,11 @@
  *
  * MOLT Viewer Implementation
  *
- * This viewer, for ease of transport, requires SDL2 to operate.
- *
  * TODO
- * 1. Array Instancing for Particle System
- *
- * Thoughts about Oculus Integration
- * - #ifdef OCULUS_SUPPORT
- *   this should be included from the WinMakefile
+ * 1. Get Fonts Working
+ * 2. Print out the following at the top of the screen (for demo purposes)
+ *    Position (x,y,z)
+ *    Time     (start,curr,stop)
  */
 
 #include <stdio.h>
@@ -29,10 +26,12 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 
+#include "handmademath.h"
+#include "stb_truetype.h"
+
 #include "common.h"
 #include "molt.h"
 #include "io.h"
-#include "handmademath.h"
 #include "viewer.h"
 
 // get some other viewer flags out of the way
@@ -50,8 +49,12 @@
 #define HEIGHT  768
 #define MOUSE_SENSITIVITY 0.4f
 
-#define MAX_PARTICLES 1000
-#define VOL_BOUND (2 * M_PI)
+#define FONT_PATH "assets/fonts/LiberationMono-Regular.ttf"
+
+#define VOL_BOUND (M_PI)
+#define VOL_STEP  (M_PI / 8)
+#define SIM_START (0.0) // make sure start and end are both floating point
+#define SIM_END   (4 * M_PI)
 
 // shader container
 struct shader_cont_t {
@@ -61,8 +64,30 @@ struct shader_cont_t {
 	u32 vao;
 	u32 loc_view;
 	u32 loc_proj;
-	u32 loc_model;
-	u32 loc_res;
+};
+
+struct fchar_t {
+	u32 texture;
+	s32 f_x; // font size
+	s32 f_y;
+	s32 b_x; // bearing information
+	s32 b_y;
+	u32 advance;
+};
+
+// font container
+struct frender_t {
+	// shader and OpenGL information
+	u32 shader, vao, vbo, eab;
+
+	u32 loc_pers;
+	u32 loc_view;
+
+	s32 vertadvance;
+
+	// text printing information
+	fvec2_t pos;
+	fvec4_t color;
 };
 
 struct intmap_t {
@@ -257,7 +282,8 @@ struct input_t {
 
 struct output_t {
 	SDL_Window *window;
-	s32 win_w, win_h;
+	f32 win_w, win_h;
+	f32 aspectratio;
 	s32 fullscreen;
 };
 
@@ -268,7 +294,8 @@ struct quad_t {
 
 struct particle_t {
 	f32 pos_x, pos_y, pos_z;
-	f32 col_r, col_g, col_b;
+	f32 col_r, col_g, col_b, col_a;
+	f32 cam_dist;
 	s32 update;
 };
 
@@ -291,6 +318,7 @@ struct simstate_t {
 				   // in "paused" mode
 
 	struct particle_t *particles;
+	struct particle_t **particles_draw;
 	s64 particle_len;
 	s64 particle_cnt;
 	f32 (*thinker) (f32, f32, f32, f32); // going to be replaced as per the note in v_updatestate
@@ -309,7 +337,14 @@ void v_keystatecycle(struct simstate_t *state);
 
 void v_handleinput(struct simstate_t *state);
 
+void v_debuginfo(struct simstate_t *state, struct frender_t *frender, struct fchar_t *ftab, int len);
+
 u32 viewer_mkshader(char *vertex, char *fragment);
+
+// font loading functions
+void f_fontload(char *path, s32 fontsize, struct fchar_t *ftab, s32 len);
+s32 f_vertadvance(struct fchar_t *ftab, s32 len);
+void f_rendertext(struct frender_t *frender, struct fchar_t *ftab, char *text);
 
 int v_loadopenglfuncs();
 int v_instatecheck(struct simstate_t *state, int kstate, int amt, ...);
@@ -367,6 +402,8 @@ typedef void (APIENTRY * GL_VertexAttribPointer_Func)(GLuint index, GLint size, 
 GL_VertexAttribPointer_Func vglVertexAttribPointer;
 typedef void (APIENTRY * GL_VertexAttribDivisor_Func)(GLuint index, GLuint divisor);
 GL_VertexAttribDivisor_Func vglVertexAttribDivisor;
+typedef void (APIENTRY * GL_DrawArrays_Func)(GLenum, GLint, GLsizei);
+GL_DrawArrays_Func vglDrawArrays;
 typedef void (APIENTRY * GL_DrawArraysInstanced_Func)(GLenum mode, GLint first, GLsizei count, GLsizei instancecount);
 GL_DrawArraysInstanced_Func vglDrawArraysInstanced;
 typedef void (APIENTRY * GL_DeleteVertexArrays_Func)(GLsizei n, const GLuint *arrays);
@@ -437,6 +474,20 @@ GL_Uniform3f_Func vglUniform3i;
 typedef void (APIENTRY * GL_Uniform4i_Func)(GLint location, GLint v0, GLint v1, GLint v2, GLint v3);
 GL_Uniform4f_Func vglUniform4i;
 
+// texturing functions
+typedef void (APIENTRY * GL_GenTextures_Func)(GLsizei, GLuint *textures);
+GL_GenTextures_Func vglGenTextures;
+typedef void (APIENTRY * GL_BindTexture_Func)(GLsizei, GLuint target);
+GL_BindTexture_Func vglBindTexture;
+typedef void (APIENTRY * GL_TexImage2D_Func)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const GLvoid *);
+GL_TexImage2D_Func vglTexImage2D;
+typedef void (APIENTRY * GL_TexParameteri_Func)(GLenum, GLenum, GLuint);
+GL_TexParameteri_Func vglTexParameteri;
+typedef void (APIENTRY * GL_ActiveTexture_Func)(GLenum);
+GL_ActiveTexture_Func vglActiveTexture;
+typedef void (APIENTRY * GL_BufferSubData_Func)(GLenum, GLintptr, GLsizeiptr, const GLvoid *);
+GL_BufferSubData_Func vglBufferSubData;
+
 
 // "OpenGL Function Make"
 #define PP_CONCAT(x,y)   x##y
@@ -453,6 +504,7 @@ struct openglfuncs_t openglfunc_table[] = {
 	OGLFUNCMK(glVertexAttribPointer),
 	OGLFUNCMK(glVertexAttribDivisor),
 	OGLFUNCMK(glDrawArraysInstanced),
+	OGLFUNCMK(glDrawArrays),
 	OGLFUNCMK(glDeleteVertexArrays),
 	OGLFUNCMK(glDeleteBuffers),
 	OGLFUNCMK(glDeleteProgram),
@@ -483,7 +535,13 @@ struct openglfuncs_t openglfunc_table[] = {
 	OGLFUNCMK(glUniform2fv),
 	OGLFUNCMK(glUniform3fv),
 	OGLFUNCMK(glUniform4fv),
-	OGLFUNCMK(glViewport)
+	OGLFUNCMK(glViewport),
+	OGLFUNCMK(glGenTextures),
+	OGLFUNCMK(glBindTexture),
+	OGLFUNCMK(glTexImage2D),
+	OGLFUNCMK(glTexParameteri),
+	OGLFUNCMK(glActiveTexture),
+	OGLFUNCMK(glBufferSubData)
 };
 
 // macro and functions to check for opengl errors
@@ -522,36 +580,62 @@ f32 particular_soln(f32 x, f32 y, f32 z, f32 t)
 #endif
 }
 
-/* viewer_run : runs the molt graphical 3d simulation viewer */
-s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
+/* v_run : runs the molt graphical 3d simulation viewer */
+s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 {
 	SDL_GLContext glcontext;
 	SDL_Event event;
 
 	struct simstate_t state;
 	struct shader_cont_t shader;
+
+	struct frender_t frender;
+	struct fchar_t ftab[128];
+
+	struct particle_t **p;
 	s32 rc, i;
+	u32 locPos, locCol;
 
 	float bbverts[] = {
-		-1.0f, -1.0f, 0.0f,
-		 1.0f, -1.0f, 0.0f,
-		-1.0f,  1.0f, 0.0f,
-		 1.0f,  1.0f, 0.0f
+		-0.5f, -0.5f, 0.0f,
+		 0.5f, -0.5f, 0.0f,
+		-0.5f,  0.5f, 0.0f,
+		 0.5f,  0.5f, 0.0f
 	};
 
-	hmm_mat4 model, view, proj, orig;
+	hmm_mat4 model, view, proj, pers;
 
+	memset(&ftab, 0, sizeof ftab);
 	memset(&state, 0, sizeof state);
 
 	// initialize the camera
-	state.cam_pos = HMM_Vec3(-12, 12, 12);//0, 3, 9);
+	state.cam_pos = HMM_Vec3(0, 4, 4);//0, 3, 9);
 	state.cam_front = HMM_MultiplyVec3f(state.cam_pos, -1);
 	state.cam_up = HMM_Vec3(0, 1, 0);
 
-	// add some particles for debugging
-	v_addpart(&state, 0, 0, 0, 1, 0, 1, 0);
-	v_addpart(&state, 1, 0, 0, 1, 1, 1, 0);
-	v_addpart(&state, 1, 1, 0, 0, 1, 1, 0);
+	// NOTE (brian) debugging particles
+	// TODO (brian) hook up the actual simulation data from hunk into our particles
+	// TODO (brian) use v_updatestate to read the new particle data on step
+#if 1
+	{
+		f32 x, y, z;
+		for (x = -VOL_BOUND; x <= VOL_BOUND; x += VOL_STEP)
+		for (y = -VOL_BOUND; y <= VOL_BOUND; y += VOL_STEP)
+		for (z = -VOL_BOUND; z <= VOL_BOUND; z += VOL_STEP) {
+			v_addpart(&state, x, y, z, 1, 0, 1, 1);
+		}
+	}
+#else
+	{
+		f32 x, y;
+		for (i = 0; i < 36; i++) {
+			x = cos(i * 10.0 * M_PI / 180);
+			y = sin(i * 10.0 * M_PI / 180);
+			// add some particles for debugging
+			v_addpart(&state, x, 0, y, x, 0, y, 0);
+		}
+	}
+#endif
 
 	state.thinker = particular_soln;
 
@@ -564,7 +648,10 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		return -1;
 	}
 
-	state.output.window = SDL_CreateWindow("MOLT Viewer", 64, 64, WIDTH, HEIGHT, VIEWER_SDL_WINFLAGS);
+	state.output.win_w = WIDTH;
+	state.output.win_h = HEIGHT;
+	state.output.aspectratio = state.output.win_w / state.output.win_h;
+	state.output.window = SDL_CreateWindow("MOLT Viewer", 64, 64, state.output.win_w, state.output.win_h, VIEWER_SDL_WINFLAGS);
 	if (state.output.window == NULL) {
 		ERRLOG("Couldn't Create Window", SDL_GetError());
 		return -1;
@@ -614,13 +701,33 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	vglVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
 	vglEnableVertexAttribArray(0);
 
+	// setup our font rendering and shader
+	f_fontload(FONT_PATH, 18, ftab, ARRAYSIZE(ftab));
+	frender.vertadvance = f_vertadvance(ftab, ARRAYSIZE(ftab));
+	frender.shader = viewer_mkshader("src/font.vert", "src/font.frag");
+
+	vglGenVertexArrays(1, &frender.vao);
+	vglGenBuffers(1, &frender.vbo);
+
+	vglBindVertexArray(frender.vao);
+
+	vglBindBuffer(GL_ARRAY_BUFFER, frender.vbo);
+	vglBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
+
+	vglEnableVertexAttribArray(0);
+	vglVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), 0);
+	vglBindBuffer(GL_ARRAY_BUFFER, 0);
+	vglBindVertexArray(0);
+
+	// setup uniform locations so we only have to do it once
 	shader.loc_view  = vglGetUniformLocation(shader.shader, "uView");
 	shader.loc_proj  = vglGetUniformLocation(shader.shader, "uProj");
+	frender.loc_view = vglGetUniformLocation(frender.shader, "uView");
+	frender.loc_pers = vglGetUniformLocation(frender.shader, "uPers");
 
-	// setup original cube state
-	orig = HMM_Mat4d(1.0f);
-
+	// now we can finally run our simulation
 	while (state.run) {
+
 		while (SDL_PollEvent(&event)) {
 			switch (event.type) {
 			case SDL_CONTROLLERAXISMOTION:
@@ -649,12 +756,6 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 			}
 		}
 
-		if (state.input.key[INPUT_KEY_F]) {
-			// TODO move the fullscreen call
-			// TODO change gl settings and resolution when this happens
-			SDL_SetWindowFullscreen(state.output.window, SDL_WINDOW_FULLSCREEN);
-		}
-
 		v_handleinput(&state);
 		v_keystatecycle(&state);
 
@@ -662,43 +763,55 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		// while we're in an unpaused state, state.paused == 0
 		if (!state.paused) {
 			v_updatestate(&state);
+
+			// handle the time wrapping updates
+			if (SIM_END <= state.time_curr) {
+				state.time_curr = SIM_START;
+			}
 		}
 
 		// render
 		glClearColor(0, 0, 0, 1);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+		// create updated transform matricies
 		state.cam_look = HMM_AddVec3(state.cam_pos, state.cam_front);
 		view = HMM_LookAt(state.cam_pos, state.cam_look, state.cam_up);
+		// TODO (brian) compute the draw distance based on the dimensionatliy of the simulation
+		proj = HMM_Perspective(90.0f, state.output.aspectratio, 0.1f, 40.0f);
+		// pers = HMM_Orthographic(0, state.output.win_w, state.output.win_h, 0, -1.0, 1.0);
+		pers = HMM_Orthographic(0, state.output.win_w, 0, state.output.win_h, -1.0, 1.0);
 
-		proj = HMM_Perspective(90.0f, WIDTH / HEIGHT, 0.1f, 100.0f);
-
-		// draw the particles
+		/* draw the particles */
 		vglUseProgram(shader.shader);
+
+		vglBindVertexArray(shader.vao);
 
 		vglUniformMatrix4fv(shader.loc_view, 1, GL_FALSE, (f32 *)&view);
 		vglUniformMatrix4fv(shader.loc_proj, 1, GL_FALSE, (f32 *)&proj);
 
-		vglBindVertexArray(shader.vao);
-
-		u32 locPos, locRes, locCol;
-		struct particle_t *p;
-
 		locPos = vglGetUniformLocation(shader.shader, "uPos");
-		locRes = vglGetUniformLocation(shader.shader, "uRes");
 		locCol = vglGetUniformLocation(shader.shader, "uCol");
 
-		vglUniform2i(locRes, state.output.win_w, state.output.win_h);
-
-		for (i = 0, p = state.particles; i < state.particle_cnt; i++, p++) {
-			vglUniform3f(locPos, p->pos_x, p->pos_y, p->pos_z);
-			vglUniform3f(locCol, p->col_r, p->col_g, p->col_b);
-			glDrawArrays(GL_TRIANGLE_STRIP, 0, 6);
+		for (i = 0, p = state.particles_draw; i < state.particle_cnt; i++, p++) {
+			vglUniform3f(locPos, (*p)->pos_x, (*p)->pos_y, (*p)->pos_z);
+			vglUniform4f(locCol, (*p)->col_r, (*p)->col_g, (*p)->col_b, (*p)->col_a);
+			vglDrawArrays(GL_TRIANGLE_STRIP, 0, 6);
 		}
+
+		// DEBUG (brian) debugging font renderin
+		vglUseProgram(frender.shader);
+		vglBindVertexArray(frender.vao);
+
+		vglUniformMatrix4fv(frender.loc_view, 1, GL_FALSE, (f32 *)&view);
+		vglUniformMatrix4fv(frender.loc_pers, 1, GL_FALSE, (f32 *)&pers);
+
+		v_debuginfo(&state, &frender, ftab, ARRAYSIZE(ftab));
 
 		// redraw the screen
 		SDL_GL_SwapWindow(state.output.window);
 
+		vglBindVertexArray(0);
 		vglUseProgram(0);
 
 		// get time to draw frame, wait if needed
@@ -718,11 +831,14 @@ s32 viewer_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		state.frame_last = state.frame_curr;
 	}
 
+	vglDeleteVertexArrays(1, &frender.vao);
+	vglDeleteBuffers(1, &frender.vbo);
 	vglDeleteVertexArrays(1, &shader.vao);
 	vglDeleteBuffers(1, &shader.vbo);
 
 	// clean up from our gl shenanigans
 	vglDeleteProgram(shader.shader);
+	vglDeleteProgram(frender.shader);
 
 	SDL_GameControllerClose(state.input.controller);
 	SDL_GL_DeleteContext(glcontext);
@@ -921,6 +1037,8 @@ void v_keystatecycle(struct simstate_t *state)
 /* viewer_eventwindow : handles SDL window events */
 void viewer_eventwindow(SDL_Event *event, struct simstate_t *state)
 {
+	f32 win_w, win_h, ar;
+
 	switch (event->window.event) {
 	case SDL_WINDOWEVENT_SHOWN:
 	case SDL_WINDOWEVENT_HIDDEN:
@@ -936,8 +1054,14 @@ void viewer_eventwindow(SDL_Event *event, struct simstate_t *state)
 		break;
 	case SDL_WINDOWEVENT_RESIZED:
 	case SDL_WINDOWEVENT_SIZE_CHANGED:
-		state->output.win_w = event->window.data1;
-		state->output.win_h = event->window.data2;
+		win_w = event->window.data1;
+		win_h = event->window.data2;
+		ar = win_w / win_h;
+
+		state->output.win_w = win_w;
+		state->output.win_h = win_h;
+		state->output.aspectratio = ar;
+
 		vglViewport(0, 0, state->output.win_w, state->output.win_h);
 		break;
 	case SDL_WINDOWEVENT_CLOSE:
@@ -1007,14 +1131,19 @@ void v_handleinput(struct simstate_t *state)
 	}
 
 	if (v_instatecheck(state, INSTATE_PRESSED, PP_NARG(IN_PAUSE), IN_PAUSE)) {
-		if (state->output.fullscreen) {
-			SDL_SetWindowFullscreen(state->output.window, SDL_WINDOW_FULLSCREEN_DESKTOP);
-		} else {
-			SDL_SetWindowFullscreen(state->output.window, SDL_WINDOW_FULLSCREEN_DESKTOP);
-		}
+		state->paused = !state->paused;
 	}
 
 	if (v_instatecheck(state, INSTATE_PRESSED, PP_NARG(IN_FULLSCREEN), IN_FSCREEN)) {
+		if (state->output.fullscreen) {
+			SDL_SetWindowFullscreen(state->output.window, 0);
+		} else {
+			SDL_SetWindowFullscreen(state->output.window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+		}
+
+		state->output.fullscreen = !state->output.fullscreen;
+
+		state->output.fullscreen = !state->output.fullscreen;
 	}
 }
 
@@ -1245,6 +1374,8 @@ void v_addpart(struct simstate_t *state, f32 x, f32 y, f32 z, f32 r, f32 g, f32 
 
 		bytes = state->particle_len * sizeof(struct particle_t);
 		state->particles = realloc(state->particles, bytes);
+		bytes = state->particle_len * sizeof(struct particle_t *);
+		state->particles_draw = realloc(state->particles_draw, bytes);
 	}
 
 	// now actually add the particle
@@ -1256,7 +1387,51 @@ void v_addpart(struct simstate_t *state, f32 x, f32 y, f32 z, f32 r, f32 g, f32 
 	p->col_r = r;
 	p->col_g = g;
 	p->col_b = b;
+	p->col_a = 1;
 	p->update = u;
+}
+
+/* vec_dist : compute the distance between hmm_vec3s */
+f32 vec_dist(hmm_vec3 cam, hmm_vec3 part)
+{
+	f32 ret;
+
+	ret = pow(cam.x - part.x, 2);
+	ret += pow(cam.y - part.y, 2);
+	ret += pow(cam.z - part.z, 2);
+
+	return sqrt(ret);
+}
+
+/* partcmp : particle_t comparator (for distance) */
+int partcmp(const void *a, const void *b)
+{
+	struct particle_t **pa;
+	struct particle_t **pb;
+	f32 a_dist, b_dist;
+	f32 a_mag, b_mag;
+
+	pa = (struct particle_t **)a;
+	pb = (struct particle_t **)a;
+
+	a_dist = (*pa)->cam_dist;
+	b_dist = (*pb)->cam_dist;
+	a_mag = (*pa)->col_a;
+	b_mag = (*pb)->col_a;
+
+	if (a_dist < b_dist) {
+		return -1;
+	} else {
+		return 1;
+	}
+
+	if (a_mag < b_mag) {
+		return -1;
+	} else {
+		return 1;
+	}
+
+	return 0;
 }
 
 void v_updatestate(struct simstate_t *state)
@@ -1265,18 +1440,216 @@ void v_updatestate(struct simstate_t *state)
 	// reads from a molt_cfg_t, but as the simulation isn't quite perfect,
 	// this real-time computed solution will have to do
 
-	f32 x, y, z;
-	s32 i;
+	struct particle_t *p;
+	struct particle_t **pp;
+	hmm_vec3 pvec;
+f32 x, y, z;
+s32 i;
+
+	p = state->particles;
+	pp = state->particles_draw;
 
 	for (i = 0; i < state->particle_cnt; i++) {
-		if (state->particles[i].update) {
-			x = state->particles[i].pos_x;
-			y = state->particles[i].pos_y;
-			z = state->particles[i].pos_z;
-			state->particles[i].col_r = state->thinker(x, y, z, state->time_curr);
-			state->particles[i].col_g = 0.0;
-			state->particles[i].col_b = 0.0;
+		if (p[i].update) {
+			x = p[i].pos_x;
+			y = p[i].pos_y;
+			z = p[i].pos_z;
+			p[i].col_a = state->thinker(x, y, z, state->time_curr);
+		}
+
+		pvec = HMM_Vec3(p[i].pos_x, p[i].pos_y, p[i].pos_z);
+
+		// regardless, we have to compute the distance from the camera
+		p[i].cam_dist = vec_dist(state->cam_pos, pvec);
+
+		// put the pointer into our pointer bucket
+		pp[i] = p + i;
+	}
+
+	// now, we have to sort the pointers to our structures
+	qsort(state->particles_draw, state->particle_cnt, sizeof(struct particle_t **), partcmp);
+}
+
+/* v_debuginfo : draws debugging information to the screen */
+void v_debuginfo(struct simstate_t *state, struct frender_t *frender, struct fchar_t *ftab, int len)
+{
+	f32 x, y;
+	char buf[BUFSMALL];
+
+	Vec4Set(frender->color, 1, 1, 1, 1);
+
+	// NOTE (brian) we begin drawing from the top left of the screen
+	x = 0;
+	y = state->output.win_h - frender->vertadvance;
+	Vec2Set(frender->pos, x, y);
+
+	// debug header
+	snprintf(buf, sizeof buf, "MOLT Viewer DEBUG\n");
+	f_rendertext(frender, ftab, buf);
+
+	// player position
+	snprintf(buf, sizeof buf, "Pos       (%3.4f,%3.4f,%3.4f)\n",
+			state->cam_pos.x, state->cam_pos.y, state->cam_pos.z);
+	f_rendertext(frender, ftab, buf);
+
+	// start time
+	snprintf(buf, sizeof buf, "TimeStart (%3.4f)\n", SIM_START);
+	f_rendertext(frender, ftab, buf);
+
+	// curr time
+	snprintf(buf, sizeof buf, "TimeCurr  (%3.4f)\n", state->time_curr);
+	f_rendertext(frender, ftab, buf);
+
+	// end time
+	snprintf(buf, sizeof buf, "TimeEnd   (%3.4f)\n", SIM_END);
+	f_rendertext(frender, ftab, buf);
+}
+
+/* f_rendertext : renders text to the screen at the frender's position with the frender's color */
+void f_rendertext(struct frender_t *frender, struct fchar_t *ftab, char *text)
+{
+	f32 x, y;
+	f32 xpos, ypos, w, h;
+	s32 i, c;
+	u32 tmp;
+
+	vglUseProgram(frender->shader);
+
+	tmp = vglGetUniformLocation(frender->shader, "uColor");
+	vglUniform4fv(tmp, 1, frender->color);
+
+	vglActiveTexture(GL_TEXTURE0);
+	vglBindVertexArray(frender->vao);
+
+	x = frender->pos[0];
+	y = frender->pos[1];
+
+	for (i = 0; i < strlen(text); i++) {
+		// here, we check if we have a unix newline (0x10), and advance the
+		// cursor by the vertical advance amount if we have one, then continue
+		if (text[i] == '\n') {
+			frender->pos[1] -= frender->vertadvance;
+			x = frender->pos[0];
+			y = frender->pos[1];
+			continue;
+		}
+
+		c = text[i];
+
+		xpos = x + ftab[c].b_x;
+		ypos = y - (ftab[c].f_y + ftab[c].b_y);
+
+		w = ftab[c].f_x;
+		h = ftab[c].f_y;
+
+		// create new triangles to render our quads
+#if 1
+		f32 verts[6][4] = {
+			{ xpos    , ypos + h, 0.0, 0.0 },
+			{ xpos + w, ypos    , 1.0, 1.0 },
+			{ xpos    , ypos    , 0.0, 1.0 },
+
+			{ xpos    , ypos + h, 0.0, 0.0 },
+			{ xpos + w, ypos + h, 1.0, 0.0 },
+			{ xpos + w, ypos    , 1.0, 1.0 },
+		};
+#else
+		f32 verts[6][4] = {
+			{ xpos    , ypos - h, 0.0, 1.0 },
+			{ xpos + w, ypos    , 1.0, 0.0 },
+			{ xpos    , ypos    , 0.0, 0.0 },
+
+			{ xpos    , ypos - h, 0.0, 1.0 },
+			{ xpos + w, ypos - h, 1.0, 1.0 },
+			{ xpos + w, ypos    , 1.0, 0.0 },
+		};
+#endif
+
+		// render the glyph texture over our quad
+		vglBindTexture(GL_TEXTURE_2D, ftab[c].texture);
+
+		// update the contents of vbo memory
+		vglBindBuffer(GL_ARRAY_BUFFER, frender->vbo);
+		vglBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+
+		vglDrawArrays(GL_TRIANGLES, 0, 6);
+
+		vglBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		x += ftab[c].advance;
+	}
+
+	vglBindVertexArray(0);
+	vglBindTexture(GL_TEXTURE_2D, 0);
+}
+
+/* f_vertadvance : returns the desired font vertical advance value */
+s32 f_vertadvance(struct fchar_t *ftab, s32 len)
+{
+	s32 i, ret;
+
+	for (i = 0, ret = 0; i < len; i++) {
+		if (ret < ftab[i].f_y) {
+			ret = ftab[i].f_y;
 		}
 	}
+
+	return ret;
+}
+
+/* f_fontload : load as many ascii characters into the font table as possible */
+void f_fontload(char *path, s32 fontsize, struct fchar_t *ftab, s32 len)
+{
+	stbtt_fontinfo fontinfo;
+	f32 scale_x, scale_y;
+	s32 i, w, h, xoff, yoff, advance, lsb;
+	unsigned char *ttf_buffer, *bitmap;
+	u32 tex;
+
+	ttf_buffer = (unsigned char *)io_readfile(path);
+
+	if (!ttf_buffer) {
+		fprintf(stderr, "Couldn't read fontfile [%s]\n", path);
+		exit(1);
+	}
+
+	stbtt_InitFont(&fontinfo, ttf_buffer, stbtt_GetFontOffsetForIndex(ttf_buffer, 0));
+	scale_y = stbtt_ScaleForPixelHeight(&fontinfo, fontsize);
+	scale_x = scale_y;
+
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+	for (i = 0; i < len; i++) {
+		bitmap = stbtt_GetCodepointBitmap(&fontinfo, scale_x, scale_y, i, &w, &h, &xoff, &yoff);
+
+		stbtt_GetCodepointHMetrics(&fontinfo, i, &advance, &lsb);
+
+		if (bitmap) {
+			vglGenTextures(1, &tex);
+			vglBindTexture(GL_TEXTURE_2D, tex);
+			vglTexImage2D(GL_TEXTURE_2D, 0, GL_RED, w, h, 0, GL_RED, GL_UNSIGNED_BYTE, bitmap);
+
+			// setup the texture options
+			vglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			vglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			vglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			vglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		} else {
+			tex = -1;
+		}
+
+		ftab[i].texture = tex;
+		ftab[i].f_x     = w;
+		ftab[i].f_y     = h;
+		ftab[i].b_x     = xoff;
+		ftab[i].b_y     = yoff;
+		ftab[i].advance = advance * scale_x;
+
+		free(bitmap);
+	}
+
+	vglBindTexture(GL_TEXTURE_2D, 0);
+
+	free(ttf_buffer);
 }
 

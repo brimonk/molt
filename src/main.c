@@ -137,7 +137,7 @@ int main(int argc, char **argv)
 	if (flags & FLG_VIEWER) {
 		// cfg = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
 		cfg = NULL;
-		viewer_run(hunk, hunksize, fd, cfg);
+		v_run(hunk, hunksize, fd, cfg);
 	}
 
 	io_munmap(hunk);

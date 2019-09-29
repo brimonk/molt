@@ -12,12 +12,11 @@
 
 layout (location = 0) in vec3 iPart;
 
-out vec3 fColor;
+out vec4 fColor;
 
 uniform vec3 uPos; // position
-uniform vec3 uCol; // color
+uniform vec4 uCol; // color
 
-uniform ivec2 uRes;
 uniform mat4  uView;
 uniform mat4  uProj;
 
