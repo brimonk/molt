@@ -597,10 +597,10 @@ s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	u32 locPos, locCol;
 
 	float bbverts[] = {
-		-0.5f, -0.5f, 0.0f,
-		 0.5f, -0.5f, 0.0f,
-		-0.5f,  0.5f, 0.0f,
-		 0.5f,  0.5f, 0.0f
+		-1.0f, -1.0f, 0.0f,
+		 1.0f, -1.0f, 0.0f,
+		-1.0f,  1.0f, 0.0f,
+		 1.0f,  1.0f, 0.0f
 	};
 
 	hmm_mat4 model, view, proj, pers;
@@ -609,7 +609,7 @@ s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	memset(&state, 0, sizeof state);
 
 	// initialize the camera
-	state.cam_pos = HMM_Vec3(0, 4, 4);//0, 3, 9);
+	state.cam_pos = HMM_Vec3(0, 4, 4);
 	state.cam_front = HMM_MultiplyVec3f(state.cam_pos, -1);
 	state.cam_up = HMM_Vec3(0, 1, 0);
 
@@ -683,7 +683,7 @@ s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		ERRLOG("Couldn't set the swap interval", SDL_GetError());
 	}
 
-	glEnable(GL_DEPTH_TEST);
+	// glEnable(GL_DEPTH_TEST);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -702,7 +702,7 @@ s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	vglEnableVertexAttribArray(0);
 
 	// setup our font rendering and shader
-	f_fontload(FONT_PATH, 18, ftab, ARRAYSIZE(ftab));
+	f_fontload(FONT_PATH, 16, ftab, ARRAYSIZE(ftab));
 	frender.vertadvance = f_vertadvance(ftab, ARRAYSIZE(ftab));
 	frender.shader = viewer_mkshader("src/font.vert", "src/font.frag");
 
@@ -796,7 +796,7 @@ s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		for (i = 0, p = state.particles_draw; i < state.particle_cnt; i++, p++) {
 			vglUniform3f(locPos, (*p)->pos_x, (*p)->pos_y, (*p)->pos_z);
 			vglUniform4f(locCol, (*p)->col_r, (*p)->col_g, (*p)->col_b, (*p)->col_a);
-			vglDrawArrays(GL_TRIANGLE_STRIP, 0, 6);
+			vglDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 		}
 
 		// DEBUG (brian) debugging font renderin
@@ -1394,13 +1394,10 @@ void v_addpart(struct simstate_t *state, f32 x, f32 y, f32 z, f32 r, f32 g, f32 
 /* vec_dist : compute the distance between hmm_vec3s */
 f32 vec_dist(hmm_vec3 cam, hmm_vec3 part)
 {
-	f32 ret;
-
-	ret = pow(cam.x - part.x, 2);
-	ret += pow(cam.y - part.y, 2);
-	ret += pow(cam.z - part.z, 2);
-
-	return sqrt(ret);
+	return (float)sqrt(
+			pow(cam.x - part.x, 2) +
+			pow(cam.y - part.y, 2) +
+			pow(cam.z - part.z, 2));
 }
 
 /* partcmp : particle_t comparator (for distance) */
@@ -1408,30 +1405,24 @@ int partcmp(const void *a, const void *b)
 {
 	struct particle_t **pa;
 	struct particle_t **pb;
+	int rc;
 	f32 a_dist, b_dist;
-	f32 a_mag, b_mag;
 
 	pa = (struct particle_t **)a;
-	pb = (struct particle_t **)a;
+	pb = (struct particle_t **)b;
 
 	a_dist = (*pa)->cam_dist;
 	b_dist = (*pb)->cam_dist;
-	a_mag = (*pa)->col_a;
-	b_mag = (*pb)->col_a;
 
 	if (a_dist < b_dist) {
-		return -1;
+		rc = -1;
+	} else if (a_dist > b_dist) {
+		rc = 1;
 	} else {
-		return 1;
+		rc = 0;
 	}
 
-	if (a_mag < b_mag) {
-		return -1;
-	} else {
-		return 1;
-	}
-
-	return 0;
+	return rc;
 }
 
 void v_updatestate(struct simstate_t *state)
@@ -1443,8 +1434,8 @@ void v_updatestate(struct simstate_t *state)
 	struct particle_t *p;
 	struct particle_t **pp;
 	hmm_vec3 pvec;
-f32 x, y, z;
-s32 i;
+	f32 x, y, z;
+	s32 i;
 
 	p = state->particles;
 	pp = state->particles_draw;
@@ -1488,8 +1479,11 @@ void v_debuginfo(struct simstate_t *state, struct frender_t *frender, struct fch
 	f_rendertext(frender, ftab, buf);
 
 	// player position
-	snprintf(buf, sizeof buf, "Pos       (%3.4f,%3.4f,%3.4f)\n",
-			state->cam_pos.x, state->cam_pos.y, state->cam_pos.z);
+	snprintf(buf, sizeof buf, "Pos       (%3.4f,%3.4f,%3.4f)\n", state->cam_pos.x, state->cam_pos.y, state->cam_pos.z);
+	f_rendertext(frender, ftab, buf);
+
+	// player position
+	snprintf(buf, sizeof buf, "Front     (%3.4f,%3.4f,%3.4f)\n", state->cam_front.x, state->cam_front.y, state->cam_front.z);
 	f_rendertext(frender, ftab, buf);
 
 	// start time
