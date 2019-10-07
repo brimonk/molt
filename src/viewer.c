@@ -26,7 +26,10 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 
+#define HANDMADE_MATH_IMPLEMENTATION
 #include "handmademath.h"
+
+#define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
 #include "common.h"
@@ -702,8 +705,8 @@ s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	vglEnableVertexAttribArray(0);
 
 	// setup our font rendering and shader
-	f_fontload(FONT_PATH, 16, ftab, ARRAYSIZE(ftab));
-	frender.vertadvance = f_vertadvance(ftab, ARRAYSIZE(ftab));
+	f_fontload(FONT_PATH, 16, ftab, ARRSIZE(ftab));
+	frender.vertadvance = f_vertadvance(ftab, ARRSIZE(ftab));
 	frender.shader = viewer_mkshader("src/font.vert", "src/font.frag");
 
 	vglGenVertexArrays(1, &frender.vao);
@@ -806,7 +809,7 @@ s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		vglUniformMatrix4fv(frender.loc_view, 1, GL_FALSE, (f32 *)&view);
 		vglUniformMatrix4fv(frender.loc_pers, 1, GL_FALSE, (f32 *)&pers);
 
-		v_debuginfo(&state, &frender, ftab, ARRAYSIZE(ftab));
+		v_debuginfo(&state, &frender, ftab, ARRSIZE(ftab));
 
 		// redraw the screen
 		SDL_GL_SwapWindow(state.output.window);
