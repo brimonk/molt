@@ -39,6 +39,7 @@
 #include "config.h"
 #include "common.h"
 #include "viewer.h"
+#include "test.h"
 
 /* lump setup functions */
 void setup_simulation(void **base, u64 *size, int fd);
@@ -63,6 +64,7 @@ void print_help(char *prog);
 #define FLG_VERBOSE 0x01
 #define FLG_VIEWER  0x02
 #define FLG_SIM     0x04
+#define FLG_TEST    0x08
 
 int main(int argc, char **argv)
 {
@@ -95,6 +97,10 @@ int main(int argc, char **argv)
 				flags &= ~FLG_SIM; longopt = 1; continue;
 			}
 
+			if (strcmp(s, "-test") == 0) {
+				flags |= FLG_TEST; longopt = 1; continue;
+			}
+
 			switch (*s) {
 				case 'v':
 					flags |= FLG_VERBOSE;
@@ -113,6 +119,11 @@ int main(int argc, char **argv)
 	if (targc != 1) {
 		fprintf(stderr, USAGE, argv[0]);
 		return 1;
+	}
+
+	if (flags & FLG_TEST) {
+		testfunc();
+		exit(0);
 	}
 
 	fname = targv[0];

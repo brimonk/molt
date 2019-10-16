@@ -27,9 +27,10 @@
  * ?. Consider putting in the alpha calculation
  * ?. Debug/Test
  * ?. Remove use CSTDLIB math.h? stdio.h? stdlib.h?
+ * ?. Remove dependency of common.h (get our own indexing macro, for instance)
  *
  * TODO Even Higher Amounts of Performance (Brian)
- * 1. In Place Mesh Reorganize (HARD)
+ * 1. In Place Volume Reorganize (HARD)
  */
 
 enum {
@@ -82,7 +83,6 @@ struct molt_cfg_t {
 	// working storage for simulation
 	f64 *workstore[MOLT_WORKSTORE_AMT];
 	f64 *worksweep;
-
 };
 
 // molt_cfg dimension intializer functions
@@ -127,8 +127,12 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww);
 // molt_sweep : performs a sweep across the mesh in the dimension specified
 void molt_sweep(struct molt_cfg_t *cfg, f64 *dst, f64 *src, pdvec4_t params, cvec3_t order);
 
+#if 0
 /* molt_reorg : reorganize a 3d volume */
 void molt_reorg(struct molt_cfg_t *cfg, f64 *dst, f64 *src, f64 *work, cvec3_t src_ord, cvec3_t dst_ord);
+#else
+void molt_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_ord, cvec3_t dst_ord);
+#endif
 
 /* molt_gfquad_m : green's function quadriture on the input vector */
 void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, cvec3_t order);
@@ -139,10 +143,14 @@ void molt_makel(struct molt_cfg_t *cfg, f64 *arr, pdvec4_t params, f64 minval, s
 /* molt_vect_mul : perform element-wise vector multiplication */
 f64 molt_vect_mul(f64 *veca, f64 *vecb, s32 veclen);
 
+/* mk_genericidx : retrieves a generic index from input dimensionality */
+static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order);
+
 #ifdef MOLT_IMPLEMENTATION
 
 // TODO remove if possible
 #include <float.h>
+#include "common.h"
 
 static cvec3_t molt_ord_xyz = {'x', 'y', 'z'};
 static cvec3_t molt_ord_xzy = {'x', 'z', 'y'};
@@ -610,29 +618,29 @@ void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 
 	// sweep in x, y, z
 	molt_sweep(cfg, work_ix,     src, x_sweep_params, molt_ord_xyz);
-	molt_reorg(cfg, work_ix, work_ix, work_tmp, molt_ord_xyz, molt_ord_yxz);
+	molt_reorg(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_yxz);
 	molt_sweep(cfg, work_ix, work_ix, y_sweep_params, molt_ord_yxz);
-	molt_reorg(cfg, work_ix, work_ix, work_tmp, molt_ord_yxz, molt_ord_zxy);
+	molt_reorg(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_yxz, molt_ord_zxy);
 	molt_sweep(cfg, work_ix, work_ix, z_sweep_params, molt_ord_zxy);
-	molt_reorg(cfg, work_ix, work_ix, work_tmp, molt_ord_zxy, molt_ord_xyz);
+	molt_reorg(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_zxy, molt_ord_xyz);
 
 	// sweep in y, z, x
-	molt_reorg(cfg, work_iy,     src, work_tmp, molt_ord_xyz, molt_ord_yxz);
+	molt_reorg(work_iy,     src, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_yxz);
 	molt_sweep(cfg, work_iy, work_iy, y_sweep_params, molt_ord_yxz);
-	molt_reorg(cfg, work_iy, work_ix, work_tmp, molt_ord_yxz, molt_ord_zxy);
+	molt_reorg(work_iy, work_ix, work_tmp, mesh_dim, molt_ord_yxz, molt_ord_zxy);
 	molt_sweep(cfg, work_iy, work_ix, z_sweep_params, molt_ord_zxy);
-	molt_reorg(cfg, work_iy, work_ix, work_tmp, molt_ord_zxy, molt_ord_xzy);
+	molt_reorg(work_iy, work_ix, work_tmp, mesh_dim, molt_ord_zxy, molt_ord_xzy);
 	molt_sweep(cfg, work_iy, work_ix, x_sweep_params, molt_ord_xzy);
-	molt_reorg(cfg, work_iy, work_iy, work_tmp, molt_ord_xzy, molt_ord_xyz);
+	molt_reorg(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_xzy, molt_ord_xyz);
 
 	// sweep in z, x, y
-	molt_reorg(cfg, work_iz,     src, work_tmp, molt_ord_xyz, molt_ord_zxy);
+	molt_reorg(work_iz,     src, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_zxy);
 	molt_sweep(cfg, work_iz, work_iy, z_sweep_params, molt_ord_zxy);
-	molt_reorg(cfg, work_iz, work_ix, work_tmp, molt_ord_zxy, molt_ord_xzy);
+	molt_reorg(work_iz, work_ix, work_tmp, mesh_dim, molt_ord_zxy, molt_ord_xzy);
 	molt_sweep(cfg, work_iz, work_ix, x_sweep_params, molt_ord_xzy);
-	molt_reorg(cfg, work_iz, work_ix, work_tmp, molt_ord_xzy, molt_ord_yzx);
+	molt_reorg(work_iz, work_ix, work_tmp, mesh_dim, molt_ord_xzy, molt_ord_yzx);
 	molt_sweep(cfg, work_iz, work_ix, y_sweep_params, molt_ord_yzx);
-	molt_reorg(cfg, work_iy, work_iy, work_tmp, molt_ord_yzx, molt_ord_xyz);
+	molt_reorg(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_yzx, molt_ord_xyz);
 
 	// dst = (work_ix + work_iy + work_iz) / 2
 	for (i = 0; i < totalelem; i++) {
@@ -695,33 +703,33 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 	for (i = 0; i < totalelem; i++) {
 		work_ix[i] -= src[i];
 	}
-	molt_reorg(cfg, work_ix, work_ix, work_tmp, molt_ord_xyz, molt_ord_yxz);
+	molt_reorg(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_yxz);
 	molt_sweep(cfg, work_ix, work_ix, y_sweep_params, molt_ord_yxz);
-	molt_reorg(cfg, work_ix, work_ix, work_tmp, molt_ord_yxz, molt_ord_zxy);
+	molt_reorg(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_yxz, molt_ord_zxy);
 	molt_sweep(cfg, work_ix, work_ix, z_sweep_params, molt_ord_zxy);
-	molt_reorg(cfg, work_ix, work_ix, work_tmp, molt_ord_zxy, molt_ord_xyz);
+	molt_reorg(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_zxy, molt_ord_xyz);
 
 	// sweep in y, z, x
-	molt_reorg(cfg, work_iy,     src, work_tmp, molt_ord_xyz, molt_ord_yxz);
-	molt_reorg(cfg, work_tmp_,   src, work_tmp, molt_ord_xyz, molt_ord_yxz);
+	molt_reorg(work_iy,     src, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_yxz);
+	molt_reorg(work_tmp_,   src, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_yxz);
 	molt_sweep(cfg, work_iy, work_iy, y_sweep_params, molt_ord_yxz);
 	for (i = 0; i < totalelem; i++) { work_iy[i] -= work_tmp_[i]; }
-	molt_reorg(cfg, work_iy, work_iy, work_tmp, molt_ord_yxz, molt_ord_zxy);
+	molt_reorg(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_yxz, molt_ord_zxy);
 	molt_sweep(cfg, work_iy, work_iy, z_sweep_params, molt_ord_zxy);
-	molt_reorg(cfg, work_iy, work_iy, work_tmp, molt_ord_zxy, molt_ord_xzy);
+	molt_reorg(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_zxy, molt_ord_xzy);
 	molt_sweep(cfg, work_iy, work_iy, x_sweep_params, molt_ord_xzy);
-	molt_reorg(cfg, work_iy, work_iy, work_tmp, molt_ord_xzy, molt_ord_xyz);
+	molt_reorg(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_xzy, molt_ord_xyz);
 
 	// sweep in z, x, y
-	molt_reorg(cfg, work_iz,     src, work_tmp, molt_ord_xyz, molt_ord_zxy);
-	molt_reorg(cfg, work_tmp_,   src, work_tmp, molt_ord_xyz, molt_ord_zxy);
+	molt_reorg(work_iz,     src, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_zxy);
+	molt_reorg(work_tmp_,   src, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_zxy);
 	molt_sweep(cfg, work_iz, work_iy, z_sweep_params, molt_ord_zxy);
 	for (i = 0; i < totalelem; i++) { work_iz[i] -= work_tmp_[i]; }
-	molt_reorg(cfg, work_iz, work_iz, work_tmp, molt_ord_zxy, molt_ord_xzy);
+	molt_reorg(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_zxy, molt_ord_xzy);
 	molt_sweep(cfg, work_iz, work_iz, x_sweep_params, molt_ord_xzy);
-	molt_reorg(cfg, work_iz, work_iz, work_tmp, molt_ord_xzy, molt_ord_yzx);
+	molt_reorg(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_xzy, molt_ord_yzx);
 	molt_sweep(cfg, work_iz, work_iz, y_sweep_params, molt_ord_yzx);
-	molt_reorg(cfg, work_iz, work_iz, work_tmp, molt_ord_yzx, molt_ord_xyz);
+	molt_reorg(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_yzx, molt_ord_xyz);
 
 	// dst = (work_ix + work_iy + work_iz) / 2
 	for (i = 0; i < totalelem; i++) {
@@ -787,11 +795,7 @@ void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, c
 	f64 *wl = params[2];
 	f64 *wr = params[3];
 
-	// PERFLOG_APP_AND_PRINT(molt_staticbuf, "quadnum %d", quad_count);
 	quad_count++;
-
-	rowlen = molt_cfg_parampull_gen(cfg, 0, MOLT_PARAM_PINC, order);
-	orderm = cfg->spaceacc;
 
 	IL = 0;
 	IR = 0;
@@ -840,44 +844,6 @@ void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, c
 		IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[iR], orderm);
 		out[i] = out[i] + IR;
 	}
-
-#if 0
-	for (i = 0; i < N; i++) { /* left */
-		bound = molt_gfquad_bound(i, M2, N);
-
-		switch (bound) {
-		case -1: // left bound
-			IL = d * IL + molt_vect_mul(&wl[i * orderm], &in[iL], orderm);
-			break;
-		case 0: // center
-			IL = d * IL + molt_vect_mul(&wl[i * orderm], &in[i + 1 + iC], orderm);
-			break;
-		case 1:
-			IL = d * IL + molt_vect_mul(&wl[i * orderm], &in[iR], orderm);
-			break;
-		}
-
-		out[i + 1] = out[i + 1] + IL;
-	}
-
-	for (i = N; i >= 0; i--) { /* right */
-		bound = molt_gfquad_bound(i, M2, N);
-
-		switch (bound) {
-		case -1: // left bound
-			IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[iL], orderm);
-			break;
-		case 0: // center
-			IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[i + 1 + iC], orderm);
-			break;
-		case 1: // right
-			IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[iR], orderm);
-			break;
-		}
-
-		out[i] = out[i] + IR;
-	}
-#endif
 
 	for (i = 0; i < rowlen; i++)
 		out[i] /= 2;
@@ -943,6 +909,75 @@ void molt_makel(struct molt_cfg_t *cfg, f64 *arr, pdvec6_t params, f64 minval, s
 	}
 }
 
+
+#if 0
+/* molt_reorg : reorganizes a 3d mesh from src to dst */
+void molt_reorg(struct molt_cfg_t *cfg, f64 *dst, f64 *src, f64 *work, cvec3_t src_ord, cvec3_t dst_ord)
+{
+	/*
+	 * cfg - config structure
+	 * dst - destination of reorg
+	 * src - source of reorg
+	 * work - working storage for swap around (avoids same pointer problem)
+	 * src_ord - the ordering of src
+	 * dst_ord - the ordering of dsr
+	 */
+
+	u64 src_i, dst_i, total;
+	ivec3_t idx, dim;
+
+	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_PINC);
+
+	total = ((u64)dim[0]) * dim[1] * dim[2];
+
+	// PERFLOG_APP_AND_PRINT(molt_staticbuf, "REORG (%d,%d,%d) : DST %p, WORK %p, SRC %p",
+			// dim[0], dim[1], dim[2], dst, work, src);
+
+	for (idx[2] = 0; idx[2] < dim[2]; idx[2]++) {
+		for (idx[1] = 0; idx[1] < dim[1]; idx[1]++) {
+			for (idx[0] = 0; idx[0] < dim[0]; idx[0]++) {
+				src_i = molt_genericidx(idx, dim, src_ord);
+				dst_i = molt_genericidx(idx, dim, dst_ord);
+				work[dst_i] = src[src_i];
+			}
+		}
+	}
+
+	memcpy(dst, work, sizeof(*dst) * total);
+}
+#else
+/* molt_reorg : reorganizes a 3d mesh from src to dst */
+void molt_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_ord, cvec3_t dst_ord)
+{
+	/*
+	 * arguments
+	 * dst - destination of reorg
+	 * src - source of reorg
+	 * work - working storage for swap around (avoids same pointer problem)
+	 * dim - dimensionality (dim[0] -> X, dim[1] -> Y, dim[2] -> Z)
+	 * src_ord - the ordering of src
+	 * dst_ord - the ordering of dsr
+	 */
+
+	u64 src_i, dst_i, total;
+	ivec3_t idx;
+
+	total = ((u64)dim[0]) * (u64)dim[1] * (u64)dim[2];
+
+	for (idx[2] = 0; idx[2] < dim[2]; idx[2]++) {
+		for (idx[1] = 0; idx[1] < dim[1]; idx[1]++) {
+			for (idx[0] = 0; idx[0] < dim[0]; idx[0]++) {
+				src_i = molt_genericidx(idx, dim, src_ord);
+				dst_i = molt_genericidx(idx, dim, dst_ord);
+				work[dst_i] = src[src_i];
+			}
+		}
+	}
+
+	memcpy(dst, work, sizeof(*dst) * total);
+}
+#endif
+
 /* mk_genericidx : retrieves a generic index from input dimensionality */
 static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order)
 {
@@ -982,44 +1017,6 @@ static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order)
 	}
 
 	return IDX3D(lval[0], lval[1], lval[2], ldim[1], ldim[2]);
-}
-
-
-/* molt_reorg : reorganizes a 3d mesh from src to dst */
-void molt_reorg(struct molt_cfg_t *cfg, f64 *dst, f64 *src, f64 *work, cvec3_t src_ord, cvec3_t dst_ord)
-{
-	/*
-	 * cfg - config structure
-	 * dst - destination of reorg
-	 * src - source of reorg
-	 * work - working storage for swap around (avoids same pointer problem)
-	 * src_ord - the ordering of src
-	 * dst_ord - the ordering of dsr
-	 *
-	 * WARNING : this WILL fail if the input and output pointers are the same
-	 */
-
-	u64 src_i, dst_i, total;
-	ivec3_t idx, dim;
-
-	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_PINC);
-
-	total = ((u64)dim[0]) * dim[1] * dim[2];
-
-	// PERFLOG_APP_AND_PRINT(molt_staticbuf, "REORG (%d,%d,%d) : DST %p, WORK %p, SRC %p",
-			// dim[0], dim[1], dim[2], dst, work, src);
-
-	for (idx[2] = 0; idx[2] < dim[2]; idx[2]++) {
-		for (idx[1] = 0; idx[1] < dim[1]; idx[1]++) {
-			for (idx[0] = 0; idx[0] < dim[0]; idx[0]++) {
-				src_i = molt_genericidx(idx, dim, src_ord);
-				dst_i = molt_genericidx(idx, dim, dst_ord);
-				work[dst_i] = src[src_i];
-			}
-		}
-	}
-
-	memcpy(dst, work, sizeof(*dst) * total);
 }
 
 /* molt_vect_mul : perform element-wise vector multiplication */

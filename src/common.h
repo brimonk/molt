@@ -150,7 +150,7 @@ void perflog_print_mostrecent();
 	
 
 #define LOG_NEWLINESEP 1
-#define LOG_FLOATFMT "% 4.5e"
+#define LOG_FLOATFMT "%4.3lf"
 
 // we don't need a LOGMAKE_1 because that's the trivial case
 #define LOGMAKE_2(v,a,b)   ((v)[0]=(a),(v)[1]=(b))
@@ -209,6 +209,10 @@ void perflog_print_mostrecent();
 #define Vec2Set(v,a,b)     ((v)[0]=(a),(v)[1]=(b))
 #define Vec3Set(v,a,b,c)   ((v)[0]=(a),(v)[1]=(b),(v)[2]=(c))
 #define Vec4Set(v,a,b,c,d) ((v)[0]=(a),(v)[1]=(b),(v)[2]=(c),(v)[3]=(d))
+
+#define Vec2Copy(a,b)      ((a)[0]=(b)[0],(a)[1]=(b)[1])
+#define Vec3Copy(a,b)      ((a)[0]=(b)[0],(a)[1]=(b)[1],(a)[2]=(b)[2])
+#define Vec4Copy(a,b)      ((a)[0]=(b)[0],(a)[1]=(b)[1],(a)[2]=(b)[2],(a)[3]=(b)[3])
 
 /* simulation information */
 
