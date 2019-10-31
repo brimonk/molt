@@ -23,6 +23,9 @@
  *
  * 6. Clean up the other routine calling conventions. (Oops)
  *
+ * 7. Remove the 1d & 2d interfaces. At least the 2d interface won't work with
+ *    the given algorithm. It only works in odd ordered spaces.
+ *
  * TODO Future
  * ?. Consider putting in the alpha calculation
  * ?. Debug/Test
@@ -74,9 +77,9 @@ struct molt_cfg_t {
 	f64 beta_si; // b^6 term in sweeping function
 	f64 alpha;
 
-	// NOTE (brian) we can keep nu as a set of scalars as there's unsolved
+	// NOTE (brian) we can keep nu as a set of scalars as there are unsolved
 	// geometry issues to be solved, should we want to really change the
-	// granularity of the mesh
+	// granularity of the mesh.
 	dvec3_t nu;
 	dvec3_t dnu;
 
@@ -124,21 +127,17 @@ void molt_step3f(struct molt_cfg_t *cfg,
 void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww);
 void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww);
 
-// molt_sweep : performs a sweep across the mesh in the dimension specified
-void molt_sweep(struct molt_cfg_t *cfg, f64 *dst, f64 *src, pdvec4_t params, cvec3_t order);
+/* molt_sweep : performs a sweep across the mesh in the dimension specified */
+void molt_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, pdvec6_t params, dvec3_t dnu, s32 M);
 
-#if 0
-/* molt_reorg : reorganize a 3d volume */
-void molt_reorg(struct molt_cfg_t *cfg, f64 *dst, f64 *src, f64 *work, cvec3_t src_ord, cvec3_t dst_ord);
-#else
+/* molt_reorg : reorganizes a 3d mesh from src to dst */
 void molt_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_ord, cvec3_t dst_ord);
-#endif
 
 /* molt_gfquad_m : green's function quadriture on the input vector */
-void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, cvec3_t order);
+void molt_gfquad_m(f64 *dst, f64 *src, f64 dnu, f64 *wl, f64 *wr, s64 len, s32 M);
 
 /* molt_makel : applies dirichlet boundary conditions to the line in */
-void molt_makel(struct molt_cfg_t *cfg, f64 *arr, pdvec4_t params, f64 minval, s64 len);
+void molt_makel(f64 *src, f64 *vl, f64 *vr, f64 minval, s64 len);
 
 /* molt_vect_mul : perform element-wise vector multiplication */
 f64 molt_vect_mul(f64 *veca, f64 *vecb, s32 veclen);
@@ -559,8 +558,7 @@ void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 	 * The decisions that led to the layout of this function are for the
 	 * following reasons.
 	 *
-	 * 1. Functions can be read by humans when they're more concise
-	 * 2. Modern CPU architectures have caches. Data has to be in a cache for
+	 * 1. Modern CPU architectures have caches. Data has to be in a cache for
 	 *    the CPU to be able to use it. If it isn't in the cache, the CPU
 	 *    generates a cache-miss and retrieves the data from a higher level of
 	 *    cache (L1->L2->L3) or from memory (L3->Memory). For performance,
@@ -575,10 +573,9 @@ void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 	 *    around and optimize that algorithm, apply hardware to it, etc,
 	 *    the _hard_ part is no longer the sweeping or the convolution,
 	 *    it's copying memory.
-	 * 3. Performing the mesh dimension swap that happens in mesh_swap without
-	 *    working storage is difficult. For the moment, it will rely upon
-	 *    working memory at work_tmp. In the FUTURE, this could probably be
-	 *    optimized by doing some tiling stuff.
+	 *
+	 * 2. Performing the mesh dimension swap that happens in mesh_swap without
+	 *    working storage is difficult.
 	 */
 
 	u64 totalelem, i;
@@ -616,30 +613,34 @@ void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 	work_iz  = cfg->workstore[5];
 	work_tmp = cfg->workstore[6];
 
+	// TODO (brian) mesh_dim needs to be modified per sweep :)
+	// solutions : reorg modified mesh_dim
+	//           : we have a mesh_dim{x,y,z} <-- thinking this one
+
 	// sweep in x, y, z
-	molt_sweep(cfg, work_ix,     src, x_sweep_params, molt_ord_xyz);
+	molt_sweep(work_ix,     src, work_tmp, mesh_dim, molt_ord_xyz, x_sweep_params, cfg->dnu, cfg->spaceacc);
 	molt_reorg(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_yxz);
-	molt_sweep(cfg, work_ix, work_ix, y_sweep_params, molt_ord_yxz);
+	molt_sweep(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_yxz, y_sweep_params, cfg->dnu, cfg->spaceacc);
 	molt_reorg(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_yxz, molt_ord_zxy);
-	molt_sweep(cfg, work_ix, work_ix, z_sweep_params, molt_ord_zxy);
+	molt_sweep(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_zxy, z_sweep_params, cfg->dnu, cfg->spaceacc);
 	molt_reorg(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_zxy, molt_ord_xyz);
 
 	// sweep in y, z, x
 	molt_reorg(work_iy,     src, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_yxz);
-	molt_sweep(cfg, work_iy, work_iy, y_sweep_params, molt_ord_yxz);
+	molt_sweep(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_yxz, y_sweep_params, cfg->dnu, cfg->spaceacc);
 	molt_reorg(work_iy, work_ix, work_tmp, mesh_dim, molt_ord_yxz, molt_ord_zxy);
-	molt_sweep(cfg, work_iy, work_ix, z_sweep_params, molt_ord_zxy);
+	molt_sweep(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_zxy, z_sweep_params, cfg->dnu, cfg->spaceacc);
 	molt_reorg(work_iy, work_ix, work_tmp, mesh_dim, molt_ord_zxy, molt_ord_xzy);
-	molt_sweep(cfg, work_iy, work_ix, x_sweep_params, molt_ord_xzy);
+	molt_sweep(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_xzy, x_sweep_params, cfg->dnu, cfg->spaceacc);
 	molt_reorg(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_xzy, molt_ord_xyz);
 
 	// sweep in z, x, y
 	molt_reorg(work_iz,     src, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_zxy);
-	molt_sweep(cfg, work_iz, work_iy, z_sweep_params, molt_ord_zxy);
-	molt_reorg(work_iz, work_ix, work_tmp, mesh_dim, molt_ord_zxy, molt_ord_xzy);
-	molt_sweep(cfg, work_iz, work_ix, x_sweep_params, molt_ord_xzy);
-	molt_reorg(work_iz, work_ix, work_tmp, mesh_dim, molt_ord_xzy, molt_ord_yzx);
-	molt_sweep(cfg, work_iz, work_ix, y_sweep_params, molt_ord_yzx);
+	molt_sweep(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_zxy, z_sweep_params, cfg->dnu, cfg->spaceacc);
+	molt_reorg(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_zxy, molt_ord_xzy);
+	molt_sweep(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_xzy, x_sweep_params, cfg->dnu, cfg->spaceacc);
+	molt_reorg(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_xzy, molt_ord_yzx);
+	molt_sweep(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_yzx, y_sweep_params, cfg->dnu, cfg->spaceacc);
 	molt_reorg(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_yzx, molt_ord_xyz);
 
 	// dst = (work_ix + work_iy + work_iz) / 2
@@ -698,37 +699,36 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 	work_tmp  = cfg->workstore[6];
 	work_tmp_ = cfg->workstore[7];
 
+	// TODO (brian) mesh_dim has to be dimensionality aware
+
 	// sweep in x, y, z
-	molt_sweep(cfg, work_ix,     src, x_sweep_params, molt_ord_xyz);
-	for (i = 0; i < totalelem; i++) {
-		work_ix[i] -= src[i];
-	}
+	molt_sweep(work_ix,     src, work_tmp, mesh_dim, molt_ord_xzy, x_sweep_params, cfg->dnu, cfg->spaceacc);
+	for (i = 0; i < totalelem; i++) { work_ix[i] -= src[i]; }
 	molt_reorg(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_yxz);
-	molt_sweep(cfg, work_ix, work_ix, y_sweep_params, molt_ord_yxz);
+	molt_sweep(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_yxz, y_sweep_params, cfg->dnu, cfg->spaceacc);
 	molt_reorg(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_yxz, molt_ord_zxy);
-	molt_sweep(cfg, work_ix, work_ix, z_sweep_params, molt_ord_zxy);
+	molt_sweep(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_zxy, z_sweep_params, cfg->dnu, cfg->spaceacc);
 	molt_reorg(work_ix, work_ix, work_tmp, mesh_dim, molt_ord_zxy, molt_ord_xyz);
 
 	// sweep in y, z, x
 	molt_reorg(work_iy,     src, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_yxz);
 	molt_reorg(work_tmp_,   src, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_yxz);
-	molt_sweep(cfg, work_iy, work_iy, y_sweep_params, molt_ord_yxz);
+	molt_sweep(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_yxz, y_sweep_params, cfg->dnu, cfg->spaceacc);
 	for (i = 0; i < totalelem; i++) { work_iy[i] -= work_tmp_[i]; }
 	molt_reorg(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_yxz, molt_ord_zxy);
-	molt_sweep(cfg, work_iy, work_iy, z_sweep_params, molt_ord_zxy);
+	molt_sweep(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_zxy, z_sweep_params, cfg->dnu, cfg->spaceacc);
 	molt_reorg(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_zxy, molt_ord_xzy);
-	molt_sweep(cfg, work_iy, work_iy, x_sweep_params, molt_ord_xzy);
-	molt_reorg(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_xzy, molt_ord_xyz);
+	molt_sweep(work_iy, work_iy, work_tmp, mesh_dim, molt_ord_xyz, x_sweep_params, cfg->dnu, cfg->spaceacc);
 
 	// sweep in z, x, y
 	molt_reorg(work_iz,     src, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_zxy);
 	molt_reorg(work_tmp_,   src, work_tmp, mesh_dim, molt_ord_xyz, molt_ord_zxy);
-	molt_sweep(cfg, work_iz, work_iy, z_sweep_params, molt_ord_zxy);
+	molt_sweep(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_zxy, z_sweep_params, cfg->dnu, cfg->spaceacc);
 	for (i = 0; i < totalelem; i++) { work_iz[i] -= work_tmp_[i]; }
 	molt_reorg(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_zxy, molt_ord_xzy);
-	molt_sweep(cfg, work_iz, work_iz, x_sweep_params, molt_ord_xzy);
+	molt_sweep(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_xzy, x_sweep_params, cfg->dnu, cfg->spaceacc);
 	molt_reorg(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_xzy, molt_ord_yzx);
-	molt_sweep(cfg, work_iz, work_iz, y_sweep_params, molt_ord_yzx);
+	molt_sweep(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_yzx, y_sweep_params, cfg->dnu, cfg->spaceacc);
 	molt_reorg(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_yzx, molt_ord_xyz);
 
 	// dst = (work_ix + work_iy + work_iz) / 2
@@ -737,40 +737,13 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 	}
 }
 
-#if 0
 /* molt_sweep : performs a sweep across the mesh in the dimension specified */
-void molt_sweep(struct molt_cfg_t *cfg, f64 *dst, f64 *src, pdvec4_t params, cvec3_t order)
+void molt_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, pdvec6_t params, dvec3_t dnu, s32 M)
 {
-	ivec3_t dim;
 	f64 *ptr, minval;
-	s64 rowlen, rownum, i;
-
-	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_PINC);
-
-	// fetch the row's length and the number of rows
-	rowlen  = molt_cfg_parampull_gen(cfg, 0, MOLT_PARAM_PINC, order);
-	rownum  = molt_cfg_parampull_gen(cfg, 1, MOLT_PARAM_PINC, order);
-	rownum *= molt_cfg_parampull_gen(cfg, 2, MOLT_PARAM_PINC, order);
-
-	// find the minval (dN in Matlab)
-	for (i = 0, minval = DBL_MAX; i < rowlen; i++) {
-		if (src[i] < minval)
-			minval = src[i];
-	}
-
-	// walk through the volume, grabbing each row-organized value
-	for (i = 0, ptr = src; i < rownum; i++, ptr += rowlen) {
-		molt_gfquad_m(cfg, cfg->worksweep, ptr, params, order);
-		molt_makel(cfg, cfg->worksweep, params, minval, rowlen);
-		memcpy(ptr, cfg->worksweep, sizeof(f64) * rowlen);
-	}
-}
-#else
-/* molt_sweep : performs a sweep across the mesh in the dimension specified */
-void molt_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, pdvec6_t params)
-{
-	ivec3_t dim;
-	f64 *ptr, minval;
+	f64 *wl, *wr;
+	f64 *vl, *vr;
+	f64 usednu;
 	s64 rowlen, rownum, i;
 
 	/*
@@ -787,99 +760,99 @@ void molt_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, pdvec6_
 	// then, get the number of rows
 	rownum = dim[1] * dim[2];
 
+	// get our weighting parameters all setup
+	vl = params[0];
+	vr = params[1];
+	wl = params[2];
+	wr = params[3];
+
 	// find the minval (dN in Matlab)
+	// NOTE (brian) vl & vr are supposed to have the same dimensionality the current dimension
 	for (i = 0, minval = DBL_MAX; i < rowlen; i++) {
-		if (src[i] < minval)
-			minval = src[i];
+		if (vl[i] < minval)
+			minval = vl[i];
 	}
+
+	// then figure out the correct dnu to use
+	switch(ord[0]) {
+	case 'x':
+		usednu = dnu[0];
+		break;
+	case 'y':
+		usednu = dnu[1];
+		break;
+	case 'z':
+		usednu = dnu[2];
+		break;
+	default:
+		assert(0);
+		break;
+	}
+
+	memset(work, 0, sizeof(f64) * rowlen * rownum);
 
 	// walk through the volume, grabbing each row-organized value
-	for (i = 0, ptr = src; i < rownum; i++, ptr += rowlen) {
-		molt_gfquad_m(cfg, cfg->worksweep, ptr, params, order);
-		molt_makel(cfg, cfg->worksweep, params, minval, rowlen);
-		memcpy(ptr, cfg->worksweep, sizeof(f64) * rowlen);
+	for (i = 0, ptr = src; i < rownum; i++, ptr += rowlen, work += rowlen) {
+		molt_gfquad_m(work, ptr, usednu, wl, wr, rowlen, M);
+		molt_makel(work, vl, vr, minval, rowlen);
+		memcpy(ptr, work, sizeof(f64) * rowlen);
 	}
 }
-#endif
 
 /* molt_gfquad_m : green's function quadriture on the input vector */
-void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, cvec3_t order)
+void molt_gfquad_m(f64 *dst, f64 *src, f64 dnu, f64 *wl, f64 *wr, s64 len, s32 M)
 {
 	/* out and in's length is defined by hunklen */
 	f64 IL, IR;
-	f64 d;
 	s32 iL, iR, iC, M2, N;
-	s32 i, bound, orderm;
-	s64 rowlen;
-
-	// pull out the correct dnu value
-	switch (order[0]) {
-	case 'x':
-		d = cfg->dnu[0];
-		break;
-	case 'y':
-		d = cfg->dnu[1];
-		break;
-	case 'z':
-		d = cfg->dnu[2];
-		break;
-	default:
-		assert(0); // TODO recompute it here ??????
-	}
-
-	f64 *wl = params[2];
-	f64 *wr = params[3];
+	s32 i;
 
 	IL = 0;
 	IR = 0;
-	M2 = orderm / 2;
-	N = rowlen - 1;
+	M2 = M / 2;
+	N = len - 1;
 
-	orderm++;
+	M++;
 
 	iL = 0;
 	iC = -M2;
-	iR = rowlen - orderm;
+	iR = len - M;
 
 	/* left sweep */
 	for (i = 0; i < M2; i++) {
-		// PERFLOG_SPRINTF(molt_staticbuf, "M %d, i %d", orderm, i);
-		IL = d * IL + molt_vect_mul(&wl[i * orderm] , &in[iL], orderm);
-		out[i + 1] = out[i + 1] + IL;
+		IL = dnu * IL + molt_vect_mul(&wl[i * M] , &src[iL], M);
+		dst[i + 1] = dst[i + 1] + IL;
 	}
 
 	for (; i < N - M2; i++) {
-		// PERFLOG_SPRINTF(molt_staticbuf, "M %d, i %d", orderm, i);
-		IL = d * IL + molt_vect_mul(&wl[i * orderm], &in[i + 1 + iC], orderm);
-		out[i + 1] = out[i + 1] + IL;
+		IL = dnu * IL + molt_vect_mul(&wl[i * M], &src[i + 1 + iC], M);
+		dst[i + 1] = dst[i + 1] + IL;
 	}
 
 	for (; i < N; i++) {
-		// PERFLOG_SPRINTF(molt_staticbuf, "M %d, i %d", orderm, i);
-		IL = d * IL + molt_vect_mul(&wl[i * orderm], &in[iR], orderm);
-		out[i + 1] = out[i + 1] + IL;
+		IL = dnu * IL + molt_vect_mul(&wl[i * M], &src[iR], M);
+		dst[i + 1] = dst[i + 1] + IL;
 	}
 
+	/* right sweep */
 	for (i = N - 1; i > N - 1 - M2; i--) {
-		// PERFLOG_SPRINTF(molt_staticbuf, "M %d, i %d", orderm, i);
-		IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[iL], orderm);
-		out[i] = out[i] + IR;
+		IR = dnu * IR + molt_vect_mul(&wr[i * M], &src[iR], M);
+		dst[i] = dst[i] + IR;
 	}
 
-	for (; i > M2; i--) {
-		// PERFLOG_SPRINTF(molt_staticbuf, "M %d, i %d", orderm, i);
-		IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[i + 1 + iC], orderm);
-		out[i] = out[i] + IR;
+	for (; i >= M2; i--) {
+		IR = dnu * IR + molt_vect_mul(&wr[i * M], &src[i + 1 + iC], M);
+		dst[i] = dst[i] + IR;
 	}
 
 	for (; i >= 0; i--) {
-		// PERFLOG_SPRINTF(molt_staticbuf, "M %d, i %d", orderm, i);
-		IR = d * IR + molt_vect_mul(&wr[i * orderm], &in[iR], orderm);
-		out[i] = out[i] + IR;
+		IR = dnu * IR + molt_vect_mul(&wr[i * M], &src[iL], M);
+		dst[i] = dst[i] + IR;
 	}
 
-	for (i = 0; i < rowlen; i++)
-		out[i] /= 2;
+	// I = I / 2
+	for (i = 0; i < len; i++)
+		dst[i] /= 2;
 }
 
 /* molt_gfquad_bound : return easy bound parameters for gfquad */
@@ -902,7 +875,7 @@ static s32 molt_gfquad_bound(s32 idx, s32 m2, s32 len)
 }
 
 /* molt_makel : applies dirichlet boundary conditions to the line in */
-void molt_makel(struct molt_cfg_t *cfg, f64 *arr, pdvec6_t params, f64 minval, s64 len)
+void molt_makel(f64 *src, f64 *vl, f64 *vr, f64 minval, s64 len)
 {
 	/*
 	 * molt_makel applies dirichlet boundary conditions to the line in place
@@ -916,7 +889,6 @@ void molt_makel(struct molt_cfg_t *cfg, f64 *arr, pdvec6_t params, f64 minval, s
 	 * conditions.
 	 */
 
-	f64 *vl, *vr;
 	f64 wa_use, wb_use, wc_use;
 	f64 val;
 	s64 i;
@@ -924,21 +896,18 @@ void molt_makel(struct molt_cfg_t *cfg, f64 *arr, pdvec6_t params, f64 minval, s
 	const f64 wa = 0;
 	const f64 wb = 0;
 
-	vl = params[2];
-	vr = params[3];
-
 	// * wa_use - w(1)
 	// * wb_use - w(end)
 	// * wc_use - 1 - dN ^ 2
-	wa_use = wa - arr[0];
-	wb_use = wb - arr[len - 1];
+	wa_use = wa - src[0];
+	wb_use = wb - src[len - 1];
 	wc_use = 1 - pow(minval, 2);
 
 	for (i = 0; i < len; i++) {
 		val  = wa_use * vl[i] - minval * vr[i];
 		val += wb_use * vr[i] - minval * vl[i];
 		val /= wc_use;
-		arr[i] += val;
+		src[i] += val;
 	}
 }
 

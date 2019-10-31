@@ -151,6 +151,7 @@ void perflog_print_mostrecent();
 
 #define LOG_NEWLINESEP 1
 #define LOG_FLOATFMT "% 4.5e"
+// #define LOG_FLOATFMT "%.15lf"
 
 // we don't need a LOGMAKE_1 because that's the trivial case
 #define LOGMAKE_2(v,a,b)   ((v)[0]=(a),(v)[1]=(b))

@@ -238,10 +238,8 @@ void setup_simulation(void **base, u64 *size, int fd)
 		}
 	}
 
-	// finally, memory map the file
+	// finally, memory map and zero out the file
 	*base = io_mmap(fd, *size);
-
-	// zero the file to get it to a known state (for valgrind and friends)
 	memset(*base, 0, *size);
 
 	io_lumpcheck(*base);
@@ -458,6 +456,7 @@ void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww)
 void setuplump_vmesh(struct lump_header_t *hdr, struct lump_vmesh_t *vmesh)
 {
 	// NOTE (brian) not used, initial wave velocity setup
+	// (look in setuplump_umesh)
 	vmesh->meta.magic = MOLTLUMP_MAGIC;
 }
 
@@ -507,8 +506,13 @@ void setuplump_umesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 				fz = pow(initial_scale(cfg, z, zpoints), 2);
 
 				umesh->data[i] = exp(-13.0 * (fx + fy + fz));
-				vmesh->data[i] = MOLT_TISSUESPEED * 2 * 13.0 * 2 / (xpoints * cfg->space_scale)
+#if 0
+				vmesh->data[i] = MOLT_TISSUESPEED * 52.0 / (xpoints * cfg->space_scale)
 					* initial_scale(cfg, x, xpoints) * umesh->data[i];
+#else
+				vmesh->data[i] = MOLT_TISSUESPEED * 2.0 * 13.0 * 2.0 / (xpoints * cfg->space_scale)
+					* initial_scale(cfg, x, xpoints) * umesh->data[i];
+#endif
 			}
 		}
 	}
@@ -670,7 +674,7 @@ s32 lump_magiccheck(void *hunk)
 /* print_help : prints some help text */
 void print_help(char *prog)
 {
-#define HELP_EXAMPLE "EX    : %s --viewer --test -v output.db > log.txt\n"
+#define HELP_EXAMPLE "EX    : %s --viewer -v output.db > log.txt\n"
 	fprintf(stderr, "--nosim         runs everything BUT the simulation itself\n");
 	fprintf(stderr, "--test          runs testing procedures before the simulation\n");
 	fprintf(stderr, "--viewer        runs the viewer program\n");
