@@ -108,9 +108,10 @@ int main(int argc, char **argv)
 					print_help(argv[0]);
 					return 1;
 				default:
-					fprintf(stderr, "Illegal Option %c\n", *s);
+					fprintf(stderr, "Illegal Option '%s'\n", s);
 					targc = 0;
-					break;
+					print_help(argv[0]);
+					return 1;
 			}
 		}
 	}
@@ -669,9 +670,13 @@ s32 lump_magiccheck(void *hunk)
 /* print_help : prints some help text */
 void print_help(char *prog)
 {
+#define HELP_EXAMPLE "EX    : %s --viewer --test -v output.db > log.txt\n"
+	fprintf(stderr, "--nosim         runs everything BUT the simulation itself\n");
+	fprintf(stderr, "--test          runs testing procedures before the simulation\n");
+	fprintf(stderr, "--viewer        runs the viewer program\n");
+	fprintf(stderr, "-h              prints this help text\n");
+	fprintf(stderr, "-v              displays verbose simulation info\n");
 	fprintf(stderr, USAGE, prog);
-	fprintf(stderr, "-h\t\t\tprints this help text\n");
-	fprintf(stderr, "-v\t\t\tdisplays verbose simulation info\n");
-	fprintf(stderr, "--viewer\t\tattempts to run the viewer\n");
+	fprintf(stderr, HELP_EXAMPLE, prog);
 }
 
