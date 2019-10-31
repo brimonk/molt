@@ -606,7 +606,7 @@ s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		 1.0f,  1.0f, 0.0f
 	};
 
-	hmm_mat4 model, view, proj, pers;
+	hmm_mat4 view, proj, pers;
 
 	memset(&ftab, 0, sizeof ftab);
 	memset(&state, 0, sizeof state);
