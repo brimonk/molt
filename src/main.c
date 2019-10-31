@@ -407,6 +407,7 @@ void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw)
 {
 	struct molt_cfg_t *cfg;
 	s64 i;
+	ivec3_t start, stop;
 	ivec3_t dim;
 
 	memset(vw, 0, sizeof *vw);
@@ -415,25 +416,27 @@ void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw)
 
 	vw->meta.magic = MOLTLUMP_MAGIC;
 
+	molt_cfg_parampull_xyz(cfg, start, MOLT_PARAM_START);
+	molt_cfg_parampull_xyz(cfg, stop, MOLT_PARAM_STOP);
 	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_PINC);
 
 	for (i = 0; i < dim[0]; i++) // vlx
-		vw->vlx[i] = exp((-cfg->alpha) * cfg->space_scale * i);
+		vw->vlx[i] = exp((-cfg->alpha) * cfg->space_scale * (i - start[0]));
 
 	for (i = 0; i < dim[0]; i++) // vrx
-		vw->vrx[i] = exp((-cfg->alpha) * cfg->space_scale * i);
+		vw->vrx[i] = exp((-cfg->alpha) * cfg->space_scale * (stop[0] - i));
 
 	for (i = 0; i < dim[1]; i++) // vly
-		vw->vly[i] = exp((-cfg->alpha) * cfg->space_scale * i);
+		vw->vly[i] = exp((-cfg->alpha) * cfg->space_scale * (i - start[1]));
 
 	for (i = 0; i < dim[1]; i++) // vry
-		vw->vry[i] = exp((-cfg->alpha) * cfg->space_scale * i);
+		vw->vry[i] = exp((-cfg->alpha) * cfg->space_scale * (stop[1] - i));
 
 	for (i = 0; i < dim[2]; i++) // vlz
-		vw->vrz[i] = exp((-cfg->alpha) * cfg->space_scale * i);
+		vw->vrz[i] = exp((-cfg->alpha) * cfg->space_scale * (i - start[2]));
 
 	for (i = 0; i < dim[2]; i++) // vrz
-		vw->vlz[i] = exp((-cfg->alpha) * cfg->space_scale * i);
+		vw->vlz[i] = exp((-cfg->alpha) * cfg->space_scale * (stop[2] - i));
 }
 
 /* setuplump_wweight : setup the wweight lump */
@@ -515,7 +518,6 @@ void setupstate_print(void *hunk)
 {
 	struct lump_header_t *hdr;
 	struct molt_cfg_t *cfg;
-	struct lump_nu_t *nu;
 	struct lump_vweight_t *vw;
 	struct lump_wweight_t *ww;
 	struct lump_vmesh_t *vmesh;
