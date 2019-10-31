@@ -143,9 +143,6 @@ void molt_makel(struct molt_cfg_t *cfg, f64 *arr, pdvec4_t params, f64 minval, s
 /* molt_vect_mul : perform element-wise vector multiplication */
 f64 molt_vect_mul(f64 *veca, f64 *vecb, s32 veclen);
 
-/* mk_genericidx : retrieves a generic index from input dimensionality */
-static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order);
-
 #ifdef MOLT_IMPLEMENTATION
 
 // TODO remove if possible
@@ -160,6 +157,9 @@ static cvec3_t molt_ord_zxy = {'z', 'x', 'y'};
 static cvec3_t molt_ord_zyx = {'z', 'y', 'x'};
 
 static s32 molt_gfquad_bound(s32 idx, s32 m2, s32 len);
+
+/* mk_genericidx : retrieves a generic index from input dimensionality */
+static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order);
 
 /* molt_cfg_dims_t : initializes, very explicitly, cfg's time parameters */
 void molt_cfg_dims_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc)
@@ -737,6 +737,7 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 	}
 }
 
+#if 0
 /* molt_sweep : performs a sweep across the mesh in the dimension specified */
 void molt_sweep(struct molt_cfg_t *cfg, f64 *dst, f64 *src, pdvec4_t params, cvec3_t order)
 {
@@ -764,8 +765,42 @@ void molt_sweep(struct molt_cfg_t *cfg, f64 *dst, f64 *src, pdvec4_t params, cve
 		memcpy(ptr, cfg->worksweep, sizeof(f64) * rowlen);
 	}
 }
+#else
+/* molt_sweep : performs a sweep across the mesh in the dimension specified */
+void molt_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, pdvec6_t params)
+{
+	ivec3_t dim;
+	f64 *ptr, minval;
+	s64 rowlen, rownum, i;
 
-int quad_count = 0;
+	/*
+	 * NOTE (brian)
+	 * The dimensions of the 1st, 2nd, and 3rd dimensions are in dim, and
+	 * their ordering in memory is provided in 'ord'.
+	 *
+	 * 'params' is the sweep parameters as setup in the C and D operators.
+	 */
+
+	// first, get the row's length
+	rowlen = dim[0];
+
+	// then, get the number of rows
+	rownum = dim[1] * dim[2];
+
+	// find the minval (dN in Matlab)
+	for (i = 0, minval = DBL_MAX; i < rowlen; i++) {
+		if (src[i] < minval)
+			minval = src[i];
+	}
+
+	// walk through the volume, grabbing each row-organized value
+	for (i = 0, ptr = src; i < rownum; i++, ptr += rowlen) {
+		molt_gfquad_m(cfg, cfg->worksweep, ptr, params, order);
+		molt_makel(cfg, cfg->worksweep, params, minval, rowlen);
+		memcpy(ptr, cfg->worksweep, sizeof(f64) * rowlen);
+	}
+}
+#endif
 
 /* molt_gfquad_m : green's function quadriture on the input vector */
 void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, cvec3_t order)
@@ -794,8 +829,6 @@ void molt_gfquad_m(struct molt_cfg_t *cfg, f64 *out, f64 *in, pdvec4_t params, c
 
 	f64 *wl = params[2];
 	f64 *wr = params[3];
-
-	quad_count++;
 
 	IL = 0;
 	IR = 0;
@@ -910,42 +943,6 @@ void molt_makel(struct molt_cfg_t *cfg, f64 *arr, pdvec6_t params, f64 minval, s
 }
 
 
-#if 0
-/* molt_reorg : reorganizes a 3d mesh from src to dst */
-void molt_reorg(struct molt_cfg_t *cfg, f64 *dst, f64 *src, f64 *work, cvec3_t src_ord, cvec3_t dst_ord)
-{
-	/*
-	 * cfg - config structure
-	 * dst - destination of reorg
-	 * src - source of reorg
-	 * work - working storage for swap around (avoids same pointer problem)
-	 * src_ord - the ordering of src
-	 * dst_ord - the ordering of dsr
-	 */
-
-	u64 src_i, dst_i, total;
-	ivec3_t idx, dim;
-
-	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_PINC);
-
-	total = ((u64)dim[0]) * dim[1] * dim[2];
-
-	// PERFLOG_APP_AND_PRINT(molt_staticbuf, "REORG (%d,%d,%d) : DST %p, WORK %p, SRC %p",
-			// dim[0], dim[1], dim[2], dst, work, src);
-
-	for (idx[2] = 0; idx[2] < dim[2]; idx[2]++) {
-		for (idx[1] = 0; idx[1] < dim[1]; idx[1]++) {
-			for (idx[0] = 0; idx[0] < dim[0]; idx[0]++) {
-				src_i = molt_genericidx(idx, dim, src_ord);
-				dst_i = molt_genericidx(idx, dim, dst_ord);
-				work[dst_i] = src[src_i];
-			}
-		}
-	}
-
-	memcpy(dst, work, sizeof(*dst) * total);
-}
-#else
 /* molt_reorg : reorganizes a 3d mesh from src to dst */
 void molt_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_ord, cvec3_t dst_ord)
 {
@@ -976,7 +973,6 @@ void molt_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_ord, cve
 
 	memcpy(dst, work, sizeof(*dst) * total);
 }
-#endif
 
 /* mk_genericidx : retrieves a generic index from input dimensionality */
 static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order)

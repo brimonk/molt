@@ -59,7 +59,7 @@ s32 lump_magiccheck(void *hunk);
 
 void print_help(char *prog);
 
-#define USAGE "USAGE : %s [--viewer] [-v] [-h] outfile\n"
+#define USAGE "USAGE : %s [--viewer] [--nosim] [--test] [-v] [-h] outfile\n"
 
 #define FLG_VERBOSE 0x01
 #define FLG_VIEWER  0x02
@@ -74,7 +74,6 @@ int main(int argc, char **argv)
 	s32 fd, longopt;
 	u32 flags;
 	struct molt_cfg_t *cfg;
-	struct run_t *run;
 
 	hunk = NULL;
 	hunksize = 0;
@@ -170,7 +169,7 @@ void do_simulation(void *hunk, u64 hunksize)
 	u32 firststep_flg, normal_flg;
 
 	pdvec3_t vol;
-	pdvec6_t nu, vw, ww;
+	pdvec6_t vw, ww;
 
 	cfg     = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
 	run     = io_lumpgetbase(hunk, MOLTLUMP_RUNINFO);
@@ -226,10 +225,8 @@ void do_simulation(void *hunk, u64 hunksize)
 void setup_simulation(void **base, u64 *size, int fd)
 {
 	void *newblk;
-	u64 oldsize;
 	struct lump_header_t tmpheader;
 
-	oldsize = *size;
 	*size = setup_lumptable(&tmpheader);
 
 	// resize the file (if needed (probably always needed))
