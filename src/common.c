@@ -78,7 +78,7 @@ s32 hunklog_2(char *file, int line, char *msg, ivec2_t dim, f64 *p)
 	}
 
 	// load up our printf format
-	// (%xd, %yd) : %lf\n
+	// %s (%xd, %yd) : %lf\n
 	snprintf(fmt, sizeof fmt, "%d", tmp);
 	tmp = strlen(fmt);
 	snprintf(fmt, sizeof fmt, "%s(%%%dd,%%%dd) : %s\n", msg, tmp, tmp, LOG_FLOATFMT);
@@ -86,11 +86,15 @@ s32 hunklog_2(char *file, int line, char *msg, ivec2_t dim, f64 *p)
 	// print a preamble to stdout
 	printf("%s:%d %s\n", file, line, msg);
 
+	// NOTE (brian) the following loop is supposed to present display parity
+	// with Matlab's display of wLx and similar.
+
 	lines = 0;
-	for (y = 0; y < dim[1]; y++) {
-		for (x = 0; x < dim[0]; x++, lines++) {
-			i = IDX2D(x, y, dim[1]);
+	for (x = 0; x < dim[0]; x++) {
+		for (y = 0; y < dim[1]; y++) {
+			i = IDX2D(y, x, dim[1]);
 			printf(fmt, x, y, p[i]);
+			lines++;
 		}
 	}
 

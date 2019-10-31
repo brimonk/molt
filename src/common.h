@@ -318,7 +318,6 @@ struct lump_umesh_t { // problem state (the thing we simulate)
 typedef struct lump_runinfo_t lrun_t;
 typedef struct lump_efield_t  lefield_t;
 typedef struct lump_pfield_t  lpfield_t;
-typedef struct lump_nu_t      lnu_t;
 typedef struct lump_vweight_t lvweight_t;
 typedef struct lump_wweight_t lwweight_t;
 typedef struct lump_mesh_t    lmesh_t;
