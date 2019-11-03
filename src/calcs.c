@@ -5,11 +5,7 @@
  * A collection of fancy Matlab operations that aren't trivial for computers.
  *
  * TODO
- * 1. Complete Get_Exp_Weights conversion
- * 2. Prefix functions required to do that
- * 3. Declare functions as static where not needed in public interface
- *
- * 4. Change get_exp_weights "nulen" to be something like, "dimlen" or whatever
+ * 1. Fix Win32 s64 & u64 printf formatter
  */
 
 #include <stdio.h>
