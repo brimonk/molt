@@ -8,7 +8,7 @@
  *
  * DOCUMENTATION
  * This File:
- *   1. Initializes Storage through the io_* routines
+ *   1. Initializes Storage through the sys_* routines
  *   2. Initializes problem state through the setuplump_* routines
  *   3. Kicks off MOLT Timesteps
  *   4. Synchronizes after those timesteps
@@ -17,7 +17,10 @@
  * 1. We blast over whatever file you give it with the new simulation data.
  *
  * TODO (Brian)
- * 1. Run a single simulation all the way through
+ * 1. Change the IO functions to SYS functions (more than just IO)
+ * 1a. Modify the lump system to work from a config file???
+ * 2. Rework how pointers in MOLT work. Rework to integers.
+ * 3. 
  */
 
 #include <stdio.h>
@@ -34,10 +37,10 @@
 #define MOLT_IMPLEMENTATION
 #include "molt.h"
 
-#include "io.h"
+#include "common.h"
+#include "sys.h"
 #include "calcs.h"
 #include "config.h"
-#include "common.h"
 #include "viewer.h"
 #include "test.h"
 
@@ -129,15 +132,15 @@ int main(int argc, char **argv)
 	fname = targv[0];
 
 	// create our disk-backed storage
-	fd = io_open(fname);
+	fd = sys_open(fname);
 
 	// resize the disk store and map the disk file into virtual memory
 	setup_simulation(&hunk, &hunksize, fd);
-	io_mssync(hunk, hunk, hunksize);
+	sys_mssync(hunk, hunk, hunksize);
 
 	if (flags & FLG_SIM) {
 		do_simulation(hunk, hunksize);
-		io_mssync(hunk, hunk, hunksize);
+		sys_mssync(hunk, hunk, hunksize);
 	}
 
 	if (flags & FLG_VERBOSE) {
@@ -146,13 +149,13 @@ int main(int argc, char **argv)
 	}
 
 	if (flags & FLG_VIEWER) {
-		// cfg = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
+		// cfg = sys_lumpgetbase(hunk, MOLTLUMP_CONFIG);
 		cfg = NULL;
 		v_run(hunk, hunksize, fd, cfg);
 	}
 
-	io_munmap(hunk);
-	io_close(fd);
+	sys_munmap(hunk);
+	sys_close(fd);
 
 	return 0;
 }
@@ -172,12 +175,12 @@ void do_simulation(void *hunk, u64 hunksize)
 	pdvec3_t vol;
 	pdvec6_t vw, ww;
 
-	cfg     = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
-	run     = io_lumpgetbase(hunk, MOLTLUMP_RUNINFO);
-	vw_lump = io_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
-	ww_lump = io_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
-	vmesh   = io_lumpgetbase(hunk, MOLTLUMP_VMESH);
-	umesh   = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
+	cfg     = sys_lumpgetbase(hunk, MOLTLUMP_CONFIG);
+	run     = sys_lumpgetbase(hunk, MOLTLUMP_RUNINFO);
+	vw_lump = sys_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
+	ww_lump = sys_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
+	vmesh   = sys_lumpgetbase(hunk, MOLTLUMP_VMESH);
+	umesh   = sys_lumpgetbase(hunk, MOLTLUMP_UMESH);
 
 	vw[0] = vw_lump->vlx;
 	vw[1] = vw_lump->vrx;
@@ -231,31 +234,31 @@ void setup_simulation(void **base, u64 *size, int fd)
 	*size = setup_lumptable(&tmpheader);
 
 	// resize the file (if needed (probably always needed))
-	if (io_getsize() < *size) {
-		if (io_resize(fd, *size) < 0) {
+	if (sys_getsize() < *size) {
+		if (sys_resize(fd, *size) < 0) {
 			fprintf(stderr, "Couldn't get space. Quitting\n");
 			exit(1);
 		}
 	}
 
 	// finally, memory map and zero out the file
-	*base = io_mmap(fd, *size);
+	*base = sys_mmap(fd, *size);
 	memset(*base, 0, *size);
 
-	io_lumpcheck(*base);
+	sys_lumpcheck(*base);
 
 	// ensure we copy our lump header into the mapped memory
 	memcpy(*base, &tmpheader, sizeof(tmpheader));
 
 	printf("file size %ld\n", *size);
 
-	setuplump_cfg(*base, io_lumpgetbase(*base, MOLTLUMP_CONFIG));
-	setuplump_run(io_lumpgetbase(*base, MOLTLUMP_RUNINFO));
-	setuplump_efield(*base, io_lumpgetbase(*base, MOLTLUMP_EFIELD));
-	setuplump_pfield(*base, io_lumpgetbase(*base, MOLTLUMP_PFIELD));
-	setuplump_vweight(*base, io_lumpgetbase(*base, MOLTLUMP_VWEIGHT));
-	setuplump_wweight(*base, io_lumpgetbase(*base, MOLTLUMP_WWEIGHT));
-	setuplump_umesh(*base, io_lumpgetbase(*base, MOLTLUMP_UMESH));
+	setuplump_cfg(*base, sys_lumpgetbase(*base, MOLTLUMP_CONFIG));
+	setuplump_run(sys_lumpgetbase(*base, MOLTLUMP_RUNINFO));
+	setuplump_efield(*base, sys_lumpgetbase(*base, MOLTLUMP_EFIELD));
+	setuplump_pfield(*base, sys_lumpgetbase(*base, MOLTLUMP_PFIELD));
+	setuplump_vweight(*base, sys_lumpgetbase(*base, MOLTLUMP_VWEIGHT));
+	setuplump_wweight(*base, sys_lumpgetbase(*base, MOLTLUMP_WWEIGHT));
+	setuplump_umesh(*base, sys_lumpgetbase(*base, MOLTLUMP_UMESH));
 }
 
 /* setup_lumptable : fills out the lump_header_t that gets passed in */
@@ -411,7 +414,7 @@ void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw)
 
 	memset(vw, 0, sizeof *vw);
 
-	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
+	cfg = sys_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 
 	vw->meta.magic = MOLTLUMP_MAGIC;
 
@@ -443,7 +446,7 @@ void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww)
 {
 	struct molt_cfg_t *cfg;
 
-	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
+	cfg = sys_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 
 	ww->meta.magic = MOLTLUMP_MAGIC;
 
@@ -477,9 +480,9 @@ void setuplump_umesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
 	f64 fx, fy, fz;
 
 	lump = &hdr->lump[MOLTLUMP_UMESH];
-	umesh = io_lumpgetbase(hdr, MOLTLUMP_UMESH);
-	vmesh = io_lumpgetbase(hdr, MOLTLUMP_VMESH);
-	cfg = io_lumpgetbase(hdr, MOLTLUMP_CONFIG);
+	umesh = sys_lumpgetbase(hdr, MOLTLUMP_UMESH);
+	vmesh = sys_lumpgetbase(hdr, MOLTLUMP_VMESH);
+	cfg = sys_lumpgetbase(hdr, MOLTLUMP_CONFIG);
 
 	memset(state, 0, lump->lumpsize);
 
@@ -534,7 +537,7 @@ void setupstate_print(void *hunk)
 
 	hdr = hunk;
 
-	cfg = io_lumpgetbase(hunk, MOLTLUMP_CONFIG);
+	cfg = sys_lumpgetbase(hunk, MOLTLUMP_CONFIG);
 
 	/* print out lump & storage information */
 	printf("header : 0x%8x\tver : %d\t type : 0x%02x\n", hdr->meta.magic, hdr->meta.version, hdr->meta.type);
@@ -550,7 +553,7 @@ void setupstate_print(void *hunk)
 	printf("\n");
 
 	// log all of the vweights
-	vw = io_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
+	vw = sys_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
 	LOG1D(vw->vlx, cfg->x_params[MOLT_PARAM_PINC], "VWEIGHT-VLX");
 	LOG1D(vw->vrx, cfg->x_params[MOLT_PARAM_PINC], "VWEIGHT-VRX");
 	LOG1D(vw->vly, cfg->y_params[MOLT_PARAM_PINC], "VWEIGHT-VLY");
@@ -559,7 +562,7 @@ void setupstate_print(void *hunk)
 	LOG1D(vw->vrz, cfg->z_params[MOLT_PARAM_PINC], "VWEIGHT-VRZ");
 
 	// configure the weights, and log wweights
-	ww = io_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
+	ww = sys_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
 
 	// setup the weights for passing
 #if 0
@@ -580,12 +583,12 @@ void setupstate_print(void *hunk)
 	LOG2D(ww->zr_weight, zweight_dim, "WWEIGHT-ZR");
 
 	// log out the initial state of the wave
-	vmesh = io_lumpgetbase(hunk, MOLTLUMP_VMESH);
+	vmesh = sys_lumpgetbase(hunk, MOLTLUMP_VMESH);
 	molt_cfg_parampull_xyz(cfg, vmesh_dim, MOLT_PARAM_POINTS);
 	LOG3D(vmesh->data, vmesh_dim, "VMESH");
 
 	// log out the 3d volume
-	umesh = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
+	umesh = sys_lumpgetbase(hunk, MOLTLUMP_UMESH);
 	molt_cfg_parampull_xyz(cfg, umesh_dim, MOLT_PARAM_POINTS);
 
 	for (i = 0; i < cfg->t_params[MOLT_PARAM_PINC]; i++) {
@@ -624,7 +627,7 @@ s32 lump_magiccheck(void *hunk)
 	/* get all of the lumps that have only one magic value */
 
 	for (i = 0; i < 5; i++) {
-		single_elem_magic[i] = io_lumpgetmeta(hunk, single_elem_lump[i])->magic;
+		single_elem_magic[i] = sys_lumpgetmeta(hunk, single_elem_lump[i])->magic;
 	}
 
 
@@ -637,9 +640,9 @@ s32 lump_magiccheck(void *hunk)
 		}
 	}
 
-	efield = io_lumpgetbase(hunk, MOLTLUMP_EFIELD);
-	pfield = io_lumpgetbase(hunk, MOLTLUMP_PFIELD);
-	umesh   = io_lumpgetbase(hunk, MOLTLUMP_UMESH);
+	efield = sys_lumpgetbase(hunk, MOLTLUMP_EFIELD);
+	pfield = sys_lumpgetbase(hunk, MOLTLUMP_PFIELD);
+	umesh   = sys_lumpgetbase(hunk, MOLTLUMP_UMESH);
 
 	// spin through the efield
 	for (i = 0; i < MOLT_T_POINTS; i++) {

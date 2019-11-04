@@ -6,7 +6,7 @@ CC = gcc
 LINKER = -lm -lSDL2 -lGL
 FLAGS = -Wall -g3 -march=native
 TARGET = molt
-SRC = $(wildcard src/*.c)
+SRC = src/calcs.c src/common.c src/main.c src/sys_linux.c src/test.c src/viewer.c
 OBJ = $(SRC:.c=.o)
 DEP = $(OBJ:.o=.d) # one dependency file for each source
 

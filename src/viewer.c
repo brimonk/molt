@@ -34,7 +34,7 @@
 
 #include "common.h"
 #include "molt.h"
-#include "io.h"
+#include "sys.h"
 #include "viewer.h"
 
 // get some other viewer flags out of the way
@@ -1159,8 +1159,8 @@ u32 viewer_mkshader(char *vertex_file, char *fragment_file)
 	char *vertex, *fragment;
 
 	// load shaders from disk
-	vertex = io_readfile(vertex_file);
-	fragment = io_readfile(fragment_file);
+	vertex = sys_readfile(vertex_file);
+	fragment = sys_readfile(fragment_file);
 
 	if (!vertex) {
 		fprintf(stderr, "Couldn't load [%s], doesn't exist\n", vertex_file);
@@ -1603,7 +1603,7 @@ void f_fontload(char *path, s32 fontsize, struct fchar_t *ftab, s32 len)
 	unsigned char *ttf_buffer, *bitmap;
 	u32 tex;
 
-	ttf_buffer = (unsigned char *)io_readfile(path);
+	ttf_buffer = (unsigned char *)sys_readfile(path);
 
 	if (!ttf_buffer) {
 		fprintf(stderr, "Couldn't read fontfile [%s]\n", path);
