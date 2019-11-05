@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <dlfcn.h>
 
 #define MMAP_FLAGS MAP_SHARED
 
@@ -244,5 +245,44 @@ struct lumpmeta_t *sys_lumpgetmeta(void *base, int lumpid)
 	hdr = base;
 
 	return (struct lumpmeta_t *)(((char *)base) + hdr->lump[lumpid].offset);
+}
+
+/* sys_libopen : sys wrapper for dlopen */
+void *sys_libopen(char *filename)
+{
+	void *p;
+
+	p = dlopen(filename, RTLD_LAZY);
+	if (!p) {
+		fprintf(stderr, "sys_libopen error : %s\n", dlerror());
+	}
+
+	return p;
+}
+
+/* sys_libsym : sys wrapper for dlsym */
+void *sys_libsym(void *handle, char *symbol)
+{
+	void *p;
+
+	p = dlsym(handle, symbol);
+	if (!p) {
+		fprintf(stderr, "sys_dlsym error: %s\n", dlerror());
+	}
+
+	return p;
+}
+
+/* sys_libclose : sys wrapper for dlclose */
+int sys_libclose(void *handle)
+{
+	int rc;
+
+	rc = dlclose(handle);
+	if (rc != 0) {
+		fprintf(stderr, "sys_libclose error : %s\n", dlerror());
+	}
+
+	return rc;
 }
 

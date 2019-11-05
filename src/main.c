@@ -13,9 +13,6 @@
  *   3. Kicks off MOLT Timesteps
  *   4. Synchronizes after those timesteps
  *
- * WARNINGS
- * 1. We blast over whatever file you give it with the new simulation data.
- *
  * TODO (Brian)
  * 1. Change the IO functions to SYS functions (more than just IO)
  * 1a. Modify the lump system to work from a config file???

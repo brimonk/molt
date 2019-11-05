@@ -21,10 +21,7 @@
  *
  * 5. Include file-configurable function qualifier (static, static inline, etc)
  *
- * 6. Clean up the other routine calling conventions. (Oops)
- *
- * 7. Remove the 1d & 2d interfaces. At least the 2d interface won't work with
- *    the given algorithm. It only works in odd ordered spaces.
+ * 6. 
  *
  * TODO Future
  * ?. Consider putting in the alpha calculation
@@ -327,136 +324,7 @@ void molt_cfg_parampull_xyz(struct molt_cfg_t *cfg, s32 *dst, s32 param)
 	dst[2] = cfg->z_params[param];
 }
 
-/* molt_step1f : explicit parameter for molt stepping in 1d */
-void molt_step1f(struct molt_cfg_t *cfg,
-		f64 *next, f64 *curr, f64 *prev,
-		f64 *vl_x, f64 *vr_x,
-		f64 *wl_x, f64 *wr_x, u32 flags)
-{
-	// NOTE we really just setup params for molt_step3v, and execute that
-	pdvec3_t vol;
-	pdvec6_t vw, ww;
-
-	memset(&vol, 0, sizeof vol);
-	memset( &vw, 0, sizeof vw);
-	memset( &ww, 0, sizeof ww);
-
-	// MOV parameters
-	vol[0] = next; vol[1] = curr; vol[2] = prev;
-	vw[0] = vl_x; vw[1] = vr_x;
-	ww[0] = wl_x; ww[1] = wr_x;
-
-	molt_step3v(cfg, vol, vw, ww, flags);
-}
-
-/* molt_step2f : explicit parameter for molt stepping in 2d */
-void molt_step2f(struct molt_cfg_t *cfg,
-		f64 *next, f64 *curr, f64 *prev,
-		f64 *vl_x, f64 *vr_x, f64 *vl_y, f64 *vr_y,
-		f64 *wl_x, f64 *wr_x, f64 *wl_y, f64 *wr_y, u32 flags)
-{
-	// NOTE we really just setup params for molt_step3v, and execute that
-	pdvec3_t vol;
-	pdvec4_t vw, ww;
-
-	memset(&vol, 0, sizeof vol);
-	memset( &vw, 0, sizeof vw);
-	memset( &ww, 0, sizeof ww);
-
-	// MOV parameters
-	vol[0] = next;
-	vol[1] = curr;
-	vol[2] = prev;
-
-	vw[0] = vl_x;
-	vw[1] = vr_x;
-	vw[2] = vl_y;
-	vw[3] = vr_y;
-
-	ww[0] = wl_x;
-	ww[1] = wr_x;
-	ww[2] = wl_y;
-	ww[3] = wr_y;
-
-	molt_step3v(cfg, vol, vw, ww, flags);
-}
-
-/* molt_step3f : explicit parameter for molt stepping in 3d */
-void molt_step3f(struct molt_cfg_t *cfg,
-		f64 *next, f64 *curr, f64 *prev,
-		f64 *vl_x, f64 *vr_x, f64 *vl_y, f64 *vr_y, f64 *vl_z, f64 *vr_z,
-		f64 *wl_x, f64 *wr_x, f64 *wl_y, f64 *wr_y, f64 *wl_z, f64 *wr_z, u32 flags)
-{
-	// NOTE we really just setup params for molt_step3v, and execute that
-	pdvec3_t vol;
-	pdvec6_t vw, ww;
-
-	memset(&vol, 0, sizeof vol);
-	memset( &vw, 0, sizeof vw);
-	memset( &ww, 0, sizeof ww);
-
-	// MOV parameters
-	vol[0] = next;
-	vol[1] = curr;
-	vol[2] = prev;
-
-	vw[0] = vl_x;
-	vw[1] = vr_x;
-	vw[2] = vl_y;
-	vw[3] = vr_y;
-	vw[4] = vl_z;
-	vw[5] = vr_z;
-
-	ww[0] = wl_x;
-	ww[1] = wr_x;
-	ww[2] = wl_y;
-	ww[3] = wr_y;
-	ww[4] = wl_z;
-	ww[5] = wr_z;
-
-	molt_step3v(cfg, vol, vw, ww, flags);
-}
-
-/* molt_step1v : concise function for calling molt_step3v from 1d data */
-void molt_step1v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec2_t vw, pdvec2_t ww, u32 flags)
-{
-	// NOTE we really just setup params for molt_step3v, and execute that
-	pdvec6_t outvw, outww;
-
-	memset( &outvw, 0, sizeof outvw);
-	memset( &outww, 0, sizeof outww);
-
-	outvw[0] = vw[0];
-	outvw[1] = vw[1];
-
-	outww[0] = ww[0];
-	outww[1] = ww[1];
-
-	molt_step3v(cfg, vol, outvw, outww, flags);
-}
-
-/* molt_step2v : concise function for calling molt_step3v from 2d data */
-void molt_step2v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec4_t vw, pdvec4_t ww, u32 flags)
-{
-	// NOTE we really just setup params for molt_step3v, and execute that
-	pdvec6_t outvw, outww;
-
-	memset( &outvw, 0, sizeof outvw);
-	memset( &outww, 0, sizeof outww);
-
-	outvw[0] = vw[0];
-	outvw[1] = vw[1];
-	outvw[2] = vw[2];
-	outvw[3] = vw[3];
-
-	outww[0] = ww[0];
-	outww[1] = ww[1];
-	outww[2] = ww[2];
-	outww[3] = ww[3];
-
-	molt_step3v(cfg, vol, vw, ww, flags);
-}
-
+/* molt_cfg_print : prints configuration information */
 void molt_cfg_print(struct molt_cfg_t *cfg)
 {
 	s32 i;

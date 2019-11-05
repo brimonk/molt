@@ -54,4 +54,14 @@ void *sys_lumpgetidx(void *base, int lumpid, int idx);
 /* io_lumpgetmeta : returns a pointer to a lumpmeta_t for a given lumpid */
 struct lumpmeta_t *sys_lumpgetmeta(void *base, int lumpid);
 
+/* sys_libopen : sys wrapper for dlopen */
+void *sys_libopen(char *filename);
+
+/* sys_libsym : sys wrapper for dlsym */
+void *sys_libsym(void *handle, char *symbol);
+
+/* sys_libclose : sys wrapper for dlclose */
+int sys_libclose(void *handle);
+
 #endif // SYS_H
+

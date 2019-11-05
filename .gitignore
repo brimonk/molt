@@ -18,3 +18,4 @@ lib*
 
 # don't commit binaries to the source tree
 *.dll
+*.so
