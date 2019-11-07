@@ -85,8 +85,10 @@ struct molt_cfg_t {
 	f64 *worksweep;
 };
 
+typedef int (*moltcustom_func) (void *arg);
+
 struct molt_custom_t {
-	f64 *next, *prev, *curr; // volume states
+	f64 *prev, *curr, *next; // volume states
 
 	struct molt_cfg_t *cfg;
 
@@ -94,9 +96,14 @@ struct molt_custom_t {
 
 	f64 *vlx, *vrx, *vly, *vry, *vlz, *vrz;
 	f64 *wlx, *wrx, *wly, *wry, *wlz, *wrz;
-};
 
-typedef int (*moltcustom_func) (struct molt_custom_t *);
+	// now for our custom functions
+	// NOTE it is expected that they will get a pointer to this structure
+	moltcustom_func *custom_init;
+	moltcustom_func *custom_free;
+	moltcustom_func *custom_sweep;
+	moltcustom_func *custom_reorg;
+};
 
 // molt_cfg dimension intializer functions
 void molt_cfg_dims_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc);
@@ -114,6 +121,9 @@ void molt_cfg_free_workstore(struct molt_cfg_t *cfg);
 
 /* molt_step : a concise way to setup some parameters for whatever dim is being used */
 void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u32 flags);
+
+/* moltcustom_step : the custom library molt stepper */
+void molt_step_custom(struct molt_custom_t *custom, u32 flags);
 
 void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww);
 void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww);
@@ -410,6 +420,110 @@ void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u
 		for (i = 0; i < totalelem; i++) { next[i] += 2 * curr[i] - prev[i]; }
 	}
 }
+
+/* moltcustom_step : the custom library molt stepper */
+void molt_step_custom(struct molt_custom_t *custom, u32 flags)
+{
+	/*
+	 * TODO (brian)
+	 * 1. cleanup
+	 * 1a. vw
+	 * 1b. ww
+	 * 1c. work_d*
+	 * 1d. next, curr, prev
+	 */
+
+	u64 totalelem, i;
+	ivec3_t mesh_dim;
+	f64 *work_d1, *work_d2, *work_d3;
+	f64 *next, *curr, *prev;
+	f64 tmp;
+	pdvec2_t opstor;
+	struct molt_cfg_t *cfg;
+	pdvec6_t vw, ww;
+
+	cfg = custom->cfg;
+
+	vw[0] = custom->vlx;
+	vw[1] = custom->vrx;
+	vw[2] = custom->vly;
+	vw[3] = custom->vry;
+	vw[4] = custom->vlz;
+	vw[5] = custom->vrz;
+
+	ww[0] = custom->wlx;
+	ww[1] = custom->wrx;
+	ww[2] = custom->wly;
+	ww[3] = custom->wry;
+	ww[4] = custom->wlz;
+	ww[5] = custom->wrz;
+
+	// first, we have to acquire some working storage, external to our meshes
+	molt_cfg_parampull_xyz(cfg, mesh_dim, MOLT_PARAM_PINC);
+
+	totalelem = ((u64)mesh_dim[0]) * mesh_dim[1] * mesh_dim[2];
+
+	work_d1 = cfg->workstore[0];
+	work_d2 = cfg->workstore[1];
+	work_d3 = cfg->workstore[2];
+
+	next = custom->next;
+	curr = custom->curr;
+	prev = custom->prev;
+
+	if (flags & MOLT_FLAG_FIRSTSTEP) {
+		// u1 = 2 * (u0 + d1 * v0)
+		tmp = cfg->time_scale * cfg->t_params[MOLT_PARAM_STEP];
+		for (i = 0; i < totalelem; i++) {
+			next[i] = 2 * (curr[i] + tmp * prev[i]);
+		}
+	}
+
+	// now we can begin doing work
+	opstor[0] = work_d1, opstor[1] = next;
+	molt_c_op(cfg, opstor, vw, ww);
+
+	// u = u + beta ^ 2 * D1
+	for (i = 0; i < totalelem; i++) {
+		next[i] = next[i] * cfg->beta_sq * work_d1[i];
+	}
+
+	if (cfg->timeacc >= 2) {
+		opstor[0] = work_d2, opstor[1] = work_d1;
+		molt_c_op(cfg, opstor, vw, ww);
+		opstor[0] = work_d1, opstor[1] = work_d1;
+		molt_c_op(cfg, opstor, vw, ww);
+
+		// u = u - beta ^ 2 * D2 + beta ^ 4 / 12 * D1
+		for (i = 0; i < totalelem; i++) {
+			next[i] -= cfg->beta_sq * work_d2[i] + cfg->beta_fo * work_d1[i];
+		}
+	}
+
+	if (cfg->timeacc >= 3) {
+		opstor[0] = work_d3, opstor[1] = work_d2;
+		molt_c_op(cfg, opstor, vw, ww);
+		opstor[0] = work_d2, opstor[1] = work_d2;
+		molt_c_op(cfg, opstor, vw, ww);
+		opstor[0] = work_d1, opstor[1] = work_d1;
+		molt_c_op(cfg, opstor, vw, ww);
+
+		// u = u + (beta ^ 2 * D3 - 2 * beta ^ 4 / 12 * D2 + beta ^ 6 / 360 * D1)
+		for (i = 0; i < totalelem; i++) {
+			tmp = cfg->beta_sq * work_d3[i] - cfg->beta_fo * work_d2[i] + cfg->beta_si * work_d1[i];
+			next[i] += tmp;
+		}
+	}
+
+	if (flags & MOLT_FLAG_FIRSTSTEP) {
+		// next = next / 2;
+		for (i = 0; i < totalelem; i++) { next[i] /= 2; }
+	} else {
+		// next = next + 2 * curr - prev
+		for (i = 0; i < totalelem; i++) { next[i] += 2 * curr[i] - prev[i]; }
+	}
+}
+
 
 /* molt_d_op : MOLT's D Convolution Operator*/
 void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)

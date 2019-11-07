@@ -252,6 +252,63 @@ void do_simulation(void *hunk, u64 hunksize)
 /* do_custom_step : setsup and invokes the custom MOLT routines */
 void do_custom_step(void *hunk, void *lib, u64 hunksize)
 {
+	struct molt_custom_t custom;
+	struct molt_cfg_t *cfg;
+	struct lump_runinfo_t *run;
+	struct lump_vweight_t *vw_lump;
+	struct lump_wweight_t *ww_lump;
+	struct lump_vmesh_t *vmesh;
+	struct lump_umesh_t *umesh, *curr;
+
+	memset(&custom, 0, sizeof custom);
+
+	// TODO (brian) pull the functions we can from our handle
+
+	cfg     = sys_lumpgetbase(hunk, MOLTLUMP_CONFIG);
+	run     = sys_lumpgetbase(hunk, MOLTLUMP_RUNINFO);
+	vw_lump = sys_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
+	ww_lump = sys_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
+	vmesh   = sys_lumpgetbase(hunk, MOLTLUMP_VMESH);
+	umesh   = sys_lumpgetbase(hunk, MOLTLUMP_UMESH);
+
+	// setup our custom params
+	custom.vlx = vw_lump->vlx;
+	custom.vrx = vw_lump->vrx;
+	custom.vly = vw_lump->vly;
+	custom.vry = vw_lump->vry;
+	custom.vlz = vw_lump->vlz;
+	custom.vrz = vw_lump->vrz;
+
+	custom.wlx = ww_lump->xl_weight;
+	custom.wrx = ww_lump->xr_weight;
+	custom.wly = ww_lump->yl_weight;
+	custom.wry = ww_lump->yr_weight;
+	custom.wlz = ww_lump->zl_weight;
+	custom.wrz = ww_lump->zr_weight;
+
+	custom.cfg = cfg;
+
+	// setup the volume info for the FIRST step
+	custom.next = (umesh + 1)->data;
+	custom.curr = umesh->data;
+	custom.prev = vmesh->data;
+
+	molt_step_custom(&custom, MOLT_FLAG_FIRSTSTEP);
+
+	for (run->t_idx = 1; run->t_idx < run->t_total; run->t_idx++) {
+		curr = umesh + run->t_idx;
+
+		custom.next = (curr + 1)->data;
+		custom.curr = (curr    )->data;
+		custom.prev = (curr - 1)->data;
+
+		molt_step_custom(&custom, 0);
+
+		// save off whatever fields are required
+	}
+
+	// TODO (brian) move somewhere else
+	molt_cfg_free_workstore(cfg);
 }
 
 /* setup_simulation : sets up simulation based on config.h */
