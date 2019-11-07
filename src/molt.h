@@ -85,6 +85,19 @@ struct molt_cfg_t {
 	f64 *worksweep;
 };
 
+struct molt_custom_t {
+	f64 *next, *prev, *curr; // volume states
+
+	struct molt_cfg_t *cfg;
+
+	s64 time_start, time_stop, time_curr;
+
+	f64 *vlx, *vrx, *vly, *vry, *vlz, *vrz;
+	f64 *wlx, *wrx, *wly, *wry, *wlz, *wrz;
+};
+
+typedef int (*moltcustom_func) (struct molt_custom_t *);
+
 // molt_cfg dimension intializer functions
 void molt_cfg_dims_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc);
 void molt_cfg_dims_x(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc);
@@ -99,27 +112,8 @@ s64 molt_cfg_parampull_gen(struct molt_cfg_t *cfg, s32 oidx, s32 cfgidx, cvec3_t
 void molt_cfg_set_workstore(struct molt_cfg_t *cfg);
 void molt_cfg_free_workstore(struct molt_cfg_t *cfg);
 
-/* molt_step%v : a concise way to setup some parameters for whatever dim is being used */
-void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u32 flags);
-void molt_step2v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec4_t vw, pdvec4_t ww, u32 flags);
-void molt_step1v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec2_t vw, pdvec2_t ww, u32 flags);
-
-/* molt_step%f : a less concise, yet more explicit approach to the same thing */
-void molt_step1f(struct molt_cfg_t *cfg,
-		f64 *next, f64 *curr, f64 *prev,
-		f64 *vl_x, f64 *vr_x,
-		f64 *wl_x, f64 *wr_x, u32 flags);
-
-void molt_step2f(struct molt_cfg_t *cfg,
-		f64 *next, f64 *curr, f64 *prev,
-		f64 *vl_x, f64 *vr_x, f64 *vl_y, f64 *vr_y,
-		f64 *wl_x, f64 *wr_x, f64 *wl_y, f64 *wr_y, u32 flags);
-
-void molt_step3f(struct molt_cfg_t *cfg,
-		f64 *next, f64 *curr, f64 *prev,
-		f64 *vl_x, f64 *vr_x, f64 *vl_y, f64 *vr_y, f64 *vl_z, f64 *vr_z,
-		f64 *wl_x, f64 *wr_x, f64 *wl_y, f64 *wr_y, f64 *wl_z, f64 *wr_z, u32 flags);
-
+/* molt_step : a concise way to setup some parameters for whatever dim is being used */
+void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u32 flags);
 
 void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww);
 void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww);
@@ -341,8 +335,8 @@ void molt_cfg_print(struct molt_cfg_t *cfg)
 	}
 }
 
-/* molt_step3v : the actual MOLT function, everything else is sugar */
-void molt_step3v(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u32 flags)
+/* molt_step : the actual MOLT function, everything else is sugar */
+void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u32 flags)
 {
 	u64 totalelem, i;
 	ivec3_t mesh_dim;

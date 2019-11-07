@@ -65,6 +65,7 @@ void print_help(char *prog);
 #define FLG_VIEWER  0x02
 #define FLG_SIM     0x04
 #define FLG_TEST    0x08
+#define FLG_CUSTOM  0x10
 
 int main(int argc, char **argv)
 {
@@ -74,6 +75,9 @@ int main(int argc, char **argv)
 	s32 fd, longopt;
 	u32 flags;
 	struct molt_cfg_t *cfg;
+
+	void *lib;
+	char *libname;
 
 	hunk = NULL;
 	hunksize = 0;
@@ -94,6 +98,13 @@ int main(int argc, char **argv)
 
 			if (strcmp(s, "-nosim") == 0) {
 				flags &= ~FLG_SIM; longopt = 1; continue;
+			}
+
+			if (strcmp(s, "-custom") == 0) {
+				flags |= FLG_CUSTOM; longopt = 1;
+				libname = *(++targv);
+				targc--;
+				continue;
 			}
 
 			if (strcmp(s, "-test") == 0) {
@@ -126,6 +137,18 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
+	if (flags & FLG_CUSTOM) {
+		lib = sys_libopen(libname);
+
+		if (lib == NULL) {
+			flags &= ~FLG_CUSTOM; // ?
+			fprintf(stderr, "Did you mean to use './' for a library in the current directory?\n");
+			exit(1);
+		} else {
+			printf("Loading lib [%s]\n", libname);
+		}
+	}
+
 	fname = targv[0];
 
 	// create our disk-backed storage
@@ -149,6 +172,10 @@ int main(int argc, char **argv)
 		// cfg = sys_lumpgetbase(hunk, MOLTLUMP_CONFIG);
 		cfg = NULL;
 		v_run(hunk, hunksize, fd, cfg);
+	}
+
+	if (flags & FLG_CUSTOM) {
+		sys_libclose(lib);
 	}
 
 	sys_munmap(hunk);
@@ -203,7 +230,7 @@ void do_simulation(void *hunk, u64 hunksize)
 	vol[MOLT_VOL_CURR] = umesh->data;
 	vol[MOLT_VOL_PREV] = vmesh->data;
 
-	molt_step3v(cfg, vol, vw, ww, firststep_flg);
+	molt_step(cfg, vol, vw, ww, firststep_flg);
 
 	for (run->t_idx = 1; run->t_idx < run->t_total; run->t_idx++) {
 		curr = umesh + run->t_idx;
@@ -213,13 +240,18 @@ void do_simulation(void *hunk, u64 hunksize)
 		vol[MOLT_VOL_CURR] = (curr    )->data;
 		vol[MOLT_VOL_PREV] = (curr - 1)->data;
 
-		molt_step3v(cfg, vol, vw, ww, normal_flg);
+		molt_step(cfg, vol, vw, ww, normal_flg);
 
 		// save off whatever fields are required
 	}
 
 	// TODO (brian) move somewhere else
 	molt_cfg_free_workstore(cfg);
+}
+
+/* do_custom_step : setsup and invokes the custom MOLT routines */
+void do_custom_step(void *hunk, void *lib, u64 hunksize)
+{
 }
 
 /* setup_simulation : sets up simulation based on config.h */
