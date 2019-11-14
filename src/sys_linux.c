@@ -44,6 +44,8 @@ void *sys_mmap(int fd, size_t size)
 		sys_errorhandle();
 	}
 
+	sys_mappinglen = size;
+
 	return p;
 }
 
@@ -65,7 +67,7 @@ int sys_msync(void *base, void *ptr, size_t len, int flags)
 	u64 addlsize;
 	int rc;
 
-	addlsize = ((unsigned long)ptr) & sys_getpagesize();
+	addlsize = ((unsigned long)ptr) % sys_getpagesize();
 
 	rc = msync(((char *)ptr) - addlsize, len + addlsize, flags);
 

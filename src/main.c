@@ -53,13 +53,14 @@ void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww);
 void setuplump_umesh(struct lump_header_t *hdr, struct lump_mesh_t *state);
 
 void do_simulation(void *hunk, u64 hunksize);
+void do_custom_simulation(void *hunk, void *lib, u64 hunksize);
 
 void setupstate_print(void *hunk);
 s32 lump_magiccheck(void *hunk);
 
 void print_help(char *prog);
 
-#define USAGE "USAGE : %s [--viewer] [--nosim] [--test] [-v] [-h] outfile\n"
+#define USAGE "USAGE : %s [--viewer] [--custom <customlib>] [--nosim] [--test] [-v] [-h] outfile\n"
 
 #define FLG_VERBOSE 0x01
 #define FLG_VIEWER  0x02
@@ -159,7 +160,11 @@ int main(int argc, char **argv)
 	sys_mssync(hunk, hunk, hunksize);
 
 	if (flags & FLG_SIM) {
-		do_simulation(hunk, hunksize);
+		if (flags & FLG_CUSTOM) {
+			do_custom_simulation(hunk, lib, hunksize);
+		} else {
+			do_simulation(hunk, hunksize);
+		}
 		sys_mssync(hunk, hunk, hunksize);
 	}
 
@@ -249,8 +254,8 @@ void do_simulation(void *hunk, u64 hunksize)
 	molt_cfg_free_workstore(cfg);
 }
 
-/* do_custom_step : setsup and invokes the custom MOLT routines */
-void do_custom_step(void *hunk, void *lib, u64 hunksize)
+/* do_custom_simulation : setsup and invokes the custom MOLT routines */
+void do_custom_simulation(void *hunk, void *lib, u64 hunksize)
 {
 	struct molt_custom_t custom;
 	struct molt_cfg_t *cfg;
@@ -260,9 +265,15 @@ void do_custom_step(void *hunk, void *lib, u64 hunksize)
 	struct lump_vmesh_t *vmesh;
 	struct lump_umesh_t *umesh, *curr;
 
+	int rc;
+
 	memset(&custom, 0, sizeof custom);
 
 	// TODO (brian) pull the functions we can from our handle
+	custom.func_open  = sys_libsym(lib, "molt_custom_open");
+	custom.func_close = sys_libsym(lib, "molt_custom_close");
+	custom.func_sweep = sys_libsym(lib, "molt_custom_sweep");
+	custom.func_reorg = sys_libsym(lib, "molt_custom_reorg");
 
 	cfg     = sys_lumpgetbase(hunk, MOLTLUMP_CONFIG);
 	run     = sys_lumpgetbase(hunk, MOLTLUMP_RUNINFO);
@@ -293,6 +304,8 @@ void do_custom_step(void *hunk, void *lib, u64 hunksize)
 	custom.curr = umesh->data;
 	custom.prev = vmesh->data;
 
+	rc = custom.func_open(&custom);
+
 	molt_step_custom(&custom, MOLT_FLAG_FIRSTSTEP);
 
 	for (run->t_idx = 1; run->t_idx < run->t_total; run->t_idx++) {
@@ -307,6 +320,8 @@ void do_custom_step(void *hunk, void *lib, u64 hunksize)
 		// save off whatever fields are required
 	}
 
+	rc = custom.func_close(&custom);
+
 	// TODO (brian) move somewhere else
 	molt_cfg_free_workstore(cfg);
 }
@@ -314,7 +329,6 @@ void do_custom_step(void *hunk, void *lib, u64 hunksize)
 /* setup_simulation : sets up simulation based on config.h */
 void setup_simulation(void **base, u64 *size, int fd)
 {
-	void *newblk;
 	struct lump_header_t tmpheader;
 
 	*size = setup_lumptable(&tmpheader);

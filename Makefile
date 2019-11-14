@@ -24,8 +24,8 @@ $(TARGET): $(OBJ)
 	$(CC) $(FLAGS) -o $(TARGET) $(OBJ) $(LINKER)
 
 # this is where we have individual targets for our modules
-moltthreaded.so: src/custom/moltthreaded.c
-	$(CC) -fPIC -shared $(FLAGS) -o $@ $< -lm -lpthread
+moltthreaded.so: src/custom/moltthreaded.c src/custom/thpool.c
+	$(CC) -fPIC -shared $(FLAGS) -o $@ src/custom/moltthreaded.c src/custom/thpool.c -lm -lpthread
 
 clean: clean-obj clean-bin
 
