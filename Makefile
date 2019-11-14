@@ -3,20 +3,28 @@
 # MOLT Specific (GNU) Makefile
 
 CC = gcc
-LINKER = -lm -ldl -lSDL2 -lGL
+LINKER = -lm -ldl
 FLAGS = -Wall -g3 -march=native
 TARGET = molt
-SRC = src/calcs.c src/common.c src/main.c src/sys_linux.c src/test.c src/viewer.c
+SRC = src/calcs.c src/common.c src/main.c src/sys_linux.c src/test.c 
 OBJ = $(SRC:.c=.o)
 DEP = $(OBJ:.o=.d) # one dependency file for each source
+
+BUILDVIEWER?=0
+
+ifeq ($(BUILDVIEWER),1)
+	PPARMS := -DMOLT_VIEWER
+	SRC += src/viewer.c
+	LINKER += -lSDL2 -lGL
+endif
 
 all: $(TARGET) moltthreaded.so
 
 %.d: %.c
-	@$(CC) $(FLAGS) $< -MM -MT $(@:.d=.o) >$@
+	@$(CC) $(FLAGS) $(PPARMS) $< -MM -MT $(@:.d=.o) >$@
 
 %.o: %.c
-	$(CC) -c $(FLAGS) $(PREPROCESSPARMS) -o $@ $<
+	$(CC) -c $(FLAGS) $(PPARMS) -o $@ $<
 
 -include $(DEP)
 
