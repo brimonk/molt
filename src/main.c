@@ -38,8 +38,11 @@
 #include "sys.h"
 #include "calcs.h"
 #include "config.h"
-#include "viewer.h"
 #include "test.h"
+
+#ifdef MOLT_VIEWER
+#include "viewer.h"
+#endif
 
 /* lump setup functions */
 void setup_simulation(void **base, u64 *size, int fd);
@@ -173,11 +176,13 @@ int main(int argc, char **argv)
 		setupstate_print(hunk);
 	}
 
+#ifdef MOLT_VIEWER
 	if (flags & FLG_VIEWER) {
 		// cfg = sys_lumpgetbase(hunk, MOLTLUMP_CONFIG);
 		cfg = NULL;
 		v_run(hunk, hunksize, fd, cfg);
 	}
+#endif
 
 	if (flags & FLG_CUSTOM) {
 		sys_libclose(lib);

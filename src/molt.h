@@ -929,23 +929,8 @@ void molt_step_custom(struct molt_custom_t *custom, u32 flags)
 	f64 *next, *curr, *prev;
 	f64 tmp;
 	struct molt_cfg_t *cfg;
-	pdvec6_t vw, ww;
 
 	cfg = custom->cfg;
-
-	vw[0] = custom->vlx;
-	vw[1] = custom->vrx;
-	vw[2] = custom->vly;
-	vw[3] = custom->vry;
-	vw[4] = custom->vlz;
-	vw[5] = custom->vrz;
-
-	ww[0] = custom->wlx;
-	ww[1] = custom->wrx;
-	ww[2] = custom->wly;
-	ww[3] = custom->wry;
-	ww[4] = custom->wlz;
-	ww[5] = custom->wrz;
 
 	// first, we have to acquire some working storage, external to our meshes
 	molt_cfg_parampull_xyz(cfg, mesh_dim, MOLT_PARAM_PINC);
