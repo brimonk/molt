@@ -149,7 +149,7 @@ int main(int argc, char **argv)
 			fprintf(stderr, "Did you mean to use './' for a library in the current directory?\n");
 			exit(1);
 		} else {
-			printf("Loading lib [%s]\n", libname);
+			fprintf(stderr, "Loading lib [%s]\n", libname);
 		}
 	}
 
