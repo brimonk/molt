@@ -18,7 +18,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <float.h>
-#include <assert.h>
 #include <limits.h>
 #include <math.h>
 
@@ -53,8 +52,19 @@ struct sweep_args_t {
 	s32 orderm;
 };
 
+struct reorg_args_t {
+	f64 *src;
+	f64 *dst;
+	f64 *work; // TODO (brian) do we need this work pointer?
+	cvec3_t src_ord;
+	cvec3_t dst_ord;
+	ivec3_t dim;
+	ivec3_t row;
+};
+
 static threadpool g_pool;
 static struct sweep_args_t *g_sweepargs;
+static struct reorg_args_t *g_reorgargs;
 
 /* molt_custom_init : intializes the custom module */
 int molt_custom_open(struct molt_custom_t *custom)
@@ -88,11 +98,8 @@ int molt_custom_open(struct molt_custom_t *custom)
 	// a is the largest, followed by b, trailed by c
 	len = a * b;
 
-	printf("len is : %ld\n", len);
-
 	g_sweepargs = calloc(len, sizeof(*g_sweepargs));
-
-	printf("%s\n", __FUNCTION__);
+	g_reorgargs = calloc(len, sizeof(*g_reorgargs));
 
 	// 0 on success
 	return g_pool == NULL;
@@ -132,7 +139,6 @@ void molt_custom_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, 
 	f64 *vl, *vr;
 	f64 usednu;
 	s64 rowlen, rownum, i;
-	int rc;
 
 	/*
 	 * NOTE (brian)
@@ -172,8 +178,7 @@ void molt_custom_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, 
 	case 'z':
 		usednu = dnu[2];
 		break;
-	default:
-		assert(0);
+	default: // assert here? it's an illegal parameter
 		break;
 	}
 
@@ -194,31 +199,84 @@ void molt_custom_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, 
 		g_sweepargs[i].dnu = usednu;
 
 		// then we add it to the thread queue
-		rc = thpool_add_work(g_pool, molt_custom_sweep_work, g_sweepargs + i);
-
-		assert(rc == 0);
+		thpool_add_work(g_pool, molt_custom_sweep_work, g_sweepargs + i);
 	}
 
 	thpool_wait(g_pool);
+}
+
+/* molt_custom_reorg_work : worker function for threaded transpose */
+void molt_custom_reorg_work(void *arg)
+{
+	struct reorg_args_t *reorgargs;
+	s64 i;
+	u64 src_i, dst_i;
+	ivec3_t tmpv;
+
+	/*
+	 * NOTE (brian)
+	 *
+	 */
+
+	reorgargs = arg;
+
+	for (i = 0; i < reorgargs->dim[0]; i++) {
+		Vec3Set(tmpv, i, reorgargs->row[1], reorgargs->row[2]);
+		src_i = molt_genericidx(tmpv, reorgargs->dim, reorgargs->src_ord);
+		dst_i = molt_genericidx(tmpv, reorgargs->dim, reorgargs->dst_ord);
+		reorgargs->dst[dst_i] = reorgargs->src[src_i];
+	}
 }
 
 /* molt_custom_reorg : reorganizes a 3d mesh from src to dst */
 void molt_custom_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_ord, cvec3_t dst_ord)
 {
 	/*
-	 * arguments
-	 * dst - destination of reorg
-	 * src - source of reorg
-	 * work - working storage for swap around (avoids same pointer problem)
-	 * dim - dimensionality (dim[0] -> X, dim[1] -> Y, dim[2] -> Z)
-	 * src_ord - the ordering of src
-	 * dst_ord - the ordering of dsr
+	 * NOTE (brian)
+	 *
+	 * This function is called in exactly the same way as the default
+	 * 'molt_reorg' function. It differs, obviously, by creating threads
+	 * to perform transposition one row at a time, much like the sweeping
+	 * function.
+	 *
+	 * So,
+	 *
+	 * In this threaded module, we transpose "Y" by "Z" rows of "X",
+	 * one row of "X" per thread. Keeping in mind that the values in src_ord
+	 * and dst_ord may not be 'actual' x, y, or z.
 	 */
 
-	// we're using the default reorg for now
-	// I don't know if the overhead of threading will actually make this faster
-	molt_reorg(dst, src, work, dim, src_ord, dst_ord);
-}
+	s64 i, j;
+	s64 rowlen, rownum;
 
-// COPIES OF THE SINGLE-THREADED IMPLEMENTATION
+	/*
+	 * NOTE (brian)
+	 */
+
+	// first, get the row's length
+	rowlen = dim[0];
+
+	// then, get the number of rows
+	rownum = dim[1] * dim[2];
+
+	memset(work, 0, sizeof(f64) * rowlen * rownum);
+
+	for (i = 0; i < dim[1]; i++) {
+		for (j = 0; j < dim[2]; j++) {
+			// we setup our arguments for 'molt_reorg_custom_work'
+			g_reorgargs[i].src  = src;
+			g_reorgargs[i].dst  = dst;
+			g_reorgargs[i].work = work;
+			Vec3Copy(g_reorgargs[i].src_ord, src_ord);
+			Vec3Copy(g_reorgargs[i].dst_ord, dst_ord);
+			Vec3Copy(g_reorgargs[i].dim, dim);
+			Vec3Set(g_reorgargs[i].row, 0, i, j);
+
+			// then we add it to the thread queue
+			thpool_add_work(g_pool, molt_custom_reorg_work, g_reorgargs + i);
+		}
+	}
+
+	thpool_wait(g_pool);
+}
 

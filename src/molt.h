@@ -23,6 +23,12 @@
  *
  * 6. Fix the molt_step function.
  *
+ * 7. Do we really need working memory for the transpose? Reevaluating it for
+ *    a custom function, it seems like we don't.
+ *    For that matter, we _maybe_ don't need it for our sweeps. If everything
+ *    were bookkept correctly, we could probably get it to off of just src and
+ *    dst memory.
+ *
  * TODO Custom
  * 1. Include more function pointers for things like 'work_ix[i] -= src[i]'
  *
@@ -157,6 +163,8 @@ void molt_d_op_custom(struct molt_custom_t *custom);
 
 // TODO remove if possible
 #include <float.h>
+#include <assert.h>
+
 #include "common.h"
 
 static cvec3_t molt_ord_xyz = {'x', 'y', 'z'};
