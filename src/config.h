@@ -42,8 +42,8 @@
 
 /* MESH PARAMETERS */
 
-#define MOLT_TIMESCALE       1e-9
-#define MOLT_SPACESCALE      1e-2
+#define MOLT_TIMESCALE       1.0
+#define MOLT_SPACESCALE      1.0
 
 /*
  * There are 3 pieces of information to know about the dimensionality of the
@@ -83,11 +83,11 @@
 #define MOLT_Z_PINC          (MOLT_Z_POINTS + 1)
 
 #define MOLT_CFL \
-	(MOLT_TISSUESPEED * (MOLT_T_STEP * MOLT_INTSCALE) *\
+	(MOLT_TISSUESPEED * (MOLT_T_STEP * MOLT_TIMESCALE) *\
 	 sqrt(\
-		 1 / pow((MOLT_X_STEP * MOLT_INTSCALE), 2) + \
-		 1 / pow((MOLT_Y_STEP * MOLT_INTSCALE), 2) + \
-		 1 / pow((MOLT_Z_STEP * MOLT_INTSCALE), 2)) * 1e-10)
+		 1 / pow((MOLT_X_STEP * MOLT_SPACESCALE), 2) + \
+		 1 / pow((MOLT_Y_STEP * MOLT_SPACESCALE), 2) + \
+		 1 / pow((MOLT_Z_STEP * MOLT_SPACESCALE), 2)) * 1e-10)
 
 #define MOLT_SPACEACC     6
 #define MOLT_TIMEACC      3
@@ -102,5 +102,5 @@
 
 #define MOLT_ALPHA MOLT_BETA / (MOLT_TISSUESPEED * MOLT_T_STEP * MOLT_INTSCALE)
 
-#endif
+#endif // CONFIG_H
 

@@ -12,84 +12,20 @@
 #include <stdarg.h>
 #include <errno.h>
 
-#include <unistd.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <sys/mman.h>
 #include <dlfcn.h>
-
-#define MMAP_FLAGS MAP_SHARED
 
 #include "common.h"
 #include "sys.h"
 
-// module globals
-static size_t sys_mappinglen;
-char sys_filename[256];
-
 static void sys_errorhandle()
 {
 	fprintf(stderr, "%s", strerror(errno));
-}
-
-/* sys_mmap : system wrapper for mmap */
-void *sys_mmap(int fd, size_t size)
-{
-	void *p;
-
-	p = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE, fd, 0);
-
-	if (p == MAP_FAILED) {
-		sys_errorhandle();
-	}
-
-	sys_mappinglen = size;
-
-	return p;
-}
-
-/* sys_mmsync : system wrapper for mssync (sync memory mapped page) */
-int sys_mssync(void *base, void *ptr, size_t len)
-{
-	return sys_msync(base, ptr, len, MS_SYNC);
-}
-
-/* sys_mmsync : system wrapper for mssync (async sync memory mapped page) */
-int sys_masync(void *base, void *ptr, size_t len)
-{
-	return sys_msync(base, ptr, len, MS_ASYNC);
-}
-
-/* sys_msync : msync wrapper - ensures we write with a PAGESIZE multiple */
-int sys_msync(void *base, void *ptr, size_t len, int flags)
-{
-	u64 addlsize;
-	int rc;
-
-	addlsize = ((unsigned long)ptr) % sys_getpagesize();
-
-	rc = msync(((char *)ptr) - addlsize, len + addlsize, flags);
-
-	if (rc) {
-		sys_errorhandle();
-	}
-
-	return rc;
-}
-
-/* sys_munmap : system wrapper for munmap */
-int sys_munmap(void *ptr)
-{
-	int rc;
-
-	rc = munmap(ptr, sys_mappinglen);
-
-	if (rc < 0) {
-		sys_errorhandle();
-	}
-
-	return rc;
 }
 
 /* sys_getpagesize : system wrapper for getpagesize */
@@ -99,27 +35,27 @@ int sys_getpagesize()
 }
 
 /* sys_open : system wrapper for open */
-int sys_open(char *name)
+sys_file sys_open(char *name)
 {
-	int rc;
+	sys_file fd;
 
-	rc = open(name, O_RDWR|O_CREAT, 0666);
+	fd.fd = open(name, O_RDWR|O_CREAT, 0666);
 
-	if (rc < 0) {
+	if (fd.fd < 0) {
 		sys_errorhandle();
 	} else {
-		strncpy(sys_filename, name, sizeof(sys_filename));
+		strncpy(fd.name, name, sizeof(fd.name));
 	}
 
-	return rc;
+	return fd;
 }
 
 /* sys_open : system wrapper for close */
-int sys_close(int fd)
+int sys_close(sys_file fd)
 {
 	int rc;
 
-	rc = close(fd);
+	rc = close(fd.fd);
 
 	if (rc < 0) {
 		sys_errorhandle();
@@ -128,24 +64,66 @@ int sys_close(int fd)
 	return rc;
 }
 
-/* sys_resize : system wrapper for resizing a file */
-int sys_resize(int fd, size_t size)
+/* sys_read : wrapper for fread */
+size_t sys_read(sys_file fd, size_t start, size_t len, void *ptr)
 {
+	off_t off;
+	size_t bytes;
 	int rc;
 
-	rc = posix_fallocate(fd, 0, size);
+	off = lseek(fd.fd, start, SEEK_SET);
+	if (off == (off_t)-1) {
+		sys_errorhandle();
+		return -1;
+	}
+
+	bytes = read(fd.fd, ptr, len);
+	if (bytes != len) {
+		sys_errorhandle();
+		return -1;
+	}
+
+	rc = fsync(fd.fd);
+
 	if (rc < 0) {
 		sys_errorhandle();
 	}
 
-	return rc;
+	return bytes;
 }
 
-/* sys_resize : system wrapper for getting the size of a file */
-u64 sys_getsize()
+/* sys_write : wrapper for fwrite */
+size_t sys_write(sys_file fd, size_t start, size_t len, void *ptr)
+{
+	off_t off;
+	size_t bytes;
+	int rc;
+
+	off = lseek(fd.fd, start, SEEK_SET);
+	if (off == (off_t)-1) {
+		sys_errorhandle();
+		return -1;
+	}
+
+	bytes = write(fd.fd, ptr, len);
+	if (bytes != len) {
+		sys_errorhandle();
+		return -1;
+	}
+
+	rc = fsync(fd.fd);
+	if (rc < 0) {
+		sys_errorhandle();
+	}
+
+	return bytes;
+}
+
+/* sys_getsize : system wrapper for getting the size of a file */
+u64 sys_getsize(sys_file fd)
 {
 	struct stat st;
-	stat(sys_filename, &st);
+	stat(fd.name, &st);
 	return st.st_size;
 }
 
@@ -179,74 +157,6 @@ char *sys_readfile(char *path)
 	fclose(fp);
 
 	return buf;
-}
-
-/* sys_lumpcheck : 0 if file has correct magic, else if it doesn't */
-int sys_lumpcheck(void *ptr)
-{
-	struct lump_header_t *hdr;
-
-	hdr = ptr;
-	if (hdr->meta.magic != MOLTLUMP_MAGIC) {
-		hdr->meta.magic = MOLTLUMP_MAGIC;
-		hdr->meta.version = MOLTCURRVERSION;
-		hdr->meta.type = MOLTLUMP_TYPEBIO;
-
-		return 1;
-	}
-
-	return 0;
-}
-
-/* sys_lumprecnum : returns the number of records a given lump has */
-int sys_lumprecnum(void *base, int lumpid)
-{
-	struct lump_header_t *hdr;
-
-	hdr = base;
-
-	return hdr->lump[lumpid].lumpsize / hdr->lump[lumpid].elemsize;
-}
-
-/* sys_lumpgetbase : retrieves the base pointer for a lump */
-void *sys_lumpgetbase(void *base, int lumpid)
-{
-	struct lump_header_t *hdr;
-
-	hdr = base;
-
-	return (void *)(((char *)base) + hdr->lump[lumpid].offset);
-}
-
-/* sys_lumpgetidx : gets a pointer to an array in the lump */
-void *sys_lumpgetidx(void *base, int lumpid, int idx)
-{
-	void *ret;
-	struct lump_header_t *hdr;
-	int lumptotal;
-
-	hdr = base;
-
-	lumptotal = sys_lumprecnum(base, lumpid);
-
-	if (idx < lumptotal) { // valid according to the lump table
-		ret = ((char *)base) + hdr->lump[lumpid].offset;
-		ret = ((char *)ret) + hdr->lump[lumpid].elemsize * idx;
-	} else {
-		ret = NULL;
-	}
-
-	return ret;
-}
-
-/* sys_lumpgetmeta : returns a pointer to a lumpmeta_t for a given lumpid */
-struct lumpmeta_t *sys_lumpgetmeta(void *base, int lumpid)
-{
-	struct lump_header_t *hdr;
-
-	hdr = base;
-
-	return (struct lumpmeta_t *)(((char *)base) + hdr->lump[lumpid].offset);
 }
 
 /* sys_libopen : sys wrapper for dlopen */
@@ -286,5 +196,25 @@ int sys_libclose(void *handle)
 	}
 
 	return rc;
+}
+
+/* sys_timestamp : gets the current timestamp */
+int sys_timestamp(u64 *sec, u64 *usec)
+{
+	struct timeval tv;
+	struct timezone tz;
+	int rc;
+
+	rc = gettimeofday(&tv, &tz);
+
+	if (sec) {
+		*sec = tv.tv_sec;
+	}
+
+	if (usec) {
+		*usec = tv.tv_usec;
+	}
+
+	return 0;
 }
 

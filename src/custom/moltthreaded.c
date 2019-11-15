@@ -246,7 +246,6 @@ void molt_custom_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_o
 	 * and dst_ord may not be 'actual' x, y, or z.
 	 */
 
-#if 1
 	s64 i, j;
 
 	for (i = 0; i < dim[1]; i++) {
@@ -266,8 +265,5 @@ void molt_custom_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_o
 	}
 
 	thpool_wait(g_pool);
-#else
-	molt_reorg(dst, src, work, dim, src_ord, dst_ord);
-#endif
 }
 

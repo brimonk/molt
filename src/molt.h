@@ -922,15 +922,6 @@ f64 molt_vect_mul(f64 *veca, f64 *vecb, s32 veclen)
 /* moltcustom_step : the custom library molt stepper */
 void molt_step_custom(struct molt_custom_t *custom, u32 flags)
 {
-	/*
-	 * TODO (brian)
-	 * 1. cleanup
-	 * 1a. vw
-	 * 1b. ww
-	 * 1c. work_d*
-	 * 1d. next, curr, prev
-	 */
-
 	u64 totalelem, i;
 	ivec3_t mesh_dim;
 	f64 *work_d1, *work_d2, *work_d3;
@@ -962,8 +953,8 @@ void molt_step_custom(struct molt_custom_t *custom, u32 flags)
 	}
 
 	// now we can begin doing work
-	custom->src = next;
 	custom->dst = work_d1;
+	custom->src = next;
 	molt_c_op_custom(custom);
 
 	// u = u + beta ^ 2 * D1
@@ -973,11 +964,11 @@ void molt_step_custom(struct molt_custom_t *custom, u32 flags)
 
 	if (flags & MOLT_FLAG_FIRSTSTEP) {
 		if (cfg->timeacc >= 2) {
-			custom->src = work_d1;
 			custom->dst = work_d2;
-			molt_d_op_custom(custom);
 			custom->src = work_d1;
+			molt_d_op_custom(custom);
 			custom->dst = work_d1;
+			custom->src = work_d1;
 			molt_d_op_custom(custom);
 
 			// u = u - beta ^ 2 * D2 + beta ^ 4 / 12 * D1
@@ -987,14 +978,14 @@ void molt_step_custom(struct molt_custom_t *custom, u32 flags)
 		}
 
 		if (cfg->timeacc >= 3) {
-			custom->src = work_d2;
 			custom->dst = work_d3;
-			molt_d_op_custom(custom);
 			custom->src = work_d2;
-			custom->dst = work_d2;
 			molt_d_op_custom(custom);
-			custom->src = work_d1;
+			custom->dst = work_d2;
+			custom->src = work_d2;
+			molt_d_op_custom(custom);
 			custom->dst = work_d1;
+			custom->src = work_d1;
 			molt_c_op_custom(custom);
 
 			// u = u + (beta ^ 2 * D3 - 2 * beta ^ 4 / 12 * D2 + beta ^ 6 / 360 * D1)
@@ -1005,11 +996,11 @@ void molt_step_custom(struct molt_custom_t *custom, u32 flags)
 		}
 	} else {
 		if (cfg->timeacc >= 2) {
-			custom->src = work_d1;
 			custom->dst = work_d2;
-			molt_d_op_custom(custom);
 			custom->src = work_d1;
+			molt_d_op_custom(custom);
 			custom->dst = work_d1;
+			custom->src = work_d1;
 			molt_c_op_custom(custom);
 
 			// u = u - beta ^ 2 * D2 + beta ^ 4 / 12 * D1
@@ -1019,8 +1010,8 @@ void molt_step_custom(struct molt_custom_t *custom, u32 flags)
 		}
 
 		if (cfg->timeacc >= 3) {
-			custom->src = work_d2;
 			custom->dst = work_d3;
+			custom->src = work_d2;
 			molt_d_op_custom(custom);
 			custom->src = work_d2;
 			custom->dst = work_d2;
