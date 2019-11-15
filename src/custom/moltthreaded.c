@@ -246,20 +246,8 @@ void molt_custom_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_o
 	 * and dst_ord may not be 'actual' x, y, or z.
 	 */
 
+#if 1
 	s64 i, j;
-	s64 rowlen, rownum;
-
-	/*
-	 * NOTE (brian)
-	 */
-
-	// first, get the row's length
-	rowlen = dim[0];
-
-	// then, get the number of rows
-	rownum = dim[1] * dim[2];
-
-	memset(work, 0, sizeof(f64) * rowlen * rownum);
 
 	for (i = 0; i < dim[1]; i++) {
 		for (j = 0; j < dim[2]; j++) {
@@ -278,5 +266,8 @@ void molt_custom_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_o
 	}
 
 	thpool_wait(g_pool);
+#else
+	molt_reorg(dst, src, work, dim, src_ord, dst_ord);
+#endif
 }
 
