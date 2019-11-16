@@ -215,5 +215,7 @@ void perflog_print_mostrecent();
 #define Vec3Copy(a,b)      ((a)[0]=(b)[0],(a)[1]=(b)[1],(a)[2]=(b)[2])
 #define Vec4Copy(a,b)      ((a)[0]=(b)[0],(a)[1]=(b)[1],(a)[2]=(b)[2],(a)[3]=(b)[3])
 
+#define Vec3Scale(o,i,s)   ((o)[0]=(i)[0]*(s),(o)[1]=(i)[1]*(s),(o)[2]=(i)[2]*(s))
+
 #endif
 

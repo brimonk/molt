@@ -12,7 +12,7 @@ struct lumpheader_t {
 	u32 magic;
 	u32 flags;
 	u64 ts_created;
-	u64 filelen;
+	u64 size;
 	u64 lumps; // how many lumpinfo_t's appear in the file, right after this
 };
 
@@ -28,6 +28,9 @@ int lump_open(char *file);
 
 /* lump_close : closes the lump file */
 int lump_close();
+
+/* lump_getheader : gets the lump system's header */
+int lump_getheader(struct lumpheader_t *header);
 
 /* lump_getlumpinfo : reads the given lump at index 'index' into the pointer */
 int lump_getinfo(struct lumpinfo_t *info, u64 index);
@@ -45,3 +48,4 @@ int lump_read(char *tag, u64 entry, void *dst);
 int lump_write(char *tag, size_t size, void *src, u64 *entry);
 
 #endif // LUMP_H
+

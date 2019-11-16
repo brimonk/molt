@@ -8,6 +8,8 @@
  * Generic System Interface
  */
 
+#include <stdio.h>
+
 #include "common.h"
 
 struct sys_file {
@@ -48,6 +50,8 @@ int sys_libclose(void *handle);
 
 /* sys_timestamp : gets the current timestamp */
 int sys_timestamp(u64 *sec, u64 *usec);
+
+int sys_bipopen(FILE **readfp, FILE **writefp, char *command);
 
 #endif // SYS_H
 

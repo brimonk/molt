@@ -56,8 +56,10 @@ struct user_cfg_t {
 	s64 z_start;
 	s64 z_stop;
 	s64 z_step;
-	f64 timescale;
-	f64 spacescale;
+	f64 scale_time;
+	f64 scale_space;
+	s64 acc_time;
+	s64 acc_space;
 	f64 beta;
 	f64 alpha;
 	char *initamp;
@@ -72,23 +74,50 @@ void do_custom_simulation(void *lib);
 
 void parse_config(struct user_cfg_t *usercfg, char *file);
 
-/* lump setup functions */
-void setup_simulation(void **base, u64 *size, int fd, struct user_cfg_t *usercfg);
-u64 setup_lumptable(struct lump_header_t *hdr);
-void setuplump_cfg(struct lump_header_t *hdr, struct molt_cfg_t *cfg, struct user_cfg_t *usercfg);
-void setuplump_run(struct lump_runinfo_t *run);
-void setuplump_efield(struct lump_header_t *hdr, struct lump_efield_t *efield);
-void setuplump_pfield(struct lump_header_t *hdr, struct lump_pfield_t *pfield);
-void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw);
-void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww);
-void setuplump_umesh(struct lump_header_t *hdr, struct lump_mesh_t *state);
+/* setup : sets up the simulation */
+int setup(struct user_cfg_t *usercfg);
 
-void setupstate_print(void *hunk);
-s32 lump_magiccheck(void *hunk);
+/* setup_config : setup the config lump */
+int setup_config(struct user_cfg_t *ucfg);
+
+/* setup_vweight : sets up the v weights */
+int setup_vweight();
+
+/* setup_wweight : sets up the w weights */
+int setup_wweight();
+
+/* setup_initvelocity : inits velocity, uses custom command if available */
+int setup_initvelocity(struct user_cfg_t *usercfg);
+/* setup_initvelocity_config : sets up the initial velocity, from the config */
+int setup_initvelocity_config(f64 *initvelocity, struct user_cfg_t *usercfg);
+
+/* setup_initamplitude : inits amplitude, uses custom command if available */
+int setup_initamplitude(struct user_cfg_t *usercfg);
+/* setup_initamplitude_config : sets up the initial amplitude from the config */
+int setup_initamplitude_config(f64 *initamplitude, struct user_cfg_t *usercfg);
+
+/* dump_lumps : prints a dump of all the lumps in the lump system */
+int dump_lumps();
 
 void print_help(char *prog);
 
-#define USAGE "USAGE : %s [--viewer] [--custom <customlib>] [--nosim] [--test] [-v] [-h] outfile\n"
+#define MOLTSTR_CONFIG "CONFIG"
+#define MOLTSTR_VLX    "VLX"
+#define MOLTSTR_VRX    "VRX"
+#define MOLTSTR_VLY    "VLY"
+#define MOLTSTR_VRY    "VRY"
+#define MOLTSTR_VLZ    "VLZ"
+#define MOLTSTR_VRZ    "VRZ"
+#define MOLTSTR_WLX    "WLX"
+#define MOLTSTR_WRX    "WRX"
+#define MOLTSTR_WLY    "WLY"
+#define MOLTSTR_WRY    "WRY"
+#define MOLTSTR_WLZ    "WLZ"
+#define MOLTSTR_WRZ    "WRZ"
+#define MOLTSTR_VEL    "VEL"
+#define MOLTSTR_AMP    "AMP"
+
+#define USAGE "USAGE : %s [--config <config>] [--viewer] [--custom <customlib>] [--nosim] [--test] [-v] [-h] outfile\n"
 
 #define FLAG_VERBOSE 0x01
 #define FLAG_VIEWER  0x02
@@ -101,7 +130,7 @@ void print_help(char *prog);
 
 int main(int argc, char **argv)
 {
-	char *fname, *s, **targv, targc;
+	char *s, **targv, targc;
 	u32 flags;
 	void *lib;
 	char *libname;
@@ -178,6 +207,11 @@ int main(int argc, char **argv)
 
 	rc = lump_open(targv[0]);
 
+	rc = setup(&usercfg);
+	if (rc < 0) {
+		exit(1); // we failed setup somehow
+	}
+
 	if (flags & FLAG_SIM) {
 		if (flags & FLAG_CUSTOM) {
 			do_custom_simulation(lib);
@@ -187,7 +221,7 @@ int main(int argc, char **argv)
 	}
 
 	if (flags & FLAG_VERBOSE) {
-		// TODO (brian) replace this with the new lump walking magic
+		dump_lumps();
 	}
 
 #ifdef MOLT_VIEWER
@@ -349,477 +383,503 @@ void do_custom_simulation(void *lib)
 #endif
 }
 
-#if 0 // fixing storage system
-
-/* setup_simulation : sets up simulation based on config.h */
-void setup_simulation(void **base, u64 *size, int fd, struct user_cfg_t *usercfg)
+/* setup : sets up the simulation */
+int setup(struct user_cfg_t *usercfg)
 {
-	struct lump_header_t tmpheader;
+	int rc;
 
-	*size = setup_lumptable(&tmpheader);
-
-	// resize the file (if needed (probably always needed))
-	if (sys_getsize() < *size) {
-		if (sys_resize(fd, *size) < 0) {
-			fprintf(stderr, "Couldn't get space. Quitting\n");
-			exit(1);
-		}
+	rc = setup_config(usercfg);
+	if (rc < 0) {
+		fprintf(stderr, "ERR : config setup failed!\n");
+		return -1;
 	}
 
-	// finally, memory map and zero out the file
-	*base = sys_mmap(fd, *size);
-	memset(*base, 0, *size);
+	rc = setup_vweight();
+	if (rc < 0) {
+		fprintf(stderr, "ERR : v weight setup failed!\n");
+		return -1;
+	}
 
-	sys_lumpcheck(*base);
+	rc = setup_wweight();
+	if (rc < 0) {
+		fprintf(stderr, "ERR : w weight setup failed!\n");
+		return -1;
+	}
 
-	// ensure we copy our lump header into the mapped memory
-	memcpy(*base, &tmpheader, sizeof(tmpheader));
+	rc = setup_initvelocity(usercfg);
+	if (rc < 0) {
+		fprintf(stderr, "ERR : initial velocity setup failed!\n");
+		return -1;
+	}
 
-	printf("file size %ld\n", *size);
+	rc = setup_initamplitude(usercfg);
+	if (rc < 0) {
+		fprintf(stderr, "ERR : initial amplitude setup failed!\n");
+		return -1;
+	}
 
-	setuplump_cfg(*base, sys_lumpgetbase(*base, MOLTLUMP_CONFIG), usercfg);
-	setuplump_run(sys_lumpgetbase(*base, MOLTLUMP_RUNINFO));
-	setuplump_efield(*base, sys_lumpgetbase(*base, MOLTLUMP_EFIELD));
-	setuplump_pfield(*base, sys_lumpgetbase(*base, MOLTLUMP_PFIELD));
-	setuplump_vweight(*base, sys_lumpgetbase(*base, MOLTLUMP_VWEIGHT));
-	setuplump_wweight(*base, sys_lumpgetbase(*base, MOLTLUMP_WWEIGHT));
-	setuplump_umesh(*base, sys_lumpgetbase(*base, MOLTLUMP_UMESH));
+	return 0;
 }
 
-/* setup_lumptable : fills out the lump_header_t that gets passed in */
-u64 setup_lumptable(struct lump_header_t *hdr)
+/* setup_config : setup the config lump */
+int setup_config(struct user_cfg_t *ucfg)
 {
-	// NOTE (brian) returns the size, in bytes, the file needs to be
-	s32 curr_lump;
-	u64 curr_offset;
-
-	/* begin the setup by setting up our lump header and our lump directory */
-
-	curr_offset = sizeof(struct lump_header_t);
-
-	/* setup the lump header with the little run-time data we have */
-	curr_lump = MOLTLUMP_CONFIG;
-	hdr->lump[curr_lump].offset = curr_offset;
-	hdr->lump[curr_lump].elemsize = sizeof(struct molt_cfg_t);
-	hdr->lump[curr_lump].lumpsize = 1 * hdr->lump[curr_lump].elemsize;
-	curr_offset += hdr->lump[curr_lump].lumpsize;
-
-	/* setup our runtime info lump */
-	curr_lump = MOLTLUMP_RUNINFO;
-	hdr->lump[curr_lump].offset = curr_offset;
-	hdr->lump[curr_lump].elemsize = sizeof(struct lump_runinfo_t);
-	hdr->lump[curr_lump].lumpsize = 1 * hdr->lump[curr_lump].elemsize;
-	curr_offset += hdr->lump[curr_lump].lumpsize;
-
-	/* setup our vweight information */
-	curr_lump = MOLTLUMP_VWEIGHT;
-	hdr->lump[curr_lump].offset = curr_offset;
-	hdr->lump[curr_lump].elemsize = sizeof(struct lump_vweight_t);
-	hdr->lump[curr_lump].lumpsize = hdr->lump[curr_lump].elemsize;
-	curr_offset += hdr->lump[curr_lump].lumpsize;
-
-	/* setup our wweight information */
-	curr_lump = MOLTLUMP_WWEIGHT;
-	hdr->lump[curr_lump].offset = curr_offset;
-	hdr->lump[curr_lump].elemsize = sizeof(struct lump_wweight_t);
-	hdr->lump[curr_lump].lumpsize = hdr->lump[curr_lump].elemsize;
-	curr_offset += hdr->lump[curr_lump].lumpsize;
-
-	/* setup our efield information */
-	curr_lump = MOLTLUMP_EFIELD;
-	hdr->lump[curr_lump].offset = curr_offset;
-	hdr->lump[curr_lump].elemsize = sizeof(struct lump_efield_t);
-	hdr->lump[curr_lump].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[curr_lump].elemsize;
-	curr_offset += hdr->lump[curr_lump].lumpsize;
-
-	/* setup our pfield information */
-	curr_lump = MOLTLUMP_PFIELD;
-	hdr->lump[curr_lump].offset = curr_offset;
-	hdr->lump[curr_lump].elemsize = sizeof(struct lump_pfield_t);
-	hdr->lump[curr_lump].lumpsize = ((u64)MOLT_T_POINTS) * hdr->lump[curr_lump].elemsize;
-	curr_offset += hdr->lump[curr_lump].lumpsize;
-
-	/* the wave initial conditions */
-	curr_lump = MOLTLUMP_VMESH;
-	hdr->lump[curr_lump].offset = curr_offset;
-	hdr->lump[curr_lump].elemsize = sizeof(struct lump_vmesh_t);
-	hdr->lump[curr_lump].lumpsize = hdr->lump[curr_lump].elemsize;
-	curr_offset += hdr->lump[curr_lump].lumpsize;
-
-	/* the 3d volume lump */
-	curr_lump = MOLTLUMP_UMESH;
-	hdr->lump[curr_lump].offset = curr_offset;
-	hdr->lump[curr_lump].elemsize = sizeof(struct lump_umesh_t);
-	hdr->lump[curr_lump].lumpsize = ((u64)MOLT_T_PINC) * hdr->lump[curr_lump].elemsize;
-	curr_offset += hdr->lump[curr_lump].lumpsize;
-
-	return curr_offset;
-}
-
-/* setuplump_cfg : setup the config lump */
-void setuplump_cfg(struct lump_header_t *hdr, struct molt_cfg_t *cfg, struct user_cfg_t *ucfg)
-{
+	struct molt_cfg_t config;
 	s32 tpoints, xpoints, ypoints, zpoints;
 
-	memset(cfg, 0, sizeof *cfg);
+	memset(&config, 0, sizeof(config));
 
 	// NOTE (brian)
 	// we assume that ALL of the parameters are set in the config file
 	if (ucfg->isset) {
-		molt_cfg_set_spacescale(cfg, ucfg->spacescale);
-		molt_cfg_set_timescale(cfg, ucfg->timescale);
+		molt_cfg_set_spacescale(&config, ucfg->scale_space);
+		molt_cfg_set_timescale(&config, ucfg->scale_time);
 
-		tpoints = (ucfg->t_stop - ucfg->t_start) / 2;
-		xpoints = (ucfg->x_stop - ucfg->x_start) / 2;
-		ypoints = (ucfg->y_stop - ucfg->y_start) / 2;
-		zpoints = (ucfg->z_stop - ucfg->z_start) / 2;
+		tpoints = (ucfg->t_stop - ucfg->t_start) / ucfg->t_step;
+		xpoints = (ucfg->x_stop - ucfg->x_start) / ucfg->x_step;
+		ypoints = (ucfg->y_stop - ucfg->y_start) / ucfg->y_step;
+		zpoints = (ucfg->z_stop - ucfg->z_start) / ucfg->z_step;
 
-		molt_cfg_dims_t(cfg, ucfg->t_start, ucfg->t_stop, ucfg->t_step, tpoints, tpoints + 1);
-		molt_cfg_dims_x(cfg, ucfg->x_start, ucfg->x_stop, ucfg->x_step, xpoints, xpoints + 1);
-		molt_cfg_dims_y(cfg, ucfg->y_start, ucfg->y_stop, ucfg->y_step, ypoints, ypoints + 1);
-		molt_cfg_dims_z(cfg, ucfg->z_start, ucfg->z_stop, ucfg->z_step, zpoints, zpoints + 1);
+		molt_cfg_dims_t(&config, ucfg->t_start, ucfg->t_stop, ucfg->t_step, tpoints, tpoints + 1);
+		molt_cfg_dims_x(&config, ucfg->x_start, ucfg->x_stop, ucfg->x_step, xpoints, xpoints + 1);
+		molt_cfg_dims_y(&config, ucfg->y_start, ucfg->y_stop, ucfg->y_step, ypoints, ypoints + 1);
+		molt_cfg_dims_z(&config, ucfg->z_start, ucfg->z_stop, ucfg->z_step, zpoints, zpoints + 1);
 
-		molt_cfg_set_accparams(cfg, ucfg->spacescale, ucfg->timescale);
+		molt_cfg_set_accparams(&config, ucfg->acc_space, ucfg->acc_time);
 	} else {
-		molt_cfg_set_spacescale(cfg, MOLT_SPACESCALE);
-		molt_cfg_set_timescale(cfg, MOLT_TIMESCALE);
+		molt_cfg_set_spacescale(&config, MOLT_SPACESCALE);
+		molt_cfg_set_timescale(&config, MOLT_TIMESCALE);
 
-		molt_cfg_dims_t(cfg, MOLT_T_START, MOLT_T_STOP, MOLT_T_STEP, MOLT_T_POINTS, MOLT_T_PINC);
-		molt_cfg_dims_x(cfg, MOLT_X_START, MOLT_X_STOP, MOLT_X_STEP, MOLT_X_POINTS, MOLT_X_PINC);
-		molt_cfg_dims_y(cfg, MOLT_Y_START, MOLT_Y_STOP, MOLT_Y_STEP, MOLT_Y_POINTS, MOLT_Y_PINC);
-		molt_cfg_dims_z(cfg, MOLT_Z_START, MOLT_Z_STOP, MOLT_Z_STEP, MOLT_Z_POINTS, MOLT_Z_PINC);
+		molt_cfg_dims_t(&config, MOLT_T_START, MOLT_T_STOP, MOLT_T_STEP, MOLT_T_POINTS, MOLT_T_PINC);
+		molt_cfg_dims_x(&config, MOLT_X_START, MOLT_X_STOP, MOLT_X_STEP, MOLT_X_POINTS, MOLT_X_PINC);
+		molt_cfg_dims_y(&config, MOLT_Y_START, MOLT_Y_STOP, MOLT_Y_STEP, MOLT_Y_POINTS, MOLT_Y_PINC);
+		molt_cfg_dims_z(&config, MOLT_Z_START, MOLT_Z_STOP, MOLT_Z_STEP, MOLT_Z_POINTS, MOLT_Z_PINC);
 
-		molt_cfg_set_accparams(cfg, MOLT_SPACEACC, MOLT_TIMEACC);
+		molt_cfg_set_accparams(&config, MOLT_SPACEACC, MOLT_TIMEACC);
 	}
 
 	// compute alpha by hand because it relies on simulation specific params
 	// (beta is set by the previous function)
 	// TODO (brian) can we get alpha setting into the library?
-	cfg->alpha = cfg->beta /
-		(MOLT_TISSUESPEED * cfg->t_params[MOLT_PARAM_STEP] * cfg->time_scale);
+	config.alpha = config.beta /
+		(MOLT_TISSUESPEED * config.t_params[MOLT_PARAM_STEP] * config.time_scale);
 
-	molt_cfg_set_nu(cfg);
+	molt_cfg_set_nu(&config);
 
-	// setup working storage by virtue of the library
-	molt_cfg_set_workstore(cfg);
+	return lump_write(MOLTSTR_CONFIG, sizeof(config), &config, NULL);
 }
 
-/* simsetup_run : setup run information */
-void setuplump_run(struct lump_runinfo_t *run)
+/* setup_vweight : sets up the v weights */
+int setup_vweight()
 {
-	memset(run, 0, sizeof *run);
-
-	run->meta.magic = MOLTLUMP_MAGIC;
-	run->t_start = 0;
-	run->t_step  = .5;
-	run->t_stop  = 10;
-	run->t_idx   = 0;
-	// We only take T_POINTS steps. That's because we need the extra step from
-	// MOLT_T_PINC as the "firststep" mesh storage
-	run->t_total = MOLT_T_POINTS;
-}
-
-/* setuplump_efield : setup the efield lump */
-void setuplump_efield(struct lump_header_t *hdr, struct lump_efield_t *efield)
-{
-	struct lump_t *lump;
-	s32 i;
-
-	lump = &hdr->lump[MOLTLUMP_EFIELD];
-	memset(efield, 0, lump->lumpsize);
-
-	// set ALL of the efield meta tags
-	for (i = 0; i < MOLT_T_POINTS; i++) {
-		(efield + i)->meta.magic = MOLTLUMP_MAGIC;
-	}
-}
-
-/* setuplump_pfield : setup the pfield lump */
-void setuplump_pfield(struct lump_header_t *hdr, struct lump_pfield_t *pfield)
-{
-	struct lump_t *lump;
-	s32 i;
-
-	lump = &hdr->lump[MOLTLUMP_PFIELD];
-	memset(pfield, 0, lump->lumpsize);
-
-	// set ALL of the pfield meta tags
-	for (i = 0; i < MOLT_T_POINTS; i++) {
-		(pfield + i)->meta.magic = MOLTLUMP_MAGIC;
-	}
-}
-
-/* setuplump_vweight : setup the vweight lump */
-void setuplump_vweight(struct lump_header_t *hdr, struct lump_vweight_t *vw)
-{
-	struct molt_cfg_t *cfg;
-	s64 i;
+	struct molt_cfg_t config;
+	f64 *vlx, *vrx;
+	f64 *vly, *vry;
+	f64 *vlz, *vrz;
 	ivec3_t start, stop;
 	ivec3_t dim;
+	s64 i;
+	int rc;
 
-	memset(vw, 0, sizeof *vw);
-
-	cfg = sys_lumpgetbase(hdr, MOLTLUMP_CONFIG);
-
-	vw->meta.magic = MOLTLUMP_MAGIC;
-
-	molt_cfg_parampull_xyz(cfg, start, MOLT_PARAM_START);
-	molt_cfg_parampull_xyz(cfg, stop, MOLT_PARAM_STOP);
-	molt_cfg_parampull_xyz(cfg, dim, MOLT_PARAM_PINC);
-
-	for (i = 0; i < dim[0]; i++) // vlx
-		vw->vlx[i] = exp((-cfg->alpha) * cfg->space_scale * (i - start[0]));
-
-	for (i = 0; i < dim[0]; i++) // vrx
-		vw->vrx[i] = exp((-cfg->alpha) * cfg->space_scale * (stop[0] - i));
-
-	for (i = 0; i < dim[1]; i++) // vly
-		vw->vly[i] = exp((-cfg->alpha) * cfg->space_scale * (i - start[1]));
-
-	for (i = 0; i < dim[1]; i++) // vry
-		vw->vry[i] = exp((-cfg->alpha) * cfg->space_scale * (stop[1] - i));
-
-	for (i = 0; i < dim[2]; i++) // vlz
-		vw->vrz[i] = exp((-cfg->alpha) * cfg->space_scale * (i - start[2]));
-
-	for (i = 0; i < dim[2]; i++) // vrz
-		vw->vlz[i] = exp((-cfg->alpha) * cfg->space_scale * (stop[2] - i));
-}
-
-/* setuplump_wweight : setup the wweight lump */
-void setuplump_wweight(struct lump_header_t *hdr, struct lump_wweight_t *ww)
-{
-	struct molt_cfg_t *cfg;
-
-	cfg = sys_lumpgetbase(hdr, MOLTLUMP_CONFIG);
-
-	ww->meta.magic = MOLTLUMP_MAGIC;
-
-	// perform all of our get_exp_weights
-	get_exp_weights(cfg->nu[0], ww->xl_weight, ww->xr_weight, cfg->x_params[MOLT_PARAM_POINTS], cfg->spaceacc);
-	get_exp_weights(cfg->nu[1], ww->yl_weight, ww->yr_weight, cfg->y_params[MOLT_PARAM_POINTS], cfg->spaceacc);
-	get_exp_weights(cfg->nu[2], ww->zl_weight, ww->zr_weight, cfg->z_params[MOLT_PARAM_POINTS], cfg->spaceacc);
-}
-
-void setuplump_vmesh(struct lump_header_t *hdr, struct lump_vmesh_t *vmesh)
-{
-	// NOTE (brian) not used, initial wave velocity setup
-	// (look in setuplump_umesh)
-	vmesh->meta.magic = MOLTLUMP_MAGIC;
-}
-
-f64 initial_scale(struct molt_cfg_t *cfg, f64 v, f64 vlen)
-{
-	return 2 * (cfg->space_scale * v) / (cfg->space_scale * vlen) - 1;
-}
-
-/* setuplump_umesh : setup the initial conditions for the (3d) volume */
-void setuplump_umesh(struct lump_header_t *hdr, struct lump_mesh_t *state)
-{
-	// write zeroes to the umesh
-	s32 x, y, z, i, xpinc, ypinc, zpinc, xpoints, ypoints, zpoints;
-	struct molt_cfg_t *cfg;
-	struct lump_t *lump;
-	struct lump_umesh_t *umesh;
-	struct lump_vmesh_t *vmesh;
-	f64 fx, fy, fz;
-
-	lump = &hdr->lump[MOLTLUMP_UMESH];
-	umesh = sys_lumpgetbase(hdr, MOLTLUMP_UMESH);
-	vmesh = sys_lumpgetbase(hdr, MOLTLUMP_VMESH);
-	cfg = sys_lumpgetbase(hdr, MOLTLUMP_CONFIG);
-
-	memset(state, 0, lump->lumpsize);
-
-	vmesh->meta.magic = MOLTLUMP_MAGIC;
-	for (i = 0; i < lump->lumpsize / lump->elemsize; i++) {
-		umesh[i].meta.magic = MOLTLUMP_MAGIC;
+	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
+	if (rc < 0) {
+		return -1;
 	}
 
-	xpinc   = cfg->x_params[MOLT_PARAM_PINC];
-	ypinc   = cfg->y_params[MOLT_PARAM_PINC];
-	zpinc   = cfg->y_params[MOLT_PARAM_PINC];
-	xpoints = cfg->x_params[MOLT_PARAM_POINTS];
-	ypoints = cfg->y_params[MOLT_PARAM_POINTS];
-	zpoints = cfg->z_params[MOLT_PARAM_POINTS];
+	molt_cfg_parampull_xyz(&config, start, MOLT_PARAM_START);
+	molt_cfg_parampull_xyz(&config, stop, MOLT_PARAM_STOP);
+	molt_cfg_parampull_xyz(&config, dim, MOLT_PARAM_PINC);
 
-	// we only want to setup the first (0th) umesh applies function f
-	for (z = 0; z < zpinc; z++) {
-		for (y = 0; y < ypinc; y++) {
-			for (x = 0; x < xpinc; x++) {
-				i = IDX3D(x, y, z, ypinc, zpinc);
+	vlx = calloc(sizeof(f64), dim[0]);
+	vrx = calloc(sizeof(f64), dim[0]);
+	vly = calloc(sizeof(f64), dim[1]);
+	vry = calloc(sizeof(f64), dim[1]);
+	vlz = calloc(sizeof(f64), dim[2]);
+	vrz = calloc(sizeof(f64), dim[2]);
 
-				fx = pow(initial_scale(cfg, x, xpoints), 2);
-				fy = pow(initial_scale(cfg, y, ypoints), 2);
-				fz = pow(initial_scale(cfg, z, zpoints), 2);
-
-				umesh->data[i] = exp(-13.0 * (fx + fy + fz));
-#if 0
-				vmesh->data[i] = MOLT_TISSUESPEED * 52.0 / (xpoints * cfg->space_scale)
-					* initial_scale(cfg, x, xpoints) * umesh->data[i];
-#else
-				vmesh->data[i] = MOLT_TISSUESPEED * 2.0 * 13.0 * 2.0 / (xpoints * cfg->space_scale)
-					* initial_scale(cfg, x, xpoints) * umesh->data[i];
-#endif
-			}
-		}
+	for (i = 0; i < dim[0]; i++) { // vlx
+		vlx[i] = exp((-config.alpha) * config.space_scale * (i - start[0]));
 	}
+
+	for (i = 0; i < dim[0]; i++) { // vrx
+		vrx[i] = exp((-config.alpha) * config.space_scale * (stop[0] - i));
+	}
+
+	for (i = 0; i < dim[1]; i++) { // vly
+		vly[i] = exp((-config.alpha) * config.space_scale * (i - start[1]));
+	}
+
+	for (i = 0; i < dim[1]; i++) { // vry
+		vry[i] = exp((-config.alpha) * config.space_scale * (stop[1] - i));
+	}
+
+	for (i = 0; i < dim[2]; i++) { // vlz
+		vrz[i] = exp((-config.alpha) * config.space_scale * (i - start[2]));
+	}
+
+	for (i = 0; i < dim[2]; i++) { // vrz
+		vlz[i] = exp((-config.alpha) * config.space_scale * (stop[2] - i));
+	}
+
+	lump_write(MOLTSTR_VLX, sizeof(f64) * dim[0], vlx, NULL);
+	lump_write(MOLTSTR_VRX, sizeof(f64) * dim[0], vrx, NULL);
+	lump_write(MOLTSTR_VLY, sizeof(f64) * dim[1], vly, NULL);
+	lump_write(MOLTSTR_VRY, sizeof(f64) * dim[1], vry, NULL);
+	lump_write(MOLTSTR_VLZ, sizeof(f64) * dim[2], vlz, NULL);
+	lump_write(MOLTSTR_VRZ, sizeof(f64) * dim[2], vrz, NULL);
+
+	free(vlx);
+	free(vrx);
+	free(vly);
+	free(vry);
+	free(vlz);
+	free(vrz);
+
+	return 0;
 }
 
-/* setupstate_print : perform lots of printf debugging */
-void setupstate_print(void *hunk)
+/* setup_wweight : sets up the w weights */
+int setup_wweight()
 {
-	struct lump_header_t *hdr;
-	struct molt_cfg_t *cfg;
-	struct lump_vweight_t *vw;
-	struct lump_wweight_t *ww;
-	struct lump_vmesh_t *vmesh;
-	struct lump_umesh_t *umesh;
-	s32 i;
-	ivec2_t xweight_dim, yweight_dim, zweight_dim;
-	ivec3_t umesh_dim, vmesh_dim;
-	char buf[BUFLARGE];
+	s64 wlx_items, wrx_items;
+	s64 wly_items, wry_items;
+	s64 wlz_items, wrz_items;
+	f64 *wlx, *wrx;
+	f64 *wly, *wry;
+	f64 *wlz, *wrz;
+	struct molt_cfg_t config;
+	int rc;
 
-	hdr = hunk;
-
-	cfg = sys_lumpgetbase(hunk, MOLTLUMP_CONFIG);
-
-	/* print out lump & storage information */
-	printf("header : 0x%8x\tver : %d\t type : 0x%02x\n", hdr->meta.magic, hdr->meta.version, hdr->meta.type);
-	for (i = 0; i < MOLTLUMP_TOTAL; i++) {
-		printf("lump[%d] off : 0x%08lx\tlumpsz : 0x%08lx\telemsz : 0x%08lx\t"
-				"cnt : %ld\n",
-			i,
-			hdr->lump[i].offset,
-			hdr->lump[i].lumpsize,
-			hdr->lump[i].elemsize,
-			hdr->lump[i].lumpsize / hdr->lump[i].elemsize);
+	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
+	if (rc < 0) {
+		return -1;
 	}
-	printf("\n");
 
-	// log all of the vweights
-	vw = sys_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
-	LOG1D(vw->vlx, cfg->x_params[MOLT_PARAM_PINC], "VWEIGHT-VLX");
-	LOG1D(vw->vrx, cfg->x_params[MOLT_PARAM_PINC], "VWEIGHT-VRX");
-	LOG1D(vw->vly, cfg->y_params[MOLT_PARAM_PINC], "VWEIGHT-VLY");
-	LOG1D(vw->vry, cfg->y_params[MOLT_PARAM_PINC], "VWEIGHT-VRY");
-	LOG1D(vw->vlz, cfg->z_params[MOLT_PARAM_PINC], "VWEIGHT-VLZ");
-	LOG1D(vw->vrz, cfg->z_params[MOLT_PARAM_PINC], "VWEIGHT-VRZ");
+	wlx_items = config.x_params[MOLT_PARAM_POINTS] * (config.spaceacc + 1);
+	wrx_items = config.x_params[MOLT_PARAM_POINTS] * (config.spaceacc + 1);
+	wly_items = config.y_params[MOLT_PARAM_POINTS] * (config.spaceacc + 1);
+	wry_items = config.y_params[MOLT_PARAM_POINTS] * (config.spaceacc + 1);
+	wlz_items = config.z_params[MOLT_PARAM_POINTS] * (config.spaceacc + 1);
+	wrz_items = config.z_params[MOLT_PARAM_POINTS] * (config.spaceacc + 1);
 
-	// configure the weights, and log wweights
-	ww = sys_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
+	// allocate memory for the results
+	wlx = calloc(sizeof(f64), wlx_items);
+	wrx = calloc(sizeof(f64), wrx_items);
+	wly = calloc(sizeof(f64), wly_items);
+	wry = calloc(sizeof(f64), wry_items);
+	wlz = calloc(sizeof(f64), wlz_items);
+	wrz = calloc(sizeof(f64), wrz_items);
 
-	// setup the weights for passing
-#if 0
-	Vec2Set(xweight_dim, cfg->spaceacc + 1, cfg->x_params[MOLT_PARAM_POINTS]);
-	Vec2Set(yweight_dim, cfg->spaceacc + 1, cfg->y_params[MOLT_PARAM_POINTS]);
-	Vec2Set(zweight_dim, cfg->spaceacc + 1, cfg->z_params[MOLT_PARAM_POINTS]);
-#else
-	Vec2Set(xweight_dim, cfg->x_params[MOLT_PARAM_POINTS], cfg->spaceacc + 1);
-	Vec2Set(yweight_dim, cfg->y_params[MOLT_PARAM_POINTS], cfg->spaceacc + 1);
-	Vec2Set(zweight_dim, cfg->z_params[MOLT_PARAM_POINTS], cfg->spaceacc + 1);
-#endif
+	get_exp_weights(config.nu[0], wlx, wrx, config.x_params[MOLT_PARAM_POINTS], config.spaceacc);
+	get_exp_weights(config.nu[1], wly, wry, config.y_params[MOLT_PARAM_POINTS], config.spaceacc);
+	get_exp_weights(config.nu[2], wlz, wrz, config.z_params[MOLT_PARAM_POINTS], config.spaceacc);
 
-	LOG2D(ww->xl_weight, xweight_dim, "WWEIGHT-XL");
-	LOG2D(ww->xr_weight, xweight_dim, "WWEIGHT-XR");
-	LOG2D(ww->yl_weight, yweight_dim, "WWEIGHT-YL");
-	LOG2D(ww->yr_weight, yweight_dim, "WWEIGHT-YR");
-	LOG2D(ww->zl_weight, zweight_dim, "WWEIGHT-ZL");
-	LOG2D(ww->zr_weight, zweight_dim, "WWEIGHT-ZR");
-
-	// log out the initial state of the wave
-	vmesh = sys_lumpgetbase(hunk, MOLTLUMP_VMESH);
-	molt_cfg_parampull_xyz(cfg, vmesh_dim, MOLT_PARAM_POINTS);
-	LOG3D(vmesh->data, vmesh_dim, "VMESH");
-
-	// log out the 3d volume
-	umesh = sys_lumpgetbase(hunk, MOLTLUMP_UMESH);
-	molt_cfg_parampull_xyz(cfg, umesh_dim, MOLT_PARAM_POINTS);
-
-	for (i = 0; i < cfg->t_params[MOLT_PARAM_PINC]; i++) {
-		snprintf(buf, sizeof buf, "UMESH[%02d]", i);
-		LOG3D((umesh + i)->data, umesh_dim, buf);
-	}
-}
-
-/* lump_magiccheck : checks all lumps for the magic number, asserts if wrong */
-s32 lump_magiccheck(void *hunk)
-{
 	// TODO (brian)
-	// refactor/remove this function
-	// it (probably) shouldn't be needed
-	//
-	//
-	// the 'magic number' is MOLTLUMP_MAGIC
-	// the function also returns 0 on success, when > 0, how many magic values
-	// were incorrect
+	// think of an elegant way to error and return here if needed
+	lump_write(MOLTSTR_WLX, sizeof(f64) * wlx_items, wlx, NULL);
+	lump_write(MOLTSTR_WRX, sizeof(f64) * wrx_items, wrx, NULL);
+	lump_write(MOLTSTR_WLY, sizeof(f64) * wly_items, wly, NULL);
+	lump_write(MOLTSTR_WRY, sizeof(f64) * wry_items, wry, NULL);
+	lump_write(MOLTSTR_WLZ, sizeof(f64) * wlz_items, wlz, NULL);
+	lump_write(MOLTSTR_WRZ, sizeof(f64) * wrz_items, wrz, NULL);
 
-	struct lump_efield_t *efield;
-	struct lump_pfield_t *pfield;
-	struct lump_umesh_t *umesh;
+	free(wlx);
+	free(wrx);
+	free(wly);
+	free(wry);
+	free(wlz);
+	free(wrz);
 
-	s32 single_elem_lump[5] = {
-		MOLTLUMP_CONFIG, MOLTLUMP_RUNINFO,
-		MOLTLUMP_VWEIGHT, MOLTLUMP_WWEIGHT, MOLTLUMP_VMESH
-	};
+	return 0;
+}
 
+/* setup_initvelocity : inits velocity, uses custom command if available */
+int setup_initvelocity(struct user_cfg_t *usercfg)
+{
+	// NOTE
+	// this function allocates storage and commite it into the lump system
+	struct molt_cfg_t config;
+	u64 elements;
+	f64 *initvelocity;
+	ivec3_t dim;
+	int rc;
 
-	s32 single_elem_magic[5];
-	s32 i, rc;
-
-	rc = 0;
-
-	/* get all of the lumps that have only one magic value */
-
-	for (i = 0; i < 5; i++) {
-		single_elem_magic[i] = sys_lumpgetmeta(hunk, single_elem_lump[i])->magic;
+	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
+	if (rc < 0) {
+		return -1;
 	}
 
+	molt_cfg_parampull_xyz(&config, dim, MOLT_PARAM_PINC);
 
-	// spin through and check them all
-	for (i = 0; i < 5; i++) {
-		if (single_elem_magic[i] != MOLTLUMP_MAGIC) {
-			fprintf(stderr, "LUMP %d HAS MAGIC %#08X, should be %#08X\n",
-					single_elem_lump[i], single_elem_magic[i], MOLTLUMP_MAGIC);
-			rc += 1;
-		}
+	elements = dim[0] * (u64)dim[1] * dim[2];
+
+	initvelocity = calloc(sizeof(f64), elements);
+
+	if (usercfg && usercfg->isset) {
+		// rc = setup_initvelocity_config(initvelocity, usercfg);
 	}
 
-	efield = sys_lumpgetbase(hunk, MOLTLUMP_EFIELD);
-	pfield = sys_lumpgetbase(hunk, MOLTLUMP_PFIELD);
-	umesh   = sys_lumpgetbase(hunk, MOLTLUMP_UMESH);
+	rc = lump_write(MOLTSTR_VEL, sizeof(f64) * elements, initvelocity, NULL);
 
-	// spin through the efield
-	for (i = 0; i < MOLT_T_POINTS; i++) {
-		if ((efield + i)->meta.magic != MOLTLUMP_MAGIC) {
-			fprintf(stderr, "EFIELD %d HAS MAGIC %#08X, should be %#08X\n",
-					i, (efield + i)->meta.magic, MOLTLUMP_MAGIC);
-			rc += 1;
-		}
-	}
-
-	// spin through the pfield
-	for (i = 0; i < MOLT_T_POINTS; i++) {
-		if ((pfield + i)->meta.magic != MOLTLUMP_MAGIC) {
-			fprintf(stderr, "PFIELD %d HAS MAGIC %#08X, should be %#08X\n",
-					i, (pfield + i)->meta.magic, MOLTLUMP_MAGIC);
-			rc += 1;
-		}
-	}
-
-	// spin through all of the umesh lumps
-	for (i = 0; i < MOLT_T_PINC; i++) {
-		if ((umesh + i)->meta.magic != MOLTLUMP_MAGIC) {
-			fprintf(stderr, "umesh %d HAS MAGIC %#08X, should be %#08X\n",
-					i, (umesh + i)->meta.magic, MOLTLUMP_MAGIC);
-			rc += 1;
-		}
-	}
+	free(initvelocity);
 
 	return rc;
 }
 
-#endif // fixing storage system
+/* setup_initvelocity_config : sets up the initial velocity, from the config */
+int setup_initvelocity_config(f64 *initvelocity, struct user_cfg_t *usercfg)
+{
+	FILE *piper, *pipew;
+	struct molt_cfg_t config;
+	char buf[BUFLARGE];
+	int rc;
+	ivec3_t curr, dim;
+	dvec3_t fdim; // floating point (f64) dimensionality
+
+	rc = sys_bipopen(&piper, &pipew, usercfg->initvel);
+	if (rc < 0) {
+		return -1;
+	}
+
+	memset(&config, 0, sizeof(config));
+
+	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
+	if (rc < 0) {
+		return -1;
+	}
+
+	molt_cfg_parampull_xyz(&config, dim, MOLT_PARAM_PINC);
+
+	// print out the initial dimensionality
+	Vec3Copy(fdim, dim);
+	Vec3Scale(fdim, fdim, config.space_scale);
+	fprintf(pipew, "%lf\t%lf\t%lf\n", fdim[0], fdim[1], fdim[2]);
+
+	// TODO do x_start and friends
+	for (curr[0] = 0; curr[0] < dim[0]; curr[0]++)
+		for (curr[1] = 0; curr[1] < dim[1]; curr[1]++)
+			for (curr[2] = 0; curr[2] < dim[2]; curr[2]++) {
+				Vec3Set(fdim, curr[0], curr[1], curr[2]);
+				Vec3Scale(fdim, fdim, config.space_scale);
+
+				fprintf(pipew, "%lf\t%lf\t%lf\n", fdim[0], fdim[1], fdim[2]);
+
+				fflush(pipew);
+
+				fgets(buf, sizeof buf, piper);
+
+				fflush(piper);
+
+				printf("%s", buf);
+			}
+
+	fclose(piper);
+	fclose(pipew);
+
+	return 0;
+
+}
+
+/* setup_initamplitude : inits amplitude, uses custom command if available */
+int setup_initamplitude(struct user_cfg_t *usercfg)
+{
+	// NOTE
+	// this function allocates storage and commite it into the lump system
+	struct molt_cfg_t config;
+	u64 elements;
+	f64 *initamplitude;
+	ivec3_t dim;
+	int rc;
+
+	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
+	if (rc < 0) {
+		return -1;
+	}
+
+	molt_cfg_parampull_xyz(&config, dim, MOLT_PARAM_PINC);
+
+	elements = dim[0] * (u64)dim[1] * dim[2];
+
+	initamplitude = calloc(sizeof(f64), elements);
+
+	if (usercfg && usercfg->isset) {
+		// TODO use the initial amplitude config
+		// rc = setup_initvelocity_config(initamplitude, usercfg);
+	}
+
+	rc = lump_write(MOLTSTR_AMP, sizeof(f64) * elements, initamplitude, NULL);
+
+	free(initamplitude);
+
+	return rc;
+}
+
+/* setup_initamplitude_config : sets up the initial amplitude from the config */
+int setup_initamplitude_config(f64 *initamplitude, struct user_cfg_t *usercfg)
+{
+	return 0;
+}
+
+/* dump_lumps : prints a dump of all the lumps in the lump system */
+int dump_lumps()
+{
+	struct lumpheader_t lheader;
+	struct lumpinfo_t linfo;
+	struct molt_cfg_t config;
+	f64 *fptr;
+	u64 i, j, ampnum;
+	ivec3_t dim;
+	ivec2_t weight_dim;
+	int rc;
+	char buf[BUFSMALL];
+
+	// NOTE
+	// we follow a super easy pattern
+	// read data from the lump system, and print it to stdout
+	
+	rc = lump_getheader(&lheader);
+	if (rc < 0) {
+		return -1;
+	}
+
+	printf("header:\n");
+	printf("\tmagic      : %s\n",   (char *)&lheader.magic);
+	printf("\tflags      : 0x%X\n", lheader.flags);
+	printf("\tts_created : %ld\n",  lheader.ts_created);
+	printf("\tsize       : %ld\n",  lheader.size);
+	printf("\tlumps      : %ld\n",  lheader.lumps);
+
+	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
+	if (rc < 0) {
+		return -1;
+	}
+
+	molt_cfg_parampull_xyz(&config, dim, MOLT_PARAM_PINC);
+	fptr = calloc(sizeof(f64), dim[0] * (u64)dim[1] * dim[2]);
+
+	for (i = 0; i < lheader.lumps; i++) {
+		rc = lump_getinfo(&linfo, i);
+
+		if (strncmp(linfo.tag, MOLTSTR_CONFIG, sizeof(linfo.tag)) == 0) {
+		} else if (strncmp(linfo.tag, MOLTSTR_VLX, sizeof(linfo.tag)) == 0) {
+			rc = lump_read(MOLTSTR_VLX, 0, fptr);
+			if (rc < 0) {
+				return -1;
+			}
+			LOG1D(fptr, config.x_params[MOLT_PARAM_PINC], MOLTSTR_VLX);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_VRX, sizeof(linfo.tag)) == 0) {
+			rc = lump_read(MOLTSTR_VRX, 0, fptr);
+			if (rc < 0) {
+				return -1;
+			}
+			LOG1D(fptr, config.x_params[MOLT_PARAM_PINC], MOLTSTR_VRX);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_VLY, sizeof(linfo.tag)) == 0) {
+			rc = lump_read(MOLTSTR_VLY, 0, fptr);
+			if (rc < 0) {
+				return -1;
+			}
+			LOG1D(fptr, config.x_params[MOLT_PARAM_PINC], MOLTSTR_VLY);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_VRY, sizeof(linfo.tag)) == 0) {
+			rc = lump_read(MOLTSTR_VRY, 0, fptr);
+			if (rc < 0) {
+				return -1;
+			}
+			LOG1D(fptr, config.x_params[MOLT_PARAM_PINC], MOLTSTR_VRY);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_VLZ, sizeof(linfo.tag)) == 0) {
+			rc = lump_read(MOLTSTR_VLZ, 0, fptr);
+			if (rc < 0) {
+				return -1;
+			}
+			LOG1D(fptr, config.x_params[MOLT_PARAM_PINC], MOLTSTR_VLZ);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_VRZ, sizeof(linfo.tag)) == 0) {
+			rc = lump_read(MOLTSTR_VRZ, 0, fptr);
+			if (rc < 0) {
+				return -1;
+			}
+			LOG1D(fptr, config.x_params[MOLT_PARAM_PINC], MOLTSTR_VRZ);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_WLX, sizeof(linfo.tag)) == 0) {
+			rc = lump_read(MOLTSTR_WLX, 0, fptr);
+			if (rc < 0) {
+				return -1;
+			}
+			Vec2Set(weight_dim, config.x_params[MOLT_PARAM_POINTS], config.spaceacc + 1);
+			LOG2D(fptr, weight_dim, MOLTSTR_WLX);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_WRX, sizeof(linfo.tag)) == 0) {
+			rc = lump_read(MOLTSTR_WRX, 0, fptr);
+			if (rc < 0) {
+				return -1;
+			}
+			Vec2Set(weight_dim, config.x_params[MOLT_PARAM_POINTS], config.spaceacc + 1);
+			LOG2D(fptr, weight_dim, MOLTSTR_WRX);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_WLY, sizeof(linfo.tag)) == 0) {
+			rc = lump_read(MOLTSTR_WLY, 0, fptr);
+			if (rc < 0) {
+				return -1;
+			}
+			Vec2Set(weight_dim, config.y_params[MOLT_PARAM_POINTS], config.spaceacc + 1);
+			LOG2D(fptr, weight_dim, MOLTSTR_WLY);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_WRY, sizeof(linfo.tag)) == 0) {
+			rc = lump_read(MOLTSTR_WRY, 0, fptr);
+			if (rc < 0) {
+				return -1;
+			}
+			Vec2Set(weight_dim, config.y_params[MOLT_PARAM_POINTS], config.spaceacc + 1);
+			LOG2D(fptr, weight_dim, MOLTSTR_WRY);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_WLZ, sizeof(linfo.tag)) == 0) {
+			rc = lump_read(MOLTSTR_WLZ, 0, fptr);
+			if (rc < 0) {
+				return -1;
+			}
+			Vec2Set(weight_dim, config.z_params[MOLT_PARAM_POINTS], config.spaceacc + 1);
+			LOG2D(fptr, weight_dim, MOLTSTR_WLZ);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_WRZ, sizeof(linfo.tag)) == 0) {
+			rc = lump_read(MOLTSTR_WRZ, 0, fptr);
+			if (rc < 0) {
+				return -1;
+			}
+			Vec2Set(weight_dim, config.z_params[MOLT_PARAM_POINTS], config.spaceacc + 1);
+			LOG2D(fptr, weight_dim, MOLTSTR_WRZ);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_VEL, sizeof(linfo.tag)) == 0) {
+			rc = lump_read(MOLTSTR_VEL, 0, fptr);
+			if (rc < 0) {
+				return -1;
+			}
+			LOG3D(fptr, dim, MOLTSTR_VEL);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_AMP, sizeof(linfo.tag)) == 0) {
+			rc = lump_getnumentries(MOLTSTR_AMP, &ampnum);
+			if (rc < 0) { return -1; }
+
+			for (j = 0; j < ampnum; j++) {
+				rc = lump_read(MOLTSTR_AMP, j, fptr);
+				if (rc < 0) { return -1; }
+
+				snprintf(buf, sizeof buf, "AMP[%ld]", j);
+
+				LOG3D(fptr, dim, buf);
+			}
+
+		} else {
+			printf("Lump [%.*s] doesn't have any logging logic!\n", (int)sizeof(linfo.tag), linfo.tag);
+		}
+	}
+
+	free(fptr);
+
+	return rc;
+}
 
 /* print_help : prints some help text */
 void print_help(char *prog)
@@ -840,7 +900,7 @@ void print_help(char *prog)
 void parse_config(struct user_cfg_t *usercfg, char *file)
 {
 	FILE *fp;
-	char *key, *val;
+	char *key, *val, *tmp;
 	char buf[BUFLARGE];
 
 	memset(usercfg, 0, sizeof(*usercfg));
@@ -861,6 +921,12 @@ void parse_config(struct user_cfg_t *usercfg, char *file)
 		val = strchr(key, ':');
 		*val = 0;
 		val++;
+
+		// make sure our key is NULL terminated
+		tmp = strchr(key, ' ');
+		if (tmp) {
+			*tmp = 0;
+		}
 
 		while (*key == ' ') {
 			key++;
@@ -893,10 +959,14 @@ void parse_config(struct user_cfg_t *usercfg, char *file)
 			usercfg->z_step = atof(val);
 		} else if (strcmp("z_stop", key) == 0) {
 			usercfg->z_stop = atof(val);
-		} else if (strcmp("timescale", key) == 0) {
-			usercfg->timescale = atof(val);
-		} else if (strcmp("spacescale", key) == 0) {
-			usercfg->spacescale = atof(val);
+		} else if (strcmp("scale_time", key) == 0) {
+			usercfg->scale_time = atof(val);
+		} else if (strcmp("scale_space", key) == 0) {
+			usercfg->scale_space = atof(val);
+		} else if (strcmp("acc_time", key) == 0) {
+			usercfg->acc_time = atol(val);
+		} else if (strcmp("acc_space", key) == 0) {
+			usercfg->acc_space = atol(val);
 		} else if (strcmp("beta", key) == 0) {
 			usercfg->beta = atof(val);
 		} else if (strcmp("alpha", key) == 0) {
@@ -907,6 +977,8 @@ void parse_config(struct user_cfg_t *usercfg, char *file)
 			usercfg->initvel = strdup(val);
 		}
 	}
+
+	fclose(fp);
 
 	usercfg->isset = 1;
 }

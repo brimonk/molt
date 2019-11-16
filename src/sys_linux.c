@@ -39,7 +39,7 @@ sys_file sys_open(char *name)
 {
 	sys_file fd;
 
-	fd.fd = open(name, O_RDWR|O_CREAT, 0666);
+	fd.fd = open(name, O_RDWR|O_CREAT|O_TRUNC, 0666);
 
 	if (fd.fd < 0) {
 		sys_errorhandle();
@@ -213,6 +213,77 @@ int sys_timestamp(u64 *sec, u64 *usec)
 
 	if (usec) {
 		*usec = tv.tv_usec;
+	}
+
+	return 0;
+}
+
+/* current_shell : gets the current shell, for use in bipopen */
+static char *current_shell()
+{
+	return getenv("SHELL");
+}
+
+/* sys_bipopen : system's bi-directional popen */
+int sys_bipopen(FILE **readfp, FILE **writefp, char *command)
+{
+	// NOTE (brian)
+	// on systems that have a bidirectional popen, this function
+	// could probably be removed
+
+	pid_t pid;
+	int pipes[4];
+	char *args[BUFSMALL];
+	char buf[BUFLARGE];
+	char *s;
+	int i, rc;
+
+	strncpy(buf, command, sizeof(buf));
+
+	pipe(&pipes[0]); // parent read, child write pipes
+	pipe(&pipes[2]); // child read, parent write pipes
+
+	if (0 < (pid = fork())) { // parent
+		*readfp  = fdopen(pipes[0], "r");
+		*writefp = fdopen(pipes[3], "w");
+
+		close(pipes[1]);
+		close(pipes[2]);
+
+		return 0;
+	} else if (pid == 0) { // child
+		memset(args, 0, sizeof(args));
+
+		// close parent pipes, we don't need them
+		close(pipes[2]);
+		close(pipes[1]);
+
+		// parse our arguments for exec
+		s = strtok(buf, " ");
+		for (i = 0; s && i < ARRSIZE(args); i++) {
+			args[i] = s;
+			s = strtok(NULL, " ");
+		}
+
+		for (i = 0; args[i]; i++)
+			printf("%d : %s\n", i, args[i]);
+
+		close(STDOUT_FILENO);
+		dup(pipes[0]);
+
+		close(STDIN_FILENO);
+		dup(pipes[3]);
+
+		close(pipes[0]);
+		close(pipes[3]);
+
+		rc = execvp(args[0], args);
+
+		printf("child fork() failed : %s\n", strerror(errno));
+
+		exit(0); // kill the child
+	} else {
+		return -1;
 	}
 
 	return 0;

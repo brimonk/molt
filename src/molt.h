@@ -249,8 +249,8 @@ void molt_cfg_set_spacescale(struct molt_cfg_t *cfg, f64 scale)
 /* molt_cfg_set_accparams : set MOLT accuracy parameters */
 void molt_cfg_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc)
 {
-	cfg->spaceacc = spaceacc;
-	cfg->timeacc  = timeacc ;
+	cfg->spaceacc = (s64)spaceacc;
+	cfg->timeacc  = (s64)timeacc ;
 
 	// TODO possibly compute these values here???
 	switch (cfg->timeacc) {
