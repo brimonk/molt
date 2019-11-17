@@ -25,7 +25,7 @@
 
 static void sys_errorhandle()
 {
-	fprintf(stderr, "%s", strerror(errno));
+	fprintf(stderr, "%s\n", strerror(errno));
 }
 
 /* sys_getpagesize : system wrapper for getpagesize */
@@ -240,42 +240,52 @@ int sys_bipopen(FILE **readfp, FILE **writefp, char *command)
 
 	strncpy(buf, command, sizeof(buf));
 
-	pipe(&pipes[0]); // parent read, child write pipes
-	pipe(&pipes[2]); // child read, parent write pipes
+	memset(args, 0, sizeof(args));
+
+	// parse our arguments for exec
+	s = strtok(buf, " ");
+	for (i = 0; s && i < ARRSIZE(args); i++) {
+		args[i] = s;
+		s = strtok(NULL, " ");
+	}
+
+	rc = pipe(&pipes[0]); // parent read, child write pipes
+	if (rc < 0) {
+		sys_errorhandle();
+	}
+	rc = pipe(&pipes[2]); // child read, parent write pipes
+	if (rc < 0) {
+		sys_errorhandle();
+	}
 
 	if (0 < (pid = fork())) { // parent
 		*readfp  = fdopen(pipes[0], "r");
 		*writefp = fdopen(pipes[3], "w");
 
-		close(pipes[1]);
-		close(pipes[2]);
+		rc = setvbuf(*readfp, NULL, _IONBF, 0);
+		rc = setvbuf(*writefp, NULL, _IONBF, 0);
+
+		rc = close(pipes[1]);
+		if (rc < 0) {
+			sys_errorhandle();
+		}
+		rc = close(pipes[2]);
+		if (rc < 0) {
+			sys_errorhandle();
+		}
 
 		return 0;
 	} else if (pid == 0) { // child
-		memset(args, 0, sizeof(args));
 
 		// close parent pipes, we don't need them
-		close(pipes[2]);
-		close(pipes[1]);
-
-		// parse our arguments for exec
-		s = strtok(buf, " ");
-		for (i = 0; s && i < ARRSIZE(args); i++) {
-			args[i] = s;
-			s = strtok(NULL, " ");
-		}
-
-		for (i = 0; args[i]; i++)
-			printf("%d : %s\n", i, args[i]);
-
-		close(STDOUT_FILENO);
-		dup(pipes[0]);
-
-		close(STDIN_FILENO);
-		dup(pipes[3]);
-
 		close(pipes[0]);
 		close(pipes[3]);
+
+		dup2(pipes[1], STDOUT_FILENO);
+		dup2(pipes[2], STDIN_FILENO);
+
+		close(pipes[1]);
+		close(pipes[2]);
 
 		rc = execvp(args[0], args);
 
@@ -283,6 +293,7 @@ int sys_bipopen(FILE **readfp, FILE **writefp, char *command)
 
 		exit(0); // kill the child
 	} else {
+		sys_errorhandle();
 		return -1;
 	}
 

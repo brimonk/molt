@@ -36,6 +36,7 @@
 #include "config.h"
 #include "lump.h"
 #include "sys.h"
+#include "thpool.h"
 #include "test.h"
 
 #ifdef MOLT_VIEWER
@@ -64,6 +65,14 @@ struct user_cfg_t {
 	f64 alpha;
 	char *initamp;
 	char *initvel;
+};
+
+struct configthreadargs_t {
+	FILE *fp;
+	struct user_cfg_t *usercfg;
+	ivec3_t dim;
+	ivec3_t fdim;
+	f64 *vol;
 };
 
 /* parse_config : parses the config file */
@@ -96,6 +105,11 @@ int setup_initvelocity_config(f64 *initvelocity, struct user_cfg_t *usercfg);
 int setup_initamplitude(struct user_cfg_t *usercfg);
 /* setup_initamplitude_config : sets up the initial amplitude from the config */
 int setup_initamplitude_config(f64 *initamplitude, struct user_cfg_t *usercfg);
+
+/* setup_customprog_write : function for setup writing (parent -> child) */
+void setup_customprog_write(void *arg);
+/* setup_customprog_read : function for setup reading (parent <- child) */
+void setup_customprog_read(void *arg);
 
 /* dump_lumps : prints a dump of all the lumps in the lump system */
 int dump_lumps();
@@ -326,7 +340,7 @@ int do_simulation()
 
 	molt_cfg_set_workstore(&config);
 
-	i = 0;
+	i = config.t_params[MOLT_PARAM_START];
 	flags = MOLT_FLAG_FIRSTSTEP;
 
 	do {
@@ -339,7 +353,8 @@ int do_simulation()
 		memset(next, 0, volumebytes);
 
 		flags = 0;
-	} while (i++ < config.t_params[MOLT_PARAM_STOP]);
+		i += config.t_params[MOLT_PARAM_STEP];
+	} while (i < config.t_params[MOLT_PARAM_STOP]);
 
 	molt_cfg_free_workstore(&config);
 
@@ -440,7 +455,7 @@ int do_custom_simulation(void *lib)
 
 	custom.func_open(&custom);
 
-	i = 0;
+	i = config.t_params[MOLT_PARAM_START];
 	flags = MOLT_FLAG_FIRSTSTEP;
 
 	do {
@@ -453,7 +468,8 @@ int do_custom_simulation(void *lib)
 		memset(custom.next, 0, volumebytes);
 
 		flags = 0;
-	} while (i++ < config.t_params[MOLT_PARAM_STOP]);
+		i += config.t_params[MOLT_PARAM_STEP];
+	} while (i < config.t_params[MOLT_PARAM_STOP]);
 
 	custom.func_close(&custom);
 
@@ -700,6 +716,10 @@ int setup_initvelocity(struct user_cfg_t *usercfg)
 	u64 elements;
 	f64 *initvelocity;
 	ivec3_t dim;
+	dvec3_t fdim;
+	FILE *pipe_read, *pipe_write;
+	struct configthreadargs_t args_read, args_write;
+	threadpool pool;
 	int rc;
 
 	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
@@ -709,12 +729,40 @@ int setup_initvelocity(struct user_cfg_t *usercfg)
 
 	molt_cfg_parampull_xyz(&config, dim, MOLT_PARAM_PINC);
 
+	Vec3Scale(fdim, dim, usercfg->scale_space);
+
 	elements = dim[0] * (u64)dim[1] * dim[2];
 
 	initvelocity = calloc(sizeof(f64), elements);
 
 	if (usercfg && usercfg->isset) {
-		// rc = setup_initvelocity_config(initvelocity, usercfg);
+		rc = sys_bipopen(&pipe_read, &pipe_write, usercfg->initvel);
+		if (rc < 0) {
+			return -1;
+		}
+
+		pool = thpool_init(2);
+
+		args_read.fp       = pipe_read;
+		args_write.fp      = pipe_write;
+		args_read.usercfg  = usercfg;
+		args_write.usercfg = usercfg;
+		args_read.vol      = initvelocity;
+		args_write.vol     = initvelocity;
+		Vec3Copy(args_read.dim, dim);
+		Vec3Copy(args_read.dim, dim);
+		Vec3Copy(args_read.fdim, fdim);
+		Vec3Copy(args_write.fdim, fdim);
+
+		thpool_add_work(pool, setup_customprog_write, &args_write);
+		thpool_add_work(pool, setup_customprog_read, &args_read);
+
+		thpool_wait(pool);
+
+		thpool_destroy(pool);
+
+		fclose(pipe_read);
+		fclose(pipe_write);
 	}
 
 	rc = lump_write(MOLTSTR_VEL, sizeof(f64) * elements, initvelocity, NULL);
@@ -724,57 +772,53 @@ int setup_initvelocity(struct user_cfg_t *usercfg)
 	return rc;
 }
 
-/* setup_initvelocity_config : sets up the initial velocity, from the config */
-int setup_initvelocity_config(f64 *initvelocity, struct user_cfg_t *usercfg)
+/* setup_customprog_write : function for threading setup */
+void setup_customprog_write(void *arg)
 {
-	FILE *piper, *pipew;
-	struct molt_cfg_t config;
+	struct configthreadargs_t *cargs;
+	f64 scale;
+	dvec3_t fout;
+	ivec3_t curr;
+
+	cargs = arg;
+
+	scale = cargs->usercfg->scale_space;
+
+	Vec3Copy(fout, cargs->fdim);
+
+	fprintf(cargs->fp, "%lf\t%lf\t%lf\n", fout[0], fout[1], fout[2]);
+
+	Vec3Set(curr, 0, 0, 0);
+	for (; curr[0] < cargs->dim[0]; curr[0]++) {
+		for (; curr[1] < cargs->dim[1]; curr[1]++) {
+			for (; curr[2] < cargs->dim[2]; curr[2]++) {
+				Vec3Copy(fout, curr);
+				Vec3Scale(fout, curr, scale);
+				fprintf(cargs->fp, "%lf\t%lf\t%lf\n", fout[0], fout[1], fout[2]);
+			}
+		}
+	}
+}
+
+/* setup_customprog_read : function for setup reading (parent <- child) */
+void setup_customprog_read(void *arg)
+{
+	struct configthreadargs_t *cargs;
+	u64 pos;
+	ivec3_t curr;
 	char buf[BUFLARGE];
-	int rc;
-	ivec3_t curr, dim;
-	dvec3_t fdim; // floating point (f64) dimensionality
 
-	rc = sys_bipopen(&piper, &pipew, usercfg->initvel);
-	if (rc < 0) {
-		return -1;
-	}
+	cargs = arg;
 
-	memset(&config, 0, sizeof(config));
-
-	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
-	if (rc < 0) {
-		return -1;
-	}
-
-	molt_cfg_parampull_xyz(&config, dim, MOLT_PARAM_PINC);
-
-	// print out the initial dimensionality
-	Vec3Copy(fdim, dim);
-	Vec3Scale(fdim, fdim, config.space_scale);
-	fprintf(pipew, "%lf\t%lf\t%lf\n", fdim[0], fdim[1], fdim[2]);
-
-	// TODO do x_start and friends
-	for (curr[0] = 0; curr[0] < dim[0]; curr[0]++)
-		for (curr[1] = 0; curr[1] < dim[1]; curr[1]++)
-			for (curr[2] = 0; curr[2] < dim[2]; curr[2]++) {
-				Vec3Set(fdim, curr[0], curr[1], curr[2]);
-				Vec3Scale(fdim, fdim, config.space_scale);
-
-				fprintf(pipew, "%lf\t%lf\t%lf\n", fdim[0], fdim[1], fdim[2]);
-
-				fflush(pipew);
-
-				fgets(buf, sizeof buf, piper);
-
-				fflush(piper);
-
+	Vec3Set(curr, 0, 0, 0);
+	for (; curr[0] < cargs->dim[0]; curr[0]++) {
+		for (; curr[1] < cargs->dim[1]; curr[1]++) {
+			for (; curr[2] < cargs->dim[2]; curr[2]++) {
+				fgets(buf, sizeof(buf), cargs->fp);
 				printf("%s", buf);
 			}
-
-	fclose(piper);
-	fclose(pipew);
-
-	return 0;
+		}
+	}
 
 }
 
@@ -825,7 +869,7 @@ int dump_lumps()
 	struct lumpinfo_t linfo;
 	struct molt_cfg_t config;
 	f64 *fptr;
-	u64 i, j, ampnum;
+	u64 i;
 	ivec3_t dim;
 	ivec2_t weight_dim;
 	int rc;
@@ -957,17 +1001,9 @@ int dump_lumps()
 			LOG3D(fptr, dim, MOLTSTR_VEL);
 
 		} else if (strncmp(linfo.tag, MOLTSTR_AMP, sizeof(linfo.tag)) == 0) {
-			rc = lump_getnumentries(MOLTSTR_AMP, &ampnum);
 			if (rc < 0) { return -1; }
-
-			for (j = 0; j < ampnum; j++) {
-				rc = lump_read(MOLTSTR_AMP, j, fptr);
-				if (rc < 0) { return -1; }
-
-				snprintf(buf, sizeof buf, "AMP[%ld]", j);
-
-				LOG3D(fptr, dim, buf);
-			}
+			snprintf(buf, sizeof buf, "AMP[%ld]", linfo.entry);
+			LOG3D(fptr, dim, buf);
 
 		} else {
 			printf("Lump [%.*s] doesn't have any logging logic!\n", (int)sizeof(linfo.tag), linfo.tag);

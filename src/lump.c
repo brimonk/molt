@@ -90,23 +90,23 @@ int lump_getinfo(struct lumpinfo_t *info, u64 index)
 int lump_getnumentries(char *tag, u64 *entries)
 {
 	struct lumpinfo_t info;
-	u64 i;
+	u64 i, j;
 	int rc;
 
 	*entries = 0;
 
-	for (i = 0; ; i++) {
+	for (i = 0, j = 0; ; i++) {
 		rc = lump_getinfo(&info, i);
 		if (rc < 0) {
-			return -1;
+			break;
 		}
 
 		if (strncmp(tag, info.tag, sizeof(info.tag)) == 0) {
-			break;
+			j++;
 		}
 	}
 
-	*entries = i;
+	*entries = j;
 
 	return 0;
 }

@@ -28,7 +28,7 @@
 #define MOLT_IMPLEMENTATION
 #include "../molt.h"
 
-#include "thpool.h"
+#include "../thpool.h"
 
 // now we can actually define the functions that are going to be called
 // from the molt module
