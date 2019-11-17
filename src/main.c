@@ -67,12 +67,13 @@ struct user_cfg_t {
 };
 
 /* parse_config : parses the config file */
-void parse_config(struct user_cfg_t *usercfg, char *file);
+int parse_config(struct user_cfg_t *usercfg, char *file);
 
-void do_simulation();
-void do_custom_simulation(void *lib);
+/* do_simulation : actually does the simulating */
+int do_simulation();
 
-void parse_config(struct user_cfg_t *usercfg, char *file);
+/* do_custom_simulation : actually does the simulating, with custom functions */
+int do_custom_simulation(void *lib);
 
 /* setup : sets up the simulation */
 int setup(struct user_cfg_t *usercfg);
@@ -242,145 +243,242 @@ int main(int argc, char **argv)
 	return 0;
 }
 
+#define PRINTANDFAIL(x)  ({fprintf(stderr, "ERR : %s\n", (x)); return -1;})
+
 /* do_simulation : actually does the simulating */
-void do_simulation()
+int do_simulation()
 {
-#if 0
-	struct molt_cfg_t *cfg;
-	struct lump_runinfo_t *run;
-	struct lump_vweight_t *vw_lump;
-	struct lump_wweight_t *ww_lump;
-	struct lump_vmesh_t *vmesh;
-	struct lump_umesh_t *umesh, *curr;
-
-	u32 firststep_flg, normal_flg;
-
-	pdvec3_t vol;
+	struct molt_cfg_t config;
 	pdvec6_t vw, ww;
+	pdvec3_t vol;
+	f64 *prev, *curr, *next;
+	u32 flags;
+	u64 elems, i, volumebytes;;
+	ivec3_t pinc;
+	ivec3_t points;
+	int rc;
 
-	cfg     = sys_lumpgetbase(hunk, MOLTLUMP_CONFIG);
-	run     = sys_lumpgetbase(hunk, MOLTLUMP_RUNINFO);
-	vw_lump = sys_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
-	ww_lump = sys_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
-	vmesh   = sys_lumpgetbase(hunk, MOLTLUMP_VMESH);
-	umesh   = sys_lumpgetbase(hunk, MOLTLUMP_UMESH);
+	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
+	if (rc < 0) { PRINTANDFAIL("couldn't read config from lump system"); }
 
-	vw[0] = vw_lump->vlx;
-	vw[1] = vw_lump->vrx;
-	vw[2] = vw_lump->vly;
-	vw[3] = vw_lump->vry;
-	vw[4] = vw_lump->vlz;
-	vw[5] = vw_lump->vrz;
+	molt_cfg_parampull_xyz(&config, pinc, MOLT_PARAM_PINC);
+	molt_cfg_parampull_xyz(&config, points, MOLT_PARAM_POINTS);
 
-	ww[0] = ww_lump->xl_weight;
-	ww[1] = ww_lump->xr_weight;
-	ww[2] = ww_lump->yl_weight;
-	ww[3] = ww_lump->yr_weight;
-	ww[4] = ww_lump->zl_weight;
-	ww[5] = ww_lump->zr_weight;
+	elems = pinc[0] * (u64)pinc[1] * pinc[2];
 
-	// we have to set the first step flag, for caring about initial conditions
-	firststep_flg = MOLT_FLAG_FIRSTSTEP;
-	normal_flg = 0;
+	// get working memory for all of our data points we need
 
-	// setup the volume info for the FIRST step
-	// 0 - next, 1 - curr, 2 - prev
-	vol[MOLT_VOL_NEXT] = (umesh + 1)->data;
-	vol[MOLT_VOL_CURR] = umesh->data;
-	vol[MOLT_VOL_PREV] = vmesh->data;
+	vw[0] = calloc(sizeof(f64), pinc[0]);
+	vw[1] = calloc(sizeof(f64), pinc[0]);
+	vw[2] = calloc(sizeof(f64), pinc[1]);
+	vw[3] = calloc(sizeof(f64), pinc[1]);
+	vw[4] = calloc(sizeof(f64), pinc[2]);
+	vw[5] = calloc(sizeof(f64), pinc[2]);
 
-	molt_step(cfg, vol, vw, ww, firststep_flg);
+	ww[0] = calloc(sizeof(f64), points[0] * (config.spaceacc + 1));
+	ww[1] = calloc(sizeof(f64), points[0] * (config.spaceacc + 1));
+	ww[2] = calloc(sizeof(f64), points[1] * (config.spaceacc + 1));
+	ww[3] = calloc(sizeof(f64), points[1] * (config.spaceacc + 1));
+	ww[4] = calloc(sizeof(f64), points[2] * (config.spaceacc + 1));
+	ww[5] = calloc(sizeof(f64), points[2] * (config.spaceacc + 1));
 
-	for (run->t_idx = 1; run->t_idx < run->t_total; run->t_idx++) {
-		curr = umesh + run->t_idx;
+	prev = calloc(sizeof(f64), elems);
+	curr = calloc(sizeof(f64), elems);
+	next = calloc(sizeof(f64), elems);
 
-		// ensure that vol is filled with the correct parameters
-		vol[MOLT_VOL_NEXT] = (curr + 1)->data;
-		vol[MOLT_VOL_CURR] = (curr    )->data;
-		vol[MOLT_VOL_PREV] = (curr - 1)->data;
+	volumebytes = sizeof(f64) * elems;
 
-		molt_step(cfg, vol, vw, ww, normal_flg);
+	// now that we have memory, we can fully load all of our data
+	rc = lump_read(MOLTSTR_VLX, 0, vw[0]);
+	if (rc < 0) { PRINTANDFAIL("couldn't read VLX from lump system"); }
+	rc = lump_read(MOLTSTR_VRX, 0, vw[1]);
+	if (rc < 0) { PRINTANDFAIL("couldn't read VRX from lump system"); }
+	rc = lump_read(MOLTSTR_VLY, 0, vw[2]);
+	if (rc < 0) { PRINTANDFAIL("couldn't read VLY from lump system"); }
+	rc = lump_read(MOLTSTR_VRY, 0, vw[3]);
+	if (rc < 0) { PRINTANDFAIL("couldn't read VRY from lump system"); }
+	rc = lump_read(MOLTSTR_VLZ, 0, vw[4]);
+	if (rc < 0) { PRINTANDFAIL("couldn't read VLZ from lump system"); }
+	rc = lump_read(MOLTSTR_VRZ, 0, vw[5]);
+	if (rc < 0) { PRINTANDFAIL("couldn't read VRZ from lump system"); }
 
-		// save off whatever fields are required
+	rc = lump_read(MOLTSTR_WLX, 0, ww[0]);
+	if (rc < 0) { PRINTANDFAIL("couldn't read WLX from lump system"); }
+	rc = lump_read(MOLTSTR_WRX, 0, ww[1]);
+	if (rc < 0) { PRINTANDFAIL("couldn't read WRX from lump system"); }
+	rc = lump_read(MOLTSTR_WLY, 0, ww[2]);
+	if (rc < 0) { PRINTANDFAIL("couldn't read WLY from lump system"); }
+	rc = lump_read(MOLTSTR_WRY, 0, ww[3]);
+	if (rc < 0) { PRINTANDFAIL("couldn't read WRY from lump system"); }
+	rc = lump_read(MOLTSTR_WLZ, 0, ww[4]);
+	if (rc < 0) { PRINTANDFAIL("couldn't read WLZ from lump system"); }
+	rc = lump_read(MOLTSTR_WRZ, 0, ww[5]);
+	if (rc < 0) { PRINTANDFAIL("couldn't read WRZ from lump system"); }
+
+	rc = lump_read(MOLTSTR_VEL, 0, prev);
+	if (rc < 0) { PRINTANDFAIL("couldn't read initial velocity from lump system"); }
+	rc = lump_read(MOLTSTR_AMP, 0, curr);
+	if (rc < 0) { PRINTANDFAIL("couldn't read initial amplitude from lump system"); }
+
+	vol[0] = next;
+	vol[1] = curr;
+	vol[2] = prev;
+
+	molt_cfg_set_workstore(&config);
+
+	i = 0;
+	flags = MOLT_FLAG_FIRSTSTEP;
+
+	do {
+		molt_step(&config, vol, vw, ww, flags);
+
+		rc = lump_write(MOLTSTR_AMP, sizeof(f64) * elems, next, NULL);
+
+		memcpy(prev, curr, volumebytes);
+		memcpy(curr, next, volumebytes);
+		memset(next, 0, volumebytes);
+
+		flags = 0;
+	} while (i++ < config.t_params[MOLT_PARAM_STOP]);
+
+	molt_cfg_free_workstore(&config);
+
+	free(prev);
+	free(curr);
+	free(next);
+
+	for (i = 0; i < 5; i++) {
+		free(vw[i]);
+		free(ww[i]);
 	}
 
-	// TODO (brian) move somewhere else
-	molt_cfg_free_workstore(cfg);
-#endif
+	return 0;
 }
 
 /* do_custom_simulation : setsup and invokes the custom MOLT routines */
-void do_custom_simulation(void *lib)
+int do_custom_simulation(void *lib)
 {
-#if 0
+	struct molt_cfg_t config;
 	struct molt_custom_t custom;
-	struct molt_cfg_t *cfg;
-	struct lump_runinfo_t *run;
-	struct lump_vweight_t *vw_lump;
-	struct lump_wweight_t *ww_lump;
-	struct lump_vmesh_t *vmesh;
-	struct lump_umesh_t *umesh, *curr;
-
+	u32 flags;
+	u64 elems, i, volumebytes;;
+	ivec3_t pinc;
+	ivec3_t points;
 	int rc;
 
-	memset(&custom, 0, sizeof custom);
+	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
+	if (rc < 0) { PRINTANDFAIL("couldn't read config from lump system"); }
 
-	// TODO (brian) pull the functions we can from our handle
+	molt_cfg_parampull_xyz(&config, pinc,   MOLT_PARAM_PINC);
+	molt_cfg_parampull_xyz(&config, points, MOLT_PARAM_POINTS);
+
+	elems = pinc[0] * (u64)pinc[1] * pinc[2];
+
+	// get working memory for all of our data points we need
+
+	custom.vlx = calloc(sizeof(f64), pinc[0]);
+	custom.vrx = calloc(sizeof(f64), pinc[0]);
+	custom.vly = calloc(sizeof(f64), pinc[1]);
+	custom.vry = calloc(sizeof(f64), pinc[1]);
+	custom.vlz = calloc(sizeof(f64), pinc[2]);
+	custom.vrz = calloc(sizeof(f64), pinc[2]);
+
+	custom.wlx = calloc(sizeof(f64), points[0] * (config.spaceacc + 1));
+	custom.wrx = calloc(sizeof(f64), points[0] * (config.spaceacc + 1));
+	custom.wly = calloc(sizeof(f64), points[1] * (config.spaceacc + 1));
+	custom.wry = calloc(sizeof(f64), points[1] * (config.spaceacc + 1));
+	custom.wlz = calloc(sizeof(f64), points[2] * (config.spaceacc + 1));
+	custom.wrz = calloc(sizeof(f64), points[2] * (config.spaceacc + 1));
+
+	custom.prev  = calloc(sizeof(f64), elems);
+	custom.curr  = calloc(sizeof(f64), elems);
+	custom.next  = calloc(sizeof(f64), elems);
+
+	volumebytes = sizeof(f64) * elems;
+
+	// now that we have memory, we can fully load all of our data
+	rc = lump_read(MOLTSTR_VLX, 0, custom.vlx);
+	if (rc < 0) { PRINTANDFAIL("couldn't read VLX from lump system"); }
+	rc = lump_read(MOLTSTR_VRX, 0, custom.vrx);
+	if (rc < 0) { PRINTANDFAIL("couldn't read VRX from lump system"); }
+	rc = lump_read(MOLTSTR_VLY, 0, custom.vly);
+	if (rc < 0) { PRINTANDFAIL("couldn't read VLY from lump system"); }
+	rc = lump_read(MOLTSTR_VRY, 0, custom.vry);
+	if (rc < 0) { PRINTANDFAIL("couldn't read VRY from lump system"); }
+	rc = lump_read(MOLTSTR_VLZ, 0, custom.vlz);
+	if (rc < 0) { PRINTANDFAIL("couldn't read VLZ from lump system"); }
+	rc = lump_read(MOLTSTR_VRZ, 0, custom.vlz);
+	if (rc < 0) { PRINTANDFAIL("couldn't read VRZ from lump system"); }
+
+	rc = lump_read(MOLTSTR_WLX, 0, custom.wlx);
+	if (rc < 0) { PRINTANDFAIL("couldn't read WLX from lump system"); }
+	rc = lump_read(MOLTSTR_WRX, 0, custom.wrx);
+	if (rc < 0) { PRINTANDFAIL("couldn't read WRX from lump system"); }
+	rc = lump_read(MOLTSTR_WLY, 0, custom.wly);
+	if (rc < 0) { PRINTANDFAIL("couldn't read WLY from lump system"); }
+	rc = lump_read(MOLTSTR_WRY, 0, custom.wry);
+	if (rc < 0) { PRINTANDFAIL("couldn't read WRY from lump system"); }
+	rc = lump_read(MOLTSTR_WLZ, 0, custom.wlz);
+	if (rc < 0) { PRINTANDFAIL("couldn't read WLZ from lump system"); }
+	rc = lump_read(MOLTSTR_WRZ, 0, custom.wrz);
+	if (rc < 0) { PRINTANDFAIL("couldn't read WRZ from lump system"); }
+
+	rc = lump_read(MOLTSTR_VEL, 0, custom.prev);
+	if (rc < 0) { PRINTANDFAIL("couldn't read initial velocity from lump system"); }
+	rc = lump_read(MOLTSTR_AMP, 0, custom.curr);
+	if (rc < 0) { PRINTANDFAIL("couldn't read initial amplitude from lump system"); }
+
+	custom.cfg = &config;
+
+	molt_cfg_set_workstore(&config);
+
+	// the final setup step is to load the custom functions from the lib
 	custom.func_open  = sys_libsym(lib, "molt_custom_open");
 	custom.func_close = sys_libsym(lib, "molt_custom_close");
 	custom.func_sweep = sys_libsym(lib, "molt_custom_sweep");
 	custom.func_reorg = sys_libsym(lib, "molt_custom_reorg");
 
-	cfg     = sys_lumpgetbase(hunk, MOLTLUMP_CONFIG);
-	run     = sys_lumpgetbase(hunk, MOLTLUMP_RUNINFO);
-	vw_lump = sys_lumpgetbase(hunk, MOLTLUMP_VWEIGHT);
-	ww_lump = sys_lumpgetbase(hunk, MOLTLUMP_WWEIGHT);
-	vmesh   = sys_lumpgetbase(hunk, MOLTLUMP_VMESH);
-	umesh   = sys_lumpgetbase(hunk, MOLTLUMP_UMESH);
+	custom.func_open(&custom);
 
-	// setup our custom params
-	custom.vlx = vw_lump->vlx;
-	custom.vrx = vw_lump->vrx;
-	custom.vly = vw_lump->vly;
-	custom.vry = vw_lump->vry;
-	custom.vlz = vw_lump->vlz;
-	custom.vrz = vw_lump->vrz;
+	i = 0;
+	flags = MOLT_FLAG_FIRSTSTEP;
 
-	custom.wlx = ww_lump->xl_weight;
-	custom.wrx = ww_lump->xr_weight;
-	custom.wly = ww_lump->yl_weight;
-	custom.wry = ww_lump->yr_weight;
-	custom.wlz = ww_lump->zl_weight;
-	custom.wrz = ww_lump->zr_weight;
+	do {
+		molt_step_custom(&custom, flags);
 
-	custom.cfg = cfg;
+		rc = lump_write(MOLTSTR_AMP, sizeof(f64) * elems, custom.next, NULL);
 
-	// setup the volume info for the FIRST step
-	custom.next = (umesh + 1)->data;
-	custom.curr = umesh->data;
-	custom.prev = vmesh->data;
+		memcpy(custom.prev, custom.curr, volumebytes);
+		memcpy(custom.curr, custom.next, volumebytes);
+		memset(custom.next, 0, volumebytes);
 
-	rc = custom.func_open(&custom);
+		flags = 0;
+	} while (i++ < config.t_params[MOLT_PARAM_STOP]);
 
-	molt_step_custom(&custom, MOLT_FLAG_FIRSTSTEP);
+	custom.func_close(&custom);
 
-	for (run->t_idx = 1; run->t_idx < run->t_total; run->t_idx++) {
-		curr = umesh + run->t_idx;
+	molt_cfg_free_workstore(&config);
 
-		custom.next = (curr + 1)->data;
-		custom.curr = (curr    )->data;
-		custom.prev = (curr - 1)->data;
+	free(custom.prev);
+	free(custom.curr);
+	free(custom.next);
 
-		molt_step_custom(&custom, 0);
+	free(custom.vlx);
+	free(custom.vrx);
+	free(custom.vly);
+	free(custom.vry);
+	free(custom.vlz);
+	free(custom.vrz);
 
-		// save off whatever fields are required
-	}
+	free(custom.wlx);
+	free(custom.wrx);
+	free(custom.wly);
+	free(custom.wry);
+	free(custom.wlz);
+	free(custom.wrz);
 
-	rc = custom.func_close(&custom);
+	return 0;
 
-	// TODO (brian) move somewhere else
-	molt_cfg_free_workstore(cfg);
-#endif
 }
 
 /* setup : sets up the simulation */
@@ -897,7 +995,7 @@ void print_help(char *prog)
 }
 
 /* parse_config : parses the config file */
-void parse_config(struct user_cfg_t *usercfg, char *file)
+int parse_config(struct user_cfg_t *usercfg, char *file)
 {
 	FILE *fp;
 	char *key, *val, *tmp;
@@ -907,8 +1005,9 @@ void parse_config(struct user_cfg_t *usercfg, char *file)
 
 	fp = fopen(file, "r");
 
-	if (!fp)
-		return;
+	if (!fp) {
+		return -1;
+	}
 
 	while (fgets(buf, sizeof buf, fp) == buf) {
 		buf[strlen(buf) - 1] = 0;
@@ -981,5 +1080,7 @@ void parse_config(struct user_cfg_t *usercfg, char *file)
 	fclose(fp);
 
 	usercfg->isset = 1;
+
+	return 0;
 }
 
