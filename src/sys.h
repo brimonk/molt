@@ -10,6 +10,8 @@
 
 #include <stdio.h>
 
+#include <pthread.h>
+
 #include "common.h"
 
 struct sys_file {
@@ -17,6 +19,12 @@ struct sys_file {
 	char name[256];
 };
 typedef struct sys_file sys_file;
+
+struct sys_thread {
+	pthread_t thread;
+	void *(*func)(void *arg);
+	void *arg;
+};
 
 /* sys_getpagesize : system wrapper for getpagesize */
 int sys_getpagesize();
@@ -50,6 +58,12 @@ int sys_libclose(void *handle);
 
 /* sys_timestamp : gets the current timestamp */
 int sys_timestamp(u64 *sec, u64 *usec);
+
+/* sys_threadcreate : creates a thread */
+int sys_threadcreate(struct sys_thread *thread);
+
+/* sys_threadwait : waits for the given thread to exit, then cleans up */
+int sys_threadwait(struct sys_thread *thread);
 
 int sys_bipopen(FILE **readfp, FILE **writefp, char *command);
 

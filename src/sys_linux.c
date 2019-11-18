@@ -218,10 +218,31 @@ int sys_timestamp(u64 *sec, u64 *usec)
 	return 0;
 }
 
-/* current_shell : gets the current shell, for use in bipopen */
-static char *current_shell()
+/* sys_threadcreate : creates a thread */
+int sys_threadcreate(struct sys_thread *thread)
 {
-	return getenv("SHELL");
+	int rc;
+
+	rc = pthread_create(&thread->thread, NULL, thread->func, thread->arg);
+	if (rc != 0) {
+		sys_errorhandle();
+	}
+
+	return rc != 0;
+}
+
+/* sys_threadwait : waits for the given thread to exit, then cleans up */
+int sys_threadwait(struct sys_thread *thread)
+{
+	void *ret;
+	int rc;
+
+	rc = pthread_join(thread->thread, &ret);
+	if (rc != 0) {
+		sys_errorhandle();
+	}
+
+	return rc != 0;
 }
 
 /* sys_bipopen : system's bi-directional popen */

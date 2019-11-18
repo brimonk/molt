@@ -71,7 +71,7 @@ struct configthreadargs_t {
 	FILE *fp;
 	struct user_cfg_t *usercfg;
 	ivec3_t dim;
-	ivec3_t fdim;
+	dvec3_t fdim;
 	f64 *vol;
 };
 
@@ -106,10 +106,10 @@ int setup_initamplitude(struct user_cfg_t *usercfg);
 /* setup_initamplitude_config : sets up the initial amplitude from the config */
 int setup_initamplitude_config(f64 *initamplitude, struct user_cfg_t *usercfg);
 
-/* setup_customprog_write : function for setup writing (parent -> child) */
-void setup_customprog_write(void *arg);
+/* setup_customprog_write : function for threading setup */
+void *setup_customprog_write(void *arg);
 /* setup_customprog_read : function for setup reading (parent <- child) */
-void setup_customprog_read(void *arg);
+void *setup_customprog_read(void *arg);
 
 /* dump_lumps : prints a dump of all the lumps in the lump system */
 int dump_lumps();
@@ -719,7 +719,7 @@ int setup_initvelocity(struct user_cfg_t *usercfg)
 	dvec3_t fdim;
 	FILE *pipe_read, *pipe_write;
 	struct configthreadargs_t args_read, args_write;
-	threadpool pool;
+	struct sys_thread thread_reader, thread_writer;
 	int rc;
 
 	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
@@ -741,8 +741,6 @@ int setup_initvelocity(struct user_cfg_t *usercfg)
 			return -1;
 		}
 
-		pool = thpool_init(2);
-
 		args_read.fp       = pipe_read;
 		args_write.fp      = pipe_write;
 		args_read.usercfg  = usercfg;
@@ -750,19 +748,20 @@ int setup_initvelocity(struct user_cfg_t *usercfg)
 		args_read.vol      = initvelocity;
 		args_write.vol     = initvelocity;
 		Vec3Copy(args_read.dim, dim);
-		Vec3Copy(args_read.dim, dim);
+		Vec3Copy(args_write.dim, dim);
 		Vec3Copy(args_read.fdim, fdim);
 		Vec3Copy(args_write.fdim, fdim);
 
-		thpool_add_work(pool, setup_customprog_write, &args_write);
-		thpool_add_work(pool, setup_customprog_read, &args_read);
+		thread_reader.func = setup_customprog_read;
+		thread_writer.func = setup_customprog_write;
+		thread_reader.arg = &args_read;
+		thread_writer.arg = &args_write;
 
-		thpool_wait(pool);
+		sys_threadcreate(&thread_writer);
+		sys_threadcreate(&thread_reader);
 
-		thpool_destroy(pool);
-
-		fclose(pipe_read);
-		fclose(pipe_write);
+		sys_threadwait(&thread_writer);
+		sys_threadwait(&thread_reader);
 	}
 
 	rc = lump_write(MOLTSTR_VEL, sizeof(f64) * elements, initvelocity, NULL);
@@ -773,12 +772,13 @@ int setup_initvelocity(struct user_cfg_t *usercfg)
 }
 
 /* setup_customprog_write : function for threading setup */
-void setup_customprog_write(void *arg)
+void *setup_customprog_write(void *arg)
 {
 	struct configthreadargs_t *cargs;
 	f64 scale;
 	dvec3_t fout;
 	ivec3_t curr;
+	u64 lim;
 
 	cargs = arg;
 
@@ -787,39 +787,58 @@ void setup_customprog_write(void *arg)
 	Vec3Copy(fout, cargs->fdim);
 
 	fprintf(cargs->fp, "%lf\t%lf\t%lf\n", fout[0], fout[1], fout[2]);
+	fflush(cargs->fp);
 
-	Vec3Set(curr, 0, 0, 0);
-	for (; curr[0] < cargs->dim[0]; curr[0]++) {
-		for (; curr[1] < cargs->dim[1]; curr[1]++) {
-			for (; curr[2] < cargs->dim[2]; curr[2]++) {
+	lim = 0;
+
+	for (curr[0] = 0; curr[0] < cargs->dim[0]; curr[0]++) {
+		for (curr[1] = 0; curr[1] < cargs->dim[1]; curr[1]++) {
+			for (curr[2] = 0; curr[2] < cargs->dim[2]; curr[2]++) {
 				Vec3Copy(fout, curr);
 				Vec3Scale(fout, curr, scale);
 				fprintf(cargs->fp, "%lf\t%lf\t%lf\n", fout[0], fout[1], fout[2]);
+				fflush(cargs->fp);
+				lim++;
 			}
 		}
 	}
+
+	printf("we read %ld lines\n", lim);
+
+	fclose(cargs->fp);
+
+	return NULL;
 }
 
 /* setup_customprog_read : function for setup reading (parent <- child) */
-void setup_customprog_read(void *arg)
+void *setup_customprog_read(void *arg)
 {
 	struct configthreadargs_t *cargs;
 	u64 pos;
+	u64 lim;
 	ivec3_t curr;
 	char buf[BUFLARGE];
 
 	cargs = arg;
 
-	Vec3Set(curr, 0, 0, 0);
-	for (; curr[0] < cargs->dim[0]; curr[0]++) {
-		for (; curr[1] < cargs->dim[1]; curr[1]++) {
-			for (; curr[2] < cargs->dim[2]; curr[2]++) {
+	lim = 0;
+
+	for (curr[0] = 0; curr[0] < cargs->dim[0]; curr[0]++) {
+		for (curr[1] = 0; curr[1] < cargs->dim[1]; curr[1]++) {
+			for (curr[2] = 0; curr[2] < cargs->dim[2]; curr[2]++) {
 				fgets(buf, sizeof(buf), cargs->fp);
-				printf("%s", buf);
+				pos = IDX3D(curr[0], curr[1], curr[2], cargs->dim[1], cargs->dim[2]);
+				cargs->vol[pos] = atof(buf);
+				lim++;
 			}
 		}
 	}
 
+	printf("we read %ld lines\n", lim);
+
+	fclose(cargs->fp);
+
+	return NULL;
 }
 
 /* setup_initamplitude : inits amplitude, uses custom command if available */
@@ -899,6 +918,15 @@ int dump_lumps()
 	molt_cfg_parampull_xyz(&config, dim, MOLT_PARAM_PINC);
 	fptr = calloc(sizeof(f64), dim[0] * (u64)dim[1] * dim[2]);
 
+	// iterate through the lump table to dump the table metadata
+	for (i = 0; i < lheader.lumps; i++) {
+		rc = lump_getinfo(&linfo, i);
+
+		printf("Lump [%.*s][%4ld] off: 0x%010lX, entry: %4ld, bytes : %ld\n",
+				(int)sizeof(linfo.tag), linfo.tag, i, linfo.offset, linfo.entry, linfo.size);
+	}
+
+	// iterate through the lumps to dump the data
 	for (i = 0; i < lheader.lumps; i++) {
 		rc = lump_getinfo(&linfo, i);
 
