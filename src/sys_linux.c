@@ -12,11 +12,12 @@
 #include <stdarg.h>
 #include <errno.h>
 
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <sys/mman.h>
 #include <dlfcn.h>
 
@@ -245,6 +246,14 @@ int sys_threadwait(struct sys_thread *thread)
 	return rc != 0;
 }
 
+/* sigchld_handler : handles 'SIGCHLD' signal to prevent zombies from bipopen */
+static void sigchld_handler(int signum)
+{
+	if (signum == SIGCHLD) {
+		wait(NULL);
+	}
+}
+
 /* sys_bipopen : system's bi-directional popen */
 int sys_bipopen(FILE **readfp, FILE **writefp, char *command)
 {
@@ -280,6 +289,9 @@ int sys_bipopen(FILE **readfp, FILE **writefp, char *command)
 	}
 
 	if (0 < (pid = fork())) { // parent
+		// install signal handler to clean up the child
+		signal(SIGCHLD, sigchld_handler);
+
 		*readfp  = fdopen(pipes[0], "r");
 		*writefp = fdopen(pipes[3], "w");
 

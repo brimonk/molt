@@ -778,7 +778,7 @@ void *setup_customprog_write(void *arg)
 	f64 scale;
 	dvec3_t fout;
 	ivec3_t curr;
-	u64 lim;
+	u64 lines, elements;
 
 	cargs = arg;
 
@@ -789,7 +789,8 @@ void *setup_customprog_write(void *arg)
 	fprintf(cargs->fp, "%lf\t%lf\t%lf\n", fout[0], fout[1], fout[2]);
 	fflush(cargs->fp);
 
-	lim = 0;
+	elements = (u64)cargs->dim[0] * cargs->dim[1] * cargs->dim[2];
+	lines = 0;
 
 	for (curr[0] = 0; curr[0] < cargs->dim[0]; curr[0]++) {
 		for (curr[1] = 0; curr[1] < cargs->dim[1]; curr[1]++) {
@@ -798,12 +799,15 @@ void *setup_customprog_write(void *arg)
 				Vec3Scale(fout, curr, scale);
 				fprintf(cargs->fp, "%lf\t%lf\t%lf\n", fout[0], fout[1], fout[2]);
 				fflush(cargs->fp);
-				lim++;
+				lines++;
 			}
 		}
 	}
 
-	printf("we read %ld lines\n", lim);
+	if (lines != elements) {
+		fprintf(stderr, "ERR : expected to read %ld lines from init program, got %ld\n",
+				elements, lines);
+	}
 
 	fclose(cargs->fp);
 
@@ -815,13 +819,14 @@ void *setup_customprog_read(void *arg)
 {
 	struct configthreadargs_t *cargs;
 	u64 pos;
-	u64 lim;
+	u64 lines, elements;
 	ivec3_t curr;
 	char buf[BUFLARGE];
 
 	cargs = arg;
 
-	lim = 0;
+	elements = (u64)cargs->dim[0] * cargs->dim[1] * cargs->dim[2];
+	lines = 0;
 
 	for (curr[0] = 0; curr[0] < cargs->dim[0]; curr[0]++) {
 		for (curr[1] = 0; curr[1] < cargs->dim[1]; curr[1]++) {
@@ -829,12 +834,15 @@ void *setup_customprog_read(void *arg)
 				fgets(buf, sizeof(buf), cargs->fp);
 				pos = IDX3D(curr[0], curr[1], curr[2], cargs->dim[1], cargs->dim[2]);
 				cargs->vol[pos] = atof(buf);
-				lim++;
+				lines++;
 			}
 		}
 	}
 
-	printf("we read %ld lines\n", lim);
+	if (lines != elements) {
+		fprintf(stderr, "ERR : expected to read %ld lines from init program, got %ld\n",
+				elements, lines);
+	}
 
 	fclose(cargs->fp);
 
@@ -922,8 +930,10 @@ int dump_lumps()
 	for (i = 0; i < lheader.lumps; i++) {
 		rc = lump_getinfo(&linfo, i);
 
-		printf("Lump [%.*s][%4ld] off: 0x%010lX, entry: %4ld, bytes : %ld\n",
-				(int)sizeof(linfo.tag), linfo.tag, i, linfo.offset, linfo.entry, linfo.size);
+		rc = strnlen(linfo.tag, 8); // WARNING UNSAFE FOR 8 CHAR STRINGS!!!
+
+		printf("Lump [%s%*s][%4ld] off: 0x%010lX, entry: %4ld, bytes : %ld\n",
+				linfo.tag, 8 - rc, "", i, linfo.offset, linfo.entry, linfo.size);
 	}
 
 	// iterate through the lumps to dump the data
