@@ -7,7 +7,7 @@ CC = gcc
 LINKER = -lm -lmingw32 -lSDL2main -lSDL2 -lopengl32
 FLAGS = -Wall -g3 -march=native
 TARGET = molt.exe
-SRC = $(wildcard src/*.c)
+SRC = src/calcs.c src/common.c src/lump.c src/main.c src/sys_win32.c src/test.c
 OBJ = $(SRC:.c=.o)
 DEP = $(OBJ:.o=.d) # one dependency file for each source
 

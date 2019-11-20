@@ -24,26 +24,35 @@
 #include "common.h"
 #include "sys.h"
 
+struct sys_file {
+	int fd;
+	char name[BUFSMALL];
+};
+
+struct sys_thread {
+	pthread_t thread;
+	void *(*func)(void *arg);
+	void *arg;
+};
+
 static void sys_errorhandle()
 {
 	fprintf(stderr, "%s\n", strerror(errno));
 }
 
-/* sys_getpagesize : system wrapper for getpagesize */
-int sys_getpagesize()
-{
-	return getpagesize();
-}
-
 /* sys_open : system wrapper for open */
-sys_file sys_open(char *name)
+sys_file *sys_open(char *name)
 {
-	sys_file fd;
+	sys_file *fd;
 
-	fd.fd = open(name, O_RDWR|O_CREAT|O_TRUNC, 0666);
+	fd = calloc(1, sizeof(struct sys_file));
 
-	if (fd.fd < 0) {
+	fd->fd = open(name, O_RDWR|O_CREAT|O_TRUNC, 0666);
+
+	if (fd->fd < 0) {
 		sys_errorhandle();
+		free(fd);
+		fd = NULL;
 	} else {
 		strncpy(fd.name, name, sizeof(fd.name));
 	}
@@ -52,11 +61,11 @@ sys_file sys_open(char *name)
 }
 
 /* sys_open : system wrapper for close */
-int sys_close(sys_file fd)
+int sys_close(sys_file *fd)
 {
 	int rc;
 
-	rc = close(fd.fd);
+	rc = close(fd->fd);
 
 	if (rc < 0) {
 		sys_errorhandle();
@@ -65,26 +74,34 @@ int sys_close(sys_file fd)
 	return rc;
 }
 
+/* sys_getsize : system wrapper for getting the size of a file */
+u64 sys_getsize(sys_file *fd)
+{
+	struct stat st;
+	stat(fd->name, &st);
+	return st.st_size;
+}
+
 /* sys_read : wrapper for fread */
-size_t sys_read(sys_file fd, size_t start, size_t len, void *ptr)
+size_t sys_read(sys_file *fd, size_t start, size_t len, void *ptr)
 {
 	off_t off;
 	size_t bytes;
 	int rc;
 
-	off = lseek(fd.fd, start, SEEK_SET);
+	off = lseek(fd->fd, start, SEEK_SET);
 	if (off == (off_t)-1) {
 		sys_errorhandle();
 		return -1;
 	}
 
-	bytes = read(fd.fd, ptr, len);
+	bytes = read(fd->fd, ptr, len);
 	if (bytes != len) {
 		sys_errorhandle();
 		return -1;
 	}
 
-	rc = fsync(fd.fd);
+	rc = fsync(fd->fd);
 
 	if (rc < 0) {
 		sys_errorhandle();
@@ -94,38 +111,30 @@ size_t sys_read(sys_file fd, size_t start, size_t len, void *ptr)
 }
 
 /* sys_write : wrapper for fwrite */
-size_t sys_write(sys_file fd, size_t start, size_t len, void *ptr)
+size_t sys_write(sys_file *fd, size_t start, size_t len, void *ptr)
 {
 	off_t off;
 	size_t bytes;
 	int rc;
 
-	off = lseek(fd.fd, start, SEEK_SET);
+	off = lseek(fd->fd, start, SEEK_SET);
 	if (off == (off_t)-1) {
 		sys_errorhandle();
 		return -1;
 	}
 
-	bytes = write(fd.fd, ptr, len);
+	bytes = write(fd->fd, ptr, len);
 	if (bytes != len) {
 		sys_errorhandle();
 		return -1;
 	}
 
-	rc = fsync(fd.fd);
+	rc = fsync(fd->fd);
 	if (rc < 0) {
 		sys_errorhandle();
 	}
 
 	return bytes;
-}
-
-/* sys_getsize : system wrapper for getting the size of a file */
-u64 sys_getsize(sys_file fd)
-{
-	struct stat st;
-	stat(fd.name, &st);
-	return st.st_size;
 }
 
 /* sys_exists : system wrapper to see if a file currently exists */

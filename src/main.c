@@ -36,7 +36,6 @@
 #include "config.h"
 #include "lump.h"
 #include "sys.h"
-#include "thpool.h"
 #include "test.h"
 
 #ifdef MOLT_VIEWER
@@ -719,7 +718,7 @@ int setup_initvelocity(struct user_cfg_t *usercfg)
 	dvec3_t fdim;
 	FILE *pipe_read, *pipe_write;
 	struct configthreadargs_t args_read, args_write;
-	struct sys_thread thread_reader, thread_writer;
+	struct sys_thread *thread_reader, *thread_writer;
 	int rc;
 
 	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
@@ -752,16 +751,23 @@ int setup_initvelocity(struct user_cfg_t *usercfg)
 		Vec3Copy(args_read.fdim, fdim);
 		Vec3Copy(args_write.fdim, fdim);
 
-		thread_reader.func = setup_customprog_read;
-		thread_writer.func = setup_customprog_write;
-		thread_reader.arg = &args_read;
-		thread_writer.arg = &args_write;
+		thread_reader = sys_threadcreate();
+		thread_writer = sys_threadcreate();
 
-		sys_threadcreate(&thread_writer);
-		sys_threadcreate(&thread_reader);
+		sys_threadsetfunc(thread_reader, setup_customprog_read);
+		sys_threadsetfunc(thread_writer, setup_customprog_write);
 
-		sys_threadwait(&thread_writer);
-		sys_threadwait(&thread_reader);
+		sys_threadsetarg(thread_reader, &args_read);
+		sys_threadsetarg(thread_writer, &args_write);
+
+		sys_threadstart(thread_writer);
+		sys_threadstart(thread_reader);
+
+		sys_threadwait(thread_writer);
+		sys_threadwait(thread_reader);
+
+		sys_threadfree(thread_writer);
+		sys_threadfree(thread_reader);
 	}
 
 	rc = lump_write(MOLTSTR_VEL, sizeof(f64) * elements, initvelocity, NULL);

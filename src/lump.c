@@ -21,7 +21,7 @@
 #define LUMP_MAXINFO   65535 // this makes the metadata 2MB
 #define LUMP_METALEN   (sizeof(struct lumpheader_t) + sizeof(struct lumpinfo_t) * 65535)
 
-static struct sys_file g_lumpfile;
+static struct sys_file *g_lumpfile;
 
 /* lump_open : opens the given file as the lump file we're using */
 int lump_open(char *file)
@@ -30,7 +30,7 @@ int lump_open(char *file)
 
 	g_lumpfile = sys_open(file);
 
-	if (g_lumpfile.fd < 0) {
+	if (g_lumpfile == NULL) {
 		return -1;
 	}
 
