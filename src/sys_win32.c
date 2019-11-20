@@ -294,6 +294,79 @@ int sys_threadwait(struct sys_thread *thread)
 /* sys_bipopen : creates a "bi directional" popen */
 int sys_bipopen(FILE **readfp, FILE **writefp, char *command)
 {
+	SECURITY_ATTRIBUTES attribs;
+	HANDLE cpipe_in;
+	HANDLE cpipe_out;
+	HANDLE ppipe_in;
+	HANDLE ppipe_out;
+	PROCESS_INFORMATION procinfo;
+	STARTUPINFO startupinfo;
+	int rc;
+	int ppipe_fdin;
+	int ppipe_fdout;
+
+	// windows is weird
+
+	// set the bInheritHandle so pipe handles are inherited
+	attribs.nLength = sizeof(SECURITY_ATTRIBUTES);
+	attribs.bInheritHandle = TRUE;
+	attribs.lpSecurityDescriptor = NULL;
+
+	// create a pipe for the child's stdout
+	rc = CreatePipe(&cpipe_in, &ppipe_out, &attribs, 0);
+	if (!rc) {
+		sys_lasterror();
+		return -1;
+	}
+
+	// and make sure the child won't inherit the pipe for STDOUT
+	rc = SetHandleInformation(ppipe_out, HANDLE_FLAG_INHERIT, 0);
+	if (!rc) {
+		sys_lasterror();
+		return -1;
+	}
+
+	// create a pipe for the child process's STDIN
+	rc = CreatePipe(&ppipe_in, &cpipe_out, &attribs, 0);
+	if (!rc) {
+		sys_lasterror();
+		return -1;
+	}
+
+	// and ensure the write handle for parent's input isn't inherited
+	rc = SetHandleInformation(ppipe_in, HANDLE_FLAG_INHERIT, 0);
+	if (!rc) {
+		sys_lasterror();
+		return -1;
+	}
+
+	memset(&procinfo, 0, sizeof(procinfo));
+	memset(&startupinfo, 0, sizeof(startupinfo));
+
+	startupinfo.cb = sizeof(STARTUPINFO);
+	startupinfo.hStdError = cpipe_out;
+	startupinfo.hStdOutput = cpipe_out;
+	startupinfo.hStdInput = cpipe_in;
+	startupinfo.dwFlags |= STARTF_USESTDHANDLES;
+
+	rc = CreateProcess(NULL, command, NULL, NULL, TRUE, 0, NULL, NULL, &startupinfo, &procinfo);
+	if (!rc) {
+		sys_lasterror();
+		return -1;
+	}
+
+	// close handle to the child's process and thread
+	CloseHandle(procinfo.hProcess);
+	CloseHandle(procinfo.hThread);
+
+	// now that we've finally done the equivalent of calling fork(),
+	// we have to setup our C-friendly FILE *'s.
+	ppipe_fdin  = _open_osfhandle((intptr_t)ppipe_in, _O_RDONLY);
+	ppipe_fdout = _open_osfhandle((intptr_t)ppipe_out, _O_WRONLY);
+
+	*readfp = _fdopen(ppipe_fdin, "rt");
+	*writefp = _fdopen(ppipe_fdout, "wt");
+
 	return 0;
 }
 

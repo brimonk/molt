@@ -95,15 +95,8 @@ int setup_vweight();
 /* setup_wweight : sets up the w weights */
 int setup_wweight();
 
-/* setup_initvelocity : inits velocity, uses custom command if available */
-int setup_initvelocity(struct user_cfg_t *usercfg);
-/* setup_initvelocity_config : sets up the initial velocity, from the config */
-int setup_initvelocity_config(f64 *initvelocity, struct user_cfg_t *usercfg);
-
-/* setup_initamplitude : inits amplitude, uses custom command if available */
-int setup_initamplitude(struct user_cfg_t *usercfg);
-/* setup_initamplitude_config : sets up the initial amplitude from the config */
-int setup_initamplitude_config(f64 *initamplitude, struct user_cfg_t *usercfg);
+/* setup_initcommand : runs the command specified in the config, if found */
+int setup_initcommand(struct user_cfg_t *usercfg, int command);
 
 /* setup_customprog_write : function for threading setup */
 void *setup_customprog_write(void *arg);
@@ -114,6 +107,13 @@ void *setup_customprog_read(void *arg);
 int dump_lumps();
 
 void print_help(char *prog);
+
+enum {
+	COMMAND_MODE_NONE,
+	COMMAND_MODE_VELOCITY,
+	COMMAND_MODE_AMPLITUDE,
+	COMMAND_MODE_TOTAL
+};
 
 #define MOLTSTR_CONFIG "CONFIG"
 #define MOLTSTR_VLX    "VLX"
@@ -519,13 +519,13 @@ int setup(struct user_cfg_t *usercfg)
 		return -1;
 	}
 
-	rc = setup_initvelocity(usercfg);
+	rc = setup_initcommand(usercfg, COMMAND_MODE_VELOCITY);
 	if (rc < 0) {
 		fprintf(stderr, "ERR : initial velocity setup failed!\n");
 		return -1;
 	}
 
-	rc = setup_initamplitude(usercfg);
+	rc = setup_initcommand(usercfg, COMMAND_MODE_AMPLITUDE);
 	if (rc < 0) {
 		fprintf(stderr, "ERR : initial amplitude setup failed!\n");
 		return -1;
@@ -706,16 +706,18 @@ int setup_wweight()
 	return 0;
 }
 
-/* setup_initvelocity : inits velocity, uses custom command if available */
-int setup_initvelocity(struct user_cfg_t *usercfg)
+/* setup_initcommand : runs the command specified in the config, if found */
+int setup_initcommand(struct user_cfg_t *usercfg, int command)
 {
 	// NOTE
 	// this function allocates storage and commite it into the lump system
 	struct molt_cfg_t config;
 	u64 elements;
-	f64 *initvelocity;
+	f64 *hunk;
 	ivec3_t dim;
 	dvec3_t fdim;
+	char *lumpstr;
+	char *commandstr;
 	FILE *pipe_read, *pipe_write;
 	struct configthreadargs_t args_read, args_write;
 	struct sys_thread *thread_reader, *thread_writer;
@@ -726,16 +728,31 @@ int setup_initvelocity(struct user_cfg_t *usercfg)
 		return -1;
 	}
 
+	switch (command) {
+	case COMMAND_MODE_VELOCITY:
+		commandstr = usercfg->initvel;
+		lumpstr = MOLTSTR_VEL;
+		break;
+	case COMMAND_MODE_AMPLITUDE:
+		commandstr = usercfg->initamp;
+		lumpstr = MOLTSTR_AMP;
+		break;
+	default:
+		fprintf(stderr, "ERR in %s: command %d not recognized!\n",
+				__FUNCTION__, command);
+		break;
+	}
+
 	molt_cfg_parampull_xyz(&config, dim, MOLT_PARAM_PINC);
 
 	Vec3Scale(fdim, dim, usercfg->scale_space);
 
 	elements = dim[0] * (u64)dim[1] * dim[2];
 
-	initvelocity = calloc(sizeof(f64), elements);
+	hunk = calloc(sizeof(f64), elements);
 
 	if (usercfg && usercfg->isset) {
-		rc = sys_bipopen(&pipe_read, &pipe_write, usercfg->initvel);
+		rc = sys_bipopen(&pipe_read, &pipe_write, commandstr);
 		if (rc < 0) {
 			return -1;
 		}
@@ -744,8 +761,8 @@ int setup_initvelocity(struct user_cfg_t *usercfg)
 		args_write.fp      = pipe_write;
 		args_read.usercfg  = usercfg;
 		args_write.usercfg = usercfg;
-		args_read.vol      = initvelocity;
-		args_write.vol     = initvelocity;
+		args_read.vol      = hunk;
+		args_write.vol     = hunk;
 		Vec3Copy(args_read.dim, dim);
 		Vec3Copy(args_write.dim, dim);
 		Vec3Copy(args_read.fdim, fdim);
@@ -754,27 +771,32 @@ int setup_initvelocity(struct user_cfg_t *usercfg)
 		thread_reader = sys_threadcreate();
 		thread_writer = sys_threadcreate();
 
-		sys_threadsetfunc(thread_reader, setup_customprog_read);
-		sys_threadsetfunc(thread_writer, setup_customprog_write);
+		rc = sys_threadsetfunc(thread_writer, setup_customprog_write);
+		rc = sys_threadsetfunc(thread_reader, setup_customprog_read);
 
-		sys_threadsetarg(thread_reader, &args_read);
-		sys_threadsetarg(thread_writer, &args_write);
+		rc = sys_threadsetarg(thread_writer, &args_write);
+		rc = sys_threadsetarg(thread_reader, &args_read);
 
-		sys_threadstart(thread_writer);
-		sys_threadstart(thread_reader);
+		rc = sys_threadstart(thread_writer);
+		rc = sys_threadstart(thread_reader);
 
-		sys_threadwait(thread_writer);
-		sys_threadwait(thread_reader);
+		rc = sys_threadwait(thread_writer);
+		rc = sys_threadwait(thread_reader);
 
-		sys_threadfree(thread_writer);
-		sys_threadfree(thread_reader);
+		rc = sys_threadfree(thread_writer);
+		rc = sys_threadfree(thread_reader);
 	}
 
-	rc = lump_write(MOLTSTR_VEL, sizeof(f64) * elements, initvelocity, NULL);
+	rc = lump_write(lumpstr, sizeof(f64) * elements, hunk, NULL);
 
-	free(initvelocity);
+	free(hunk);
 
 	return rc;
+}
+
+/* setup_initvelocity : inits velocity, uses custom command if available */
+int setup_initvelocity(struct user_cfg_t *usercfg)
+{
 }
 
 /* setup_customprog_write : function for threading setup */
