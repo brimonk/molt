@@ -7,7 +7,7 @@ CC = gcc
 LINKER = -lm -ldl -lpthread
 FLAGS = -Wall -march=native
 TARGET = molt
-SRC = src/calcs.c src/common.c src/lump.c src/main.c src/thpool.c src/sys_linux.c src/test.c
+SRC = src/calcs.c src/common.c src/lump.c src/main.c src/thpool.c src/sys_linux.c
 OBJ = $(SRC:.c=.o)
 DEP = $(OBJ:.o=.d) # one dependency file for each source
 

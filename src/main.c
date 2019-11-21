@@ -36,7 +36,6 @@
 #include "config.h"
 #include "lump.h"
 #include "sys.h"
-#include "test.h"
 
 #ifdef MOLT_VIEWER
 #include "viewer.h"
@@ -131,14 +130,13 @@ enum {
 #define MOLTSTR_VEL    "VEL"
 #define MOLTSTR_AMP    "AMP"
 
-#define USAGE "USAGE : %s [--config <config>] [--viewer] [--custom <customlib>] [--nosim] [--test] [-v] [-h] outfile\n"
+#define USAGE "USAGE : %s [--config <config>] [--viewer] [--custom <customlib>] [--nosim] [-v] [-h] outfile\n"
 
 #define FLAG_VERBOSE 0x01
 #define FLAG_VIEWER  0x02
 #define FLAG_SIM     0x04
-#define FLAG_TEST    0x08
-#define FLAG_CUSTOM  0x10
-#define FLAG_USERCFG 0x20
+#define FLAG_CUSTOM  0x08
+#define FLAG_USERCFG 0x10
 
 #define DEFAULT_FLAGS (FLAG_SIM)
 
@@ -170,8 +168,6 @@ int main(int argc, char **argv)
 			flags |= FLAG_CUSTOM;
 			libname = *(++targv);
 			targc--;
-		} else if (strcmp(s, "-test") == 0) {
-			flags |= FLAG_TEST;
 		} else if (strcmp(s, "-config") == 0) {
 			flags |= FLAG_USERCFG;
 			usercfgfile = *(++targv);
@@ -196,11 +192,6 @@ int main(int argc, char **argv)
 	if (targc != 1) {
 		fprintf(stderr, USAGE, argv[0]);
 		return 1;
-	}
-
-	if (flags & FLAG_TEST) { // execute our test cases (test.c)
-		testfunc();
-		exit(0);
 	}
 
 	if (flags & FLAG_USERCFG) { // read and parse our user config
@@ -1045,7 +1036,6 @@ void print_help(char *prog)
 	fprintf(stderr, "--config <file> specifies a custom config file to load experiment parameters from\n");
 	fprintf(stderr, "--custom <file> specifies a custom library to load sweep and reorg functions from\n");
 	fprintf(stderr, "--nosim         runs everything BUT the simulation itself\n");
-	fprintf(stderr, "--test          runs testing procedures before the simulation\n");
 	fprintf(stderr, "--viewer        runs the viewer program\n");
 	fprintf(stderr, "-h              prints this help text\n");
 	fprintf(stderr, "-v              displays verbose simulation info\n");
