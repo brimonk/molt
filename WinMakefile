@@ -5,11 +5,15 @@
 
 CC = gcc
 LINKER = -lm -lmingw32
-FLAGS = -Wall -g3 -march=native
+FLAGS = -Wall -march=native
 TARGET = molt.exe
 SRC = src/calcs.c src/common.c src/lump.c src/main.c src/sys_win32.c src/test.c
 OBJ = $(SRC:.c=.o)
 DEP = $(OBJ:.o=.d) # one dependency file for each source
+
+ifeq ($(MOLTDEBUG),1)
+	FLAGS += -g3
+endif
 
 ifeq ($(MOLTVIEWER),1)
 	PPARMS := -DMOLT_VIEWER
@@ -20,10 +24,10 @@ endif
 all: $(TARGET) moltcuda.dll
 
 %.d: %.c
-	@$(CC) $(FLAGS) $< -MM -MT $(@:.d=.o) >$@
+	@$(CC) $(FLAGS) $(PPARMS) $< -MM -MT $(@:.d=.o) >$@
 
 %.o: %.c
-	$(CC) -c $(FLAGS) $(PREPROCESSPARMS) -o $@ $<
+	$(CC) -c $(FLAGS) $(PPARMS) $(PREPROCESSPARMS) -o $@ $<
 
 -include $(DEP)
 
@@ -37,7 +41,7 @@ moltcuda.dll: src/custom/moltcuda.cu
 clean: clean-obj clean-bin
 
 clean-obj:
-	del src\*.o src\*.d *.dll *.exp *.lib
+	del src\*.o src\*.d moltcuda.* *.pdb
 	
 clean-bin:
 	del $(TARGET)

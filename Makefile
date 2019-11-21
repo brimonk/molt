@@ -5,13 +5,15 @@
 
 CC = gcc
 LINKER = -lm -ldl -lpthread
-FLAGS = -Wall -g3 -march=native
+FLAGS = -Wall -march=native
 TARGET = molt
 SRC = src/calcs.c src/common.c src/lump.c src/main.c src/thpool.c src/sys_linux.c src/test.c
 OBJ = $(SRC:.c=.o)
 DEP = $(OBJ:.o=.d) # one dependency file for each source
 
-BUILDVIEWER?=0
+ifeq ($(MOLTDEBUG),1)
+	FLAGS += -g3
+endif
 
 ifeq ($(BUILDVIEWER),1)
 	PPARMS := -DMOLT_VIEWER

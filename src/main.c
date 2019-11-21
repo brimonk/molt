@@ -238,7 +238,6 @@ int main(int argc, char **argv)
 		dump_lumps();
 	}
 
-#define MOLT_VIEWER
 #ifdef MOLT_VIEWER
 	if (flags & FLAG_VIEWER) {
 		v_run(NULL, 0, 0, NULL);
@@ -282,23 +281,23 @@ int do_simulation()
 
 	// get working memory for all of our data points we need
 
-	vw[0] = calloc(sizeof(f64), pinc[0]);
-	vw[1] = calloc(sizeof(f64), pinc[0]);
-	vw[2] = calloc(sizeof(f64), pinc[1]);
-	vw[3] = calloc(sizeof(f64), pinc[1]);
-	vw[4] = calloc(sizeof(f64), pinc[2]);
-	vw[5] = calloc(sizeof(f64), pinc[2]);
+	vw[0] = calloc(pinc[0], sizeof(f64));
+	vw[1] = calloc(pinc[0], sizeof(f64));
+	vw[2] = calloc(pinc[1], sizeof(f64));
+	vw[3] = calloc(pinc[1], sizeof(f64));
+	vw[4] = calloc(pinc[2], sizeof(f64));
+	vw[5] = calloc(pinc[2], sizeof(f64));
 
-	ww[0] = calloc(sizeof(f64), points[0] * (config.spaceacc + 1));
-	ww[1] = calloc(sizeof(f64), points[0] * (config.spaceacc + 1));
-	ww[2] = calloc(sizeof(f64), points[1] * (config.spaceacc + 1));
-	ww[3] = calloc(sizeof(f64), points[1] * (config.spaceacc + 1));
-	ww[4] = calloc(sizeof(f64), points[2] * (config.spaceacc + 1));
-	ww[5] = calloc(sizeof(f64), points[2] * (config.spaceacc + 1));
+	ww[0] = calloc(points[0] * (config.spaceacc + 1), sizeof(f64));
+	ww[1] = calloc(points[0] * (config.spaceacc + 1), sizeof(f64));
+	ww[2] = calloc(points[1] * (config.spaceacc + 1), sizeof(f64));
+	ww[3] = calloc(points[1] * (config.spaceacc + 1), sizeof(f64));
+	ww[4] = calloc(points[2] * (config.spaceacc + 1), sizeof(f64));
+	ww[5] = calloc(points[2] * (config.spaceacc + 1), sizeof(f64));
 
-	prev = calloc(sizeof(f64), elems);
-	curr = calloc(sizeof(f64), elems);
-	next = calloc(sizeof(f64), elems);
+	prev = calloc(elems, sizeof(f64));
+	curr = calloc(elems, sizeof(f64));
+	next = calloc(elems, sizeof(f64));
 
 	volumebytes = sizeof(f64) * elems;
 
@@ -391,23 +390,23 @@ int do_custom_simulation(void *lib)
 
 	// get working memory for all of our data points we need
 
-	custom.vlx = calloc(sizeof(f64), pinc[0]);
-	custom.vrx = calloc(sizeof(f64), pinc[0]);
-	custom.vly = calloc(sizeof(f64), pinc[1]);
-	custom.vry = calloc(sizeof(f64), pinc[1]);
-	custom.vlz = calloc(sizeof(f64), pinc[2]);
-	custom.vrz = calloc(sizeof(f64), pinc[2]);
+	custom.vlx = calloc(pinc[0], sizeof(f64));
+	custom.vrx = calloc(pinc[0], sizeof(f64));
+	custom.vly = calloc(pinc[1], sizeof(f64));
+	custom.vry = calloc(pinc[1], sizeof(f64));
+	custom.vlz = calloc(pinc[2], sizeof(f64));
+	custom.vrz = calloc(pinc[2], sizeof(f64));
 
-	custom.wlx = calloc(sizeof(f64), points[0] * (config.spaceacc + 1));
-	custom.wrx = calloc(sizeof(f64), points[0] * (config.spaceacc + 1));
-	custom.wly = calloc(sizeof(f64), points[1] * (config.spaceacc + 1));
-	custom.wry = calloc(sizeof(f64), points[1] * (config.spaceacc + 1));
-	custom.wlz = calloc(sizeof(f64), points[2] * (config.spaceacc + 1));
-	custom.wrz = calloc(sizeof(f64), points[2] * (config.spaceacc + 1));
+	custom.wlx = calloc(points[0] * (config.spaceacc + 1), sizeof(f64));
+	custom.wrx = calloc(points[0] * (config.spaceacc + 1), sizeof(f64));
+	custom.wly = calloc(points[1] * (config.spaceacc + 1), sizeof(f64));
+	custom.wry = calloc(points[1] * (config.spaceacc + 1), sizeof(f64));
+	custom.wlz = calloc(points[2] * (config.spaceacc + 1), sizeof(f64));
+	custom.wrz = calloc(points[2] * (config.spaceacc + 1), sizeof(f64));
 
-	custom.prev  = calloc(sizeof(f64), elems);
-	custom.curr  = calloc(sizeof(f64), elems);
-	custom.next  = calloc(sizeof(f64), elems);
+	custom.prev  = calloc(elems, sizeof(f64));
+	custom.curr  = calloc(elems, sizeof(f64));
+	custom.next  = calloc(elems, sizeof(f64));
 
 	volumebytes = sizeof(f64) * elems;
 
@@ -453,7 +452,8 @@ int do_custom_simulation(void *lib)
 	custom.func_sweep = sys_libsym(lib, "molt_custom_sweep");
 	custom.func_reorg = sys_libsym(lib, "molt_custom_reorg");
 
-	custom.func_open(&custom);
+	rc = custom.func_open(&custom);
+	if (rc < 0) { PRINTANDFAIL("couldn't init custom library"); }
 
 	i = config.t_params[MOLT_PARAM_START];
 	flags = MOLT_FLAG_FIRSTSTEP;
@@ -471,7 +471,8 @@ int do_custom_simulation(void *lib)
 		i += config.t_params[MOLT_PARAM_STEP];
 	} while (i < config.t_params[MOLT_PARAM_STOP]);
 
-	custom.func_close(&custom);
+	rc = custom.func_close(&custom);
+	if (rc < 0) { PRINTANDFAIL("couldn't close custom library"); }
 
 	molt_cfg_free_workstore(&config);
 
@@ -604,12 +605,12 @@ int setup_vweight()
 	molt_cfg_parampull_xyz(&config, stop, MOLT_PARAM_STOP);
 	molt_cfg_parampull_xyz(&config, dim, MOLT_PARAM_PINC);
 
-	vlx = calloc(sizeof(f64), dim[0]);
-	vrx = calloc(sizeof(f64), dim[0]);
-	vly = calloc(sizeof(f64), dim[1]);
-	vry = calloc(sizeof(f64), dim[1]);
-	vlz = calloc(sizeof(f64), dim[2]);
-	vrz = calloc(sizeof(f64), dim[2]);
+	vlx = calloc(dim[0], sizeof(f64));
+	vrx = calloc(dim[0], sizeof(f64));
+	vly = calloc(dim[1], sizeof(f64));
+	vry = calloc(dim[1], sizeof(f64));
+	vlz = calloc(dim[2], sizeof(f64));
+	vrz = calloc(dim[2], sizeof(f64));
 
 	for (i = 0; i < dim[0]; i++) { // vlx
 		vlx[i] = exp((-config.alpha) * config.space_scale * (i - start[0]));
@@ -677,12 +678,12 @@ int setup_wweight()
 	wrz_items = config.z_params[MOLT_PARAM_POINTS] * (config.spaceacc + 1);
 
 	// allocate memory for the results
-	wlx = calloc(sizeof(f64), wlx_items);
-	wrx = calloc(sizeof(f64), wrx_items);
-	wly = calloc(sizeof(f64), wly_items);
-	wry = calloc(sizeof(f64), wry_items);
-	wlz = calloc(sizeof(f64), wlz_items);
-	wrz = calloc(sizeof(f64), wrz_items);
+	wlx = calloc(wlx_items, sizeof(f64));
+	wrx = calloc(wrx_items, sizeof(f64));
+	wly = calloc(wly_items, sizeof(f64));
+	wry = calloc(wry_items, sizeof(f64));
+	wlz = calloc(wlz_items, sizeof(f64));
+	wrz = calloc(wrz_items, sizeof(f64));
 
 	get_exp_weights(config.nu[0], wlx, wrx, config.x_params[MOLT_PARAM_POINTS], config.spaceacc);
 	get_exp_weights(config.nu[1], wly, wry, config.y_params[MOLT_PARAM_POINTS], config.spaceacc);
@@ -750,7 +751,7 @@ int setup_initcommand(struct user_cfg_t *usercfg, int command)
 
 	elements = dim[0] * (u64)dim[1] * dim[2];
 
-	hunk = calloc(sizeof(f64), elements);
+	hunk = calloc(elements, sizeof(f64));
 
 	if (usercfg && usercfg->isset) {
 		rc = sys_bipopen(&pipe_read, &pipe_write, commandstr);
@@ -793,11 +794,6 @@ int setup_initcommand(struct user_cfg_t *usercfg, int command)
 	free(hunk);
 
 	return rc;
-}
-
-/* setup_initvelocity : inits velocity, uses custom command if available */
-int setup_initvelocity(struct user_cfg_t *usercfg)
-{
 }
 
 /* setup_customprog_write : function for threading setup */
@@ -876,46 +872,6 @@ void *setup_customprog_read(void *arg)
 	fclose(cargs->fp);
 
 	return NULL;
-}
-
-/* setup_initamplitude : inits amplitude, uses custom command if available */
-int setup_initamplitude(struct user_cfg_t *usercfg)
-{
-	// NOTE
-	// this function allocates storage and commite it into the lump system
-	struct molt_cfg_t config;
-	u64 elements;
-	f64 *initamplitude;
-	ivec3_t dim;
-	int rc;
-
-	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
-	if (rc < 0) {
-		return -1;
-	}
-
-	molt_cfg_parampull_xyz(&config, dim, MOLT_PARAM_PINC);
-
-	elements = dim[0] * (u64)dim[1] * dim[2];
-
-	initamplitude = calloc(sizeof(f64), elements);
-
-	if (usercfg && usercfg->isset) {
-		// TODO use the initial amplitude config
-		// rc = setup_initvelocity_config(initamplitude, usercfg);
-	}
-
-	rc = lump_write(MOLTSTR_AMP, sizeof(f64) * elements, initamplitude, NULL);
-
-	free(initamplitude);
-
-	return rc;
-}
-
-/* setup_initamplitude_config : sets up the initial amplitude from the config */
-int setup_initamplitude_config(f64 *initamplitude, struct user_cfg_t *usercfg)
-{
-	return 0;
 }
 
 /* dump_lumps : prints a dump of all the lumps in the lump system */

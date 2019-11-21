@@ -21,3 +21,5 @@ lib*
 *.so
 *.exe
 *.pdb
+*.exp
+*.lib
