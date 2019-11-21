@@ -224,7 +224,7 @@ void molt_custom_reorg_work(void *arg)
 		Vec3Set(tmpv, i, reorgargs->row[1], reorgargs->row[2]);
 		src_i = molt_genericidx(tmpv, reorgargs->dim, reorgargs->src_ord);
 		dst_i = molt_genericidx(tmpv, reorgargs->dim, reorgargs->dst_ord);
-		reorgargs->dst[dst_i] = reorgargs->src[src_i];
+		reorgargs->work[dst_i] = reorgargs->src[src_i];
 	}
 }
 
@@ -265,5 +265,7 @@ void molt_custom_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_o
 	}
 
 	thpool_wait(g_pool);
+
+	memcpy(dst, work, sizeof(f64) * dim[0] * dim[1] * dim[2]);
 }
 

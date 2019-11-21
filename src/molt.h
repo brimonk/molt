@@ -176,7 +176,7 @@ static cvec3_t molt_ord_zyx = {'z', 'y', 'x'};
 
 static s32 molt_gfquad_bound(s32 idx, s32 m2, s32 len);
 
-/* mk_genericidx : retrieves a generic index from input dimensionality */
+/* molt_genericidx : retrieves a generic index from input dimensionality */
 static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order);
 
 /* molt_cfg_dims_t : initializes, very explicitly, cfg's time parameters */
@@ -316,11 +316,10 @@ void molt_cfg_set_workstore(struct molt_cfg_t *cfg)
 	}
 
 	for (i = 0; i < 8; i++) {
-		cfg->workstore[i] = calloc(elems, sizeof(f64));
-		// PERFLOG_APP_AND_PRINT(molt_staticbuf, "workstore[%d] : %p", i, cfg->workstore[i]);
+		cfg->workstore[i] = (f64 *)calloc(elems, sizeof(f64));
 	}
 
-	cfg->worksweep = calloc(len, sizeof(f64));
+	cfg->worksweep = (f64 *)calloc(len, sizeof(f64));
 }
 
 /* molt_cfg_free_workstore : frees all of the working storage */
@@ -863,7 +862,7 @@ void molt_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_ord, cve
 	memcpy(dst, work, sizeof(*dst) * total);
 }
 
-/* mk_genericidx : retrieves a generic index from input dimensionality */
+/* molt_genericidx : retrieves a generic index from input dimensionality */
 static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order)
 {
 	/*

@@ -48,7 +48,17 @@ static void sys_errorhandle()
 /* sys_lasterror : handles errors that aren't propogated through win32 errno */
 static void sys_lasterror()
 {
-	// TODO (brian) handle the
+	DWORD error;
+	char *errmsg;
+
+	error = GetLastError();
+
+	FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&errmsg, 0, NULL);
+
+	fprintf(stderr, "%s\n", errmsg);
+
+	LocalFree(errmsg);
 }
 
 /* sys_open : system wrapper for open */

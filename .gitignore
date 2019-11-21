@@ -11,7 +11,7 @@
 *.dat
 
 # don't keep the binary in source control either
-molt
+./molt
 
 # don't keep any libs
 lib*
@@ -19,3 +19,5 @@ lib*
 # don't commit binaries to the source tree
 *.dll
 *.so
+*.exe
+*.pdb

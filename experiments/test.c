@@ -4,6 +4,9 @@
  *
  * A test experiment in C. Mainly for use on Windows, where other programming
  * languages can be somewhat cludgy to use cleanly.
+ *
+ * TO COMPILE
+ *   gcc -o test.exe test.c -lm
  */
 
 #include <stdio.h>

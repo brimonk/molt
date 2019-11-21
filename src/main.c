@@ -238,9 +238,10 @@ int main(int argc, char **argv)
 		dump_lumps();
 	}
 
+#define MOLT_VIEWER
 #ifdef MOLT_VIEWER
 	if (flags & FLAG_VIEWER) {
-		v_run(hunk, hunksize, fd, NULL);
+		v_run(NULL, 0, 0, NULL);
 	}
 #endif
 
