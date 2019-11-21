@@ -7,7 +7,7 @@ CC = gcc
 LINKER = -lm -ldl -lpthread
 FLAGS = -Wall -march=native
 TARGET = molt
-SRC = src/calcs.c src/common.c src/lump.c src/main.c src/thpool.c src/sys_linux.c
+SRC = src/calcs.c src/common.c src/lump.c src/main.c src/sys_linux.c
 OBJ = $(SRC:.c=.o)
 DEP = $(OBJ:.o=.d) # one dependency file for each source
 
@@ -35,8 +35,8 @@ $(TARGET): $(OBJ)
 	$(CC) $(FLAGS) -o $(TARGET) $(OBJ) $(LINKER)
 
 # this is where we have individual targets for our modules
-moltthreaded.so: src/custom/moltthreaded.c src/thpool.c
-	$(CC) -fPIC -shared $(FLAGS) -o $@ src/custom/moltthreaded.c src/thpool.c -lm -lpthread
+moltthreaded.so: src/custom/moltthreaded.c src/custom/thpool.c
+	$(CC) -fPIC -shared $(FLAGS) -o $@ src/custom/moltthreaded.c src/custom/thpool.c -lm -lpthread
 
 clean: clean-obj clean-bin
 

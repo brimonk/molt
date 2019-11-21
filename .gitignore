@@ -11,6 +11,7 @@
 *.dat
 
 # don't keep the binary in source control either
+molt*
 ./molt
 
 # don't keep any libs

@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <dlfcn.h>
+#include <pthread.h>
 
 #include "common.h"
 #include "sys.h"
@@ -54,7 +55,7 @@ sys_file *sys_open(char *name)
 		free(fd);
 		fd = NULL;
 	} else {
-		strncpy(fd.name, name, sizeof(fd.name));
+		strncpy(fd->name, name, sizeof(fd->name));
 	}
 
 	return fd;
@@ -228,12 +229,53 @@ int sys_timestamp(u64 *sec, u64 *usec)
 	return 0;
 }
 
-/* sys_threadcreate : creates a thread */
-int sys_threadcreate(struct sys_thread *thread)
+/* sys_threadwrap : wrapper to get pairity with the pthread functionality */
+static void *sys_threadwrap(void *arg)
+{
+	struct sys_thread *thread;
+	void *p;
+
+	thread = arg;
+
+	p = thread->func(thread->arg);
+
+	return NULL;
+}
+
+
+/* sys_threadcreate : creates a new thread */
+struct sys_thread *sys_threadcreate()
+{
+	return calloc(1, sizeof(struct sys_thread));
+}
+
+/* sys_threadfree : frees the thread */
+int sys_threadfree(struct sys_thread *thread)
+{
+	free(thread);
+	return 0;
+}
+
+/* sys_threadsetfunc : sets the function for the thread */
+int sys_threadsetfunc(struct sys_thread *thread, void *(*func)(void *arg))
+{
+	thread->func = func;
+	return 0;
+}
+
+/* sys_threadsetarg : sets the argument for the thread */
+int sys_threadsetarg(struct sys_thread *thread, void *arg)
+{
+	thread->arg = arg;
+	return 0;
+}
+
+/* sys_threadstart : actually starts the thread */
+int sys_threadstart(struct sys_thread *thread)
 {
 	int rc;
 
-	rc = pthread_create(&thread->thread, NULL, thread->func, thread->arg);
+	rc = pthread_create(&thread->thread, NULL, sys_threadwrap, thread);
 	if (rc != 0) {
 		sys_errorhandle();
 	}
