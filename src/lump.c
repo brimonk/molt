@@ -19,7 +19,7 @@
 
 #define LUMP_MAGIC     *(s32 *)"MOLT"
 #define LUMP_MAXINFO   65535 // this makes the metadata 2MB
-#define LUMP_METALEN   (sizeof(struct lumpheader_t) + sizeof(struct lumpinfo_t) * 65535)
+#define LUMP_METALEN   (sizeof(struct lumpheader_t) + sizeof(struct lumpinfo_t) * LUMP_MAXINFO)
 
 static struct sys_file *g_lumpfile;
 

@@ -34,6 +34,7 @@
 
 #include "common.h"
 #include "molt.h"
+#include "lump.h"
 #include "sys.h"
 #include "viewer.h"
 
@@ -53,11 +54,6 @@
 #define MOUSE_SENSITIVITY 0.4f
 
 #define FONT_PATH "assets/fonts/LiberationMono-Regular.ttf"
-
-#define VOL_BOUND (M_PI)
-#define VOL_STEP  (M_PI / 8)
-#define SIM_START (0.0) // make sure start and end are both floating point
-#define SIM_END   (4 * M_PI)
 
 // shader container
 struct shader_cont_t {
@@ -299,7 +295,6 @@ struct particle_t {
 	f32 pos_x, pos_y, pos_z;
 	f32 col_r, col_g, col_b, col_a;
 	f32 cam_dist;
-	s32 update;
 };
 
 struct simstate_t {
@@ -320,11 +315,18 @@ struct simstate_t {
 	               // this value is always increasing while the simulation isn't
 				   // in "paused" mode
 
+	s64 timestep_last, timestep_curr;
+
+	struct molt_cfg_t *config;
+
+	// NOTE (brian) we read from storage into particles, and sort them
+	// into particles_draw for actual drawing
+	f64 *particles_raw;
 	struct particle_t *particles;
-	struct particle_t **particles_draw;
-	s64 particle_len;
-	s64 particle_cnt;
-	f32 (*thinker) (f32, f32, f32, f32); // going to be replaced as per the note in v_updatestate
+	struct particle_t *particles_draw;
+	u64 particle_cnt;
+
+	f64 volmin, volmax;
 
 	s32 run, paused;
 };
@@ -352,9 +354,15 @@ void f_rendertext(struct frender_t *frender, struct fchar_t *ftab, char *text);
 int v_loadopenglfuncs();
 int v_instatecheck(struct simstate_t *state, int kstate, int amt, ...);
 int v_iteminlist(int v, int n, ...);
-u64 v_timer();
+/* v_particles_raw_to_formed : reads raw f64 * and formats it to the particle_t structure we need to render */
+void v_particles_raw_to_formed(struct simstate_t *state, struct molt_cfg_t *config, struct particle_t *dst, f64 *src);
 void v_addpart(struct simstate_t *state, f32 x, f32 y, f32 z, f32 r, f32 g, f32 b, s32 u);
 void v_updatestate(struct simstate_t *state);
+/* v_minsandmaxes : finds the mins and maxes for all amplitude lumps */
+void v_minsandmaxes(struct simstate_t *state, f64 *max, f64 *min);
+
+/* mix_f64 : linear interpolation for f64 values */
+f64 mix_f64(f64 x, f64 y, f64 a);
 
 struct openglfuncs_t {
 	char *str;
@@ -566,37 +574,23 @@ void gl_check_errors(const char *file, int line)
 	}
 }
 
-// particular_soln : computes the particular solution for a wave in 3d
-// TODO remove and use real MOLT computations
-f32 particular_soln(f32 x, f32 y, f32 z, f32 t)
-{
-#if 0
-	const f32 k = 0.4f;
-	const f32 l = 0.4f;
-	const f32 m = 0.4f;
-	const f32 c = 1;
-
-	return sin(k * M_PI * x) * sin(l * M_PI * y) * sin(m * M_PI * z) *
-		cos(c * M_PI * sqrt(pow(k,2) + pow(l,2) + pow(m,2)) * t);
-#else
-	return sin(M_PI * x + t * 0.2);
-#endif
-}
-
 /* v_run : runs the molt graphical 3d simulation viewer */
 s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 {
 	SDL_GLContext glcontext;
 	SDL_Event event;
 
+	struct molt_cfg_t config;
 	struct simstate_t state;
 	struct shader_cont_t shader;
 
 	struct frender_t frender;
 	struct fchar_t ftab[128];
 
-	struct particle_t **p;
-	s32 rc, i;
+	struct particle_t *p;
+	s32 rc;
+	s64 i, elements;
+	ivec3_t dim;
 	u32 locPos, locCol;
 
 	float bbverts[] = {
@@ -611,38 +605,41 @@ s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	memset(&ftab, 0, sizeof ftab);
 	memset(&state, 0, sizeof state);
 
+	// TODO (brian) put the lump strings somewhere better (common.h)
+	rc = lump_read("CONFIG", 0, &config);
+	if (rc < 0) {
+		fprintf(stderr, "Couldn't load config lump!\n");
+		return -1;
+	}
+
+	molt_cfg_parampull_xyz(&config, dim, MOLT_PARAM_PINC);
+
+	elements = (s64)dim[0] * dim[1] * dim[2];
+
+	state.config = &config;
+
+	state.particles_raw = calloc(1, sizeof(f64) * elements);
+	state.particles = calloc(1, sizeof(struct particle_t) * elements);
+	state.particles_draw = calloc(1, sizeof(struct particle_t) * elements);
+	state.particle_cnt = elements;
+
+	v_minsandmaxes(&state, &state.volmin, &state.volmax);
+
+	state.timestep_curr = state.config->t_params[MOLT_PARAM_START];
+	state.timestep_last = state.config->t_params[MOLT_PARAM_START];
+
+	rc = lump_read("AMP", state.timestep_curr, state.particles_raw);
+	if (rc < 0) {
+		fprintf(stderr, "couldn't read AMP %lld from lump system!\n", state.timestep_curr);
+		return -1;
+	}
+
 	// initialize the camera
 	state.cam_pos = HMM_Vec3(0, 4, 4);
 	state.cam_front = HMM_MultiplyVec3f(state.cam_pos, -1);
 	state.cam_up = HMM_Vec3(0, 1, 0);
 
-	// NOTE (brian) debugging particles
-	// TODO (brian) hook up the actual simulation data from hunk into our particles
-	// TODO (brian) use v_updatestate to read the new particle data on step
-#if 1
-	{
-		f32 x, y, z;
-		for (x = -VOL_BOUND; x <= VOL_BOUND; x += VOL_STEP)
-		for (y = -VOL_BOUND; y <= VOL_BOUND; y += VOL_STEP)
-		for (z = -VOL_BOUND; z <= VOL_BOUND; z += VOL_STEP) {
-			v_addpart(&state, x, y, z, 1, 0, 1, 1);
-		}
-	}
-#else
-	{
-		f32 x, y;
-		for (i = 0; i < 36; i++) {
-			x = cos(i * 10.0 * M_PI / 180);
-			y = sin(i * 10.0 * M_PI / 180);
-			// add some particles for debugging
-			v_addpart(&state, x, 0, y, x, 0, y, 0);
-		}
-	}
-#endif
-
-	state.thinker = particular_soln;
-
-	v_updatestate(&state);
+	v_particles_raw_to_formed(&state, &config, state.particles, state.particles_raw);
 
 	rc = 0, state.run = 1;
 
@@ -728,6 +725,9 @@ s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	frender.loc_view = vglGetUniformLocation(frender.shader, "uView");
 	frender.loc_pers = vglGetUniformLocation(frender.shader, "uPers");
 
+	locPos = vglGetUniformLocation(shader.shader, "uPos");
+	locCol = vglGetUniformLocation(shader.shader, "uCol");
+
 	// now we can finally run our simulation
 	while (state.run) {
 
@@ -762,28 +762,34 @@ s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		v_handleinput(&state);
 		v_keystatecycle(&state);
 
-		// NOTE (brian) we only update the simulation (move time forward)
-		// while we're in an unpaused state, state.paused == 0
-		if (!state.paused) {
-			v_updatestate(&state);
+		// create updated transform matricies
+		state.cam_look = HMM_AddVec3(state.cam_pos, state.cam_front);
+		view = HMM_LookAt(state.cam_pos, state.cam_look, state.cam_up);
+		proj = HMM_Perspective(90.0f, state.output.aspectratio, 0.1f, 40.0f);
+		pers = HMM_Orthographic(0, state.output.win_w, 0, state.output.win_h, -1.0, 1.0);
 
-			// handle the time wrapping updates
-			if (SIM_END <= state.time_curr) {
-				state.time_curr = SIM_START;
+		if (state.timestep_last != state.timestep_curr) {
+
+			memset(state.particles_raw, 0, sizeof(f64) * elements);
+			memset(state.particles, 0, sizeof(struct particle_t) * elements);
+			memset(state.particles_draw, 0, sizeof(struct particle_t) * elements);
+
+			rc = lump_read("AMP", state.timestep_curr, state.particles_raw);
+			if (rc < 0) {
+				fprintf(stderr, "couldn't read AMP %lld from lump system!\n", state.timestep_curr);
+				return -1;
 			}
+
+			v_particles_raw_to_formed(&state, &config, state.particles, state.particles_raw);
+
+			state.timestep_last = state.timestep_curr;
 		}
+
+		v_updatestate(&state);
 
 		// render
 		glClearColor(0, 0, 0, 1);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		// create updated transform matricies
-		state.cam_look = HMM_AddVec3(state.cam_pos, state.cam_front);
-		view = HMM_LookAt(state.cam_pos, state.cam_look, state.cam_up);
-		// TODO (brian) compute the draw distance based on the dimensionatliy of the simulation
-		proj = HMM_Perspective(90.0f, state.output.aspectratio, 0.1f, 40.0f);
-		// pers = HMM_Orthographic(0, state.output.win_w, state.output.win_h, 0, -1.0, 1.0);
-		pers = HMM_Orthographic(0, state.output.win_w, 0, state.output.win_h, -1.0, 1.0);
 
 		/* draw the particles */
 		vglUseProgram(shader.shader);
@@ -793,12 +799,10 @@ s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 		vglUniformMatrix4fv(shader.loc_view, 1, GL_FALSE, (f32 *)&view);
 		vglUniformMatrix4fv(shader.loc_proj, 1, GL_FALSE, (f32 *)&proj);
 
-		locPos = vglGetUniformLocation(shader.shader, "uPos");
-		locCol = vglGetUniformLocation(shader.shader, "uCol");
-
-		for (i = 0, p = state.particles_draw; i < state.particle_cnt; i++, p++) {
-			vglUniform3f(locPos, (*p)->pos_x, (*p)->pos_y, (*p)->pos_z);
-			vglUniform4f(locCol, (*p)->col_r, (*p)->col_g, (*p)->col_b, (*p)->col_a);
+		p = state.particles_draw;
+		for (i = 0; i < elements; i++) {
+			vglUniform3f(locPos, p[i].pos_x, p[i].pos_y, p[i].pos_z);
+			vglUniform4f(locCol, p[i].col_r, p[i].col_g, p[i].col_b, p[i].col_a);
 			vglDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 		}
 
@@ -847,6 +851,10 @@ s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg)
 	SDL_GL_DeleteContext(glcontext);
 	SDL_DestroyWindow(state.output.window);
 	SDL_Quit();
+
+	free(state.particles_raw);
+	free(state.particles);
+	free(state.particles_draw);
 
 	return rc;
 }
@@ -1090,6 +1098,10 @@ void v_handleinput(struct simstate_t *state)
 #define IN_QUIT      INPUT_KEY_ESC, INPUT_KEY_Q
 #define IN_PAUSE     INPUT_KEY_J
 #define IN_FSCREEN   INPUT_KEY_F
+#define IN_NEXTTIME  INPUT_KEY_UARROW, INPUT_KEY_RARROW
+#define IN_PREVTIME  INPUT_KEY_DARROW, INPUT_KEY_LARROW
+#define IN_STARTTIME INPUT_KEY_HOME
+#define IN_ENDTIME   INPUT_KEY_END
 
 	// handle the "quit" sequence
 	if (v_instatecheck(state, INSTATE_PRESSED, PP_NARG(IN_QUIT), IN_QUIT)) {
@@ -1137,14 +1149,32 @@ void v_handleinput(struct simstate_t *state)
 		state->paused = !state->paused;
 	}
 
+	if (v_instatecheck(state, INSTATE_PRESSED, PP_NARG(IN_NEXTTIME), IN_NEXTTIME)) {
+		if (state->timestep_curr != state->config->t_params[MOLT_PARAM_STOP]) {
+			state->timestep_curr++;
+		}
+	}
+
+	if (v_instatecheck(state, INSTATE_PRESSED, PP_NARG(IN_PREVTIME), IN_PREVTIME)) {
+		if (state->timestep_curr != state->config->t_params[MOLT_PARAM_START]) {
+			state->timestep_curr--;
+		}
+	}
+
+	if (v_instatecheck(state, INSTATE_PRESSED, PP_NARG(IN_STARTTIME), IN_STARTTIME)) {
+		state->timestep_curr = 0;
+	}
+
+	if (v_instatecheck(state, INSTATE_PRESSED, PP_NARG(IN_ENDTIME), IN_ENDTIME)) {
+		state->timestep_curr = state->config->t_params[MOLT_PARAM_STOP];
+	}
+
 	if (v_instatecheck(state, INSTATE_PRESSED, PP_NARG(IN_FULLSCREEN), IN_FSCREEN)) {
 		if (state->output.fullscreen) {
 			SDL_SetWindowFullscreen(state->output.window, 0);
 		} else {
 			SDL_SetWindowFullscreen(state->output.window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 		}
-
-		state->output.fullscreen = !state->output.fullscreen;
 
 		state->output.fullscreen = !state->output.fullscreen;
 	}
@@ -1222,37 +1252,6 @@ u32 viewer_mkshader(char *vertex_file, char *fragment_file)
 	free(fragment);
 
 	return program_id;
-}
-
-/* viewer_bounds : gets the lowest and highest values of all values in the mesh */
-void viewer_bounds(f64 *p, u64 len, f64 *low, f64 *high)
-{
-	// WARN (Brian)
-	// this probably doesn't play nice if the algorithm isn't stable, meaning
-	// when you accidentally get -nans in your doubles, you're going to have
-	// issues (probably)
-
-	f64 llow, lhigh;
-	u64 i;
-
-	llow  = DBL_MAX;
-	lhigh = DBL_MIN;
-
-	for (i = 0; i < len; i++) {
-		if (p[i] < llow) {
-			llow = p[i];
-		}
-		if (p[i] > lhigh) {
-			lhigh = p[i];
-		}
-	}
-
-	// we only update them if the values REALLY ARE lower
-	// hopefully they come in as zero
-	if (*low > llow)
-		*low  = llow;
-	if (*high < lhigh)
-		*high = lhigh;
 }
 
 /* viewer_loadopenglfuncs : load the opengl functions that we need */
@@ -1347,53 +1346,6 @@ int v_iteminlist(int v, int n, ...)
 	return rc;
 }
 
-/* v_timer : high precision timer fun */
-u64 v_timer()
-{
-	u64 tick;
-	u32 a, d;
-
-	asm volatile("rdtsc" : "=a" (a), "=d" (d));
-
-	tick = (((u64)a) | ((u64)d << 32));
-
-	return tick;
-}
-
-/* v_addpart : adds a particle in the list of particles */
-void v_addpart(struct simstate_t *state, f32 x, f32 y, f32 z, f32 r, f32 g, f32 b, s32 u)
-{
-	size_t bytes;
-	struct particle_t *p;
-#define DEFAULT_PARTICLES 32
-
-	// get more memory if we need to
-	if (state->particle_cnt == state->particle_len) {
-		if (state->particle_len == 0) {
-			state->particle_len = DEFAULT_PARTICLES;
-		} else {
-			state->particle_len *= 2;
-		}
-
-		bytes = state->particle_len * sizeof(struct particle_t);
-		state->particles = realloc(state->particles, bytes);
-		bytes = state->particle_len * sizeof(struct particle_t *);
-		state->particles_draw = realloc(state->particles_draw, bytes);
-	}
-
-	// now actually add the particle
-	p = state->particles + state->particle_cnt++;
-
-	p->pos_x = x;
-	p->pos_y = y;
-	p->pos_z = z;
-	p->col_r = r;
-	p->col_g = g;
-	p->col_b = b;
-	p->col_a = 1;
-	p->update = u;
-}
-
 /* vec_dist : compute the distance between hmm_vec3s */
 f32 vec_dist(hmm_vec3 cam, hmm_vec3 part)
 {
@@ -1406,16 +1358,16 @@ f32 vec_dist(hmm_vec3 cam, hmm_vec3 part)
 /* partcmp : particle_t comparator (for distance) */
 int partcmp(const void *a, const void *b)
 {
-	struct particle_t **pa;
-	struct particle_t **pb;
+	struct particle_t *pa;
+	struct particle_t *pb;
 	int rc;
 	f32 a_dist, b_dist;
 
-	pa = (struct particle_t **)a;
-	pb = (struct particle_t **)b;
+	pa = (struct particle_t *)a;
+	pb = (struct particle_t *)b;
 
-	a_dist = (*pa)->cam_dist;
-	b_dist = (*pb)->cam_dist;
+	a_dist = pa->cam_dist;
+	b_dist = pb->cam_dist;
 
 	if (a_dist < b_dist) {
 		rc = -1;
@@ -1428,45 +1380,111 @@ int partcmp(const void *a, const void *b)
 	return rc;
 }
 
+/* v_particles_raw_to_formed : reads raw f64 * and formats it to the particle_t structure we need to render */
+void v_particles_raw_to_formed(struct simstate_t *state, struct molt_cfg_t *config, struct particle_t *dst, f64 *src)
+{
+	dvec3_t ddim;
+	ivec3_t curr, dim;
+	s64 idx;
+
+	molt_cfg_parampull_xyz(config, dim, MOLT_PARAM_PINC);
+
+	for (curr[0] = 0; curr[0] < dim[0]; curr[0]++) {
+		for (curr[1] = 0; curr[1] < dim[1]; curr[1]++) {
+			for (curr[2] = 0; curr[2] < dim[2]; curr[2]++) {
+				Vec3Scale(ddim, curr, 1.0f);
+
+				idx = IDX3D(curr[0], curr[1], curr[2], dim[1], dim[2]);
+
+				dst[idx].pos_x = ddim[0];
+				dst[idx].pos_y = ddim[1];
+				dst[idx].pos_z = ddim[2];
+				dst[idx].col_r = 1.0f;
+				dst[idx].col_g = 0.0f;
+				dst[idx].col_b = 1.0f;
+				dst[idx].col_a = (src[idx] + -state->volmin) / (state->volmax + -state->volmin);
+			}
+		}
+	}
+}
+
+/* v_updatestate : updates the particle system for drawing */
 void v_updatestate(struct simstate_t *state)
 {
 	// NOTE (brian) eventually, this will be replaced with a function that
 	// reads from a molt_cfg_t, but as the simulation isn't quite perfect,
 	// this real-time computed solution will have to do
 
-	struct particle_t *p;
-	struct particle_t **pp;
+	struct particle_t *part_r;
+	struct particle_t *part_w;
 	hmm_vec3 pvec;
-	f32 x, y, z;
-	s32 i;
+	u64 i;
 
-	p = state->particles;
-	pp = state->particles_draw;
+	part_r = state->particles;
+	part_w = state->particles_draw;
 
 	for (i = 0; i < state->particle_cnt; i++) {
-		if (p[i].update) {
-			x = p[i].pos_x;
-			y = p[i].pos_y;
-			z = p[i].pos_z;
-			p[i].col_a = state->thinker(x, y, z, state->time_curr);
-		}
-
-		pvec = HMM_Vec3(p[i].pos_x, p[i].pos_y, p[i].pos_z);
-
-		// regardless, we have to compute the distance from the camera
-		p[i].cam_dist = vec_dist(state->cam_pos, pvec);
-
-		// put the pointer into our pointer bucket
-		pp[i] = p + i;
+		pvec = HMM_Vec3(part_r[i].pos_x, part_r[i].pos_y, part_r[i].pos_z);
+		part_r[i].cam_dist = vec_dist(state->cam_pos, pvec);
 	}
 
-	// now, we have to sort the pointers to our structures
-	qsort(state->particles_draw, state->particle_cnt, sizeof(struct particle_t **), partcmp);
+	memcpy(part_w, part_r, state->particle_cnt * sizeof(struct particle_t));
+
+	// qsort(part_w, state->particle_cnt, sizeof(struct particle_t), partcmp);
+}
+
+/* v_minsandmaxes : finds the mins and maxes for all amplitude lumps */
+void v_minsandmaxes(struct simstate_t *state, f64 *max, f64 *min)
+{
+	f64 *hunk;
+	f64 lmax, lmin;
+	u64 i, entries, idx;
+	int rc;
+	ivec3_t dim;
+	ivec3_t curr;
+
+	molt_cfg_parampull_xyz(state->config, dim, MOLT_PARAM_PINC);
+
+	hunk = calloc(dim[0] * (u64)dim[1] * dim[2], sizeof(f64));
+	lmax = DBL_MIN;
+	lmin = DBL_MAX;
+
+	rc = lump_getnumentries("AMP", &entries);
+
+	for (i = 0; i < entries; i++) {
+		rc = lump_read("AMP", i, hunk);
+
+		for (curr[0] = 0; curr[0] < dim[0]; curr[0]++) {
+			for (curr[1] = 0; curr[1] < dim[1]; curr[1]++) {
+				for (curr[2] = 0; curr[2] < dim[2]; curr[2]++) {
+					idx = IDX3D(curr[0], curr[1], curr[2], dim[1], dim[2]);
+					if (hunk[idx] < lmin) {
+						lmin = hunk[idx];
+					}
+					if (hunk[idx] > lmax) {
+						lmax = hunk[idx];
+					}
+				}
+			}
+		}
+	}
+
+	if (max) {
+		*max = lmax;
+	}
+	if (min) {
+		*min = lmin;
+	}
+
+	free(hunk);
 }
 
 /* v_debuginfo : draws debugging information to the screen */
 void v_debuginfo(struct simstate_t *state, struct frender_t *frender, struct fchar_t *ftab, int len)
 {
+	s32 i;
+	s64 val;
+	f64 scale;
 	f32 x, y;
 	char buf[BUFSMALL];
 
@@ -1489,16 +1507,22 @@ void v_debuginfo(struct simstate_t *state, struct frender_t *frender, struct fch
 	snprintf(buf, sizeof buf, "Front     (%3.4f,%3.4f,%3.4f)\n", state->cam_front.x, state->cam_front.y, state->cam_front.z);
 	f_rendertext(frender, ftab, buf);
 
-	// start time
-	snprintf(buf, sizeof buf, "TimeStart (%3.4f)\n", SIM_START);
+	scale = state->config->time_scale;
+
+	// TODO (brian) add back the time debug info
+	val = state->config->t_params[MOLT_PARAM_START];
+	snprintf(buf, sizeof buf, "TimeStart %lld (%3.4e)\n", val, val * scale);
 	f_rendertext(frender, ftab, buf);
 
-	// curr time
-	snprintf(buf, sizeof buf, "TimeCurr  (%3.4f)\n", state->time_curr);
+	val = state->timestep_curr;
+	snprintf(buf, sizeof buf, "TimeCurr  %lld (%3.4e)\n", val, val * scale);
 	f_rendertext(frender, ftab, buf);
 
-	// end time
-	snprintf(buf, sizeof buf, "TimeEnd   (%3.4f)\n", SIM_END);
+	val = state->config->t_params[MOLT_PARAM_STOP];
+	snprintf(buf, sizeof buf, "TimeEnd   %lld (%3.4e)\n", val, val * scale);
+	f_rendertext(frender, ftab, buf);
+
+	snprintf(buf, sizeof buf, "Min (%3.4e), Max (%3.4e)\n", state->volmin, state->volmax);
 	f_rendertext(frender, ftab, buf);
 }
 
@@ -1648,5 +1672,11 @@ void f_fontload(char *path, s32 fontsize, struct fchar_t *ftab, s32 len)
 	vglBindTexture(GL_TEXTURE_2D, 0);
 
 	free(ttf_buffer);
+}
+
+/* mix_f64 : linear interpolation for f64 values */
+f64 mix_f64(f64 x, f64 y, f64 a)
+{
+	return x * (1 - a) + y * a;
 }
 

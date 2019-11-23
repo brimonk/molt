@@ -7,7 +7,7 @@
 #include "molt.h"
 
 /* v_run : runs the molt graphical 3d simulation viewer */
-s32 v_run(void *hunk, u64 hunksize, s32 fd, struct molt_cfg_t *cfg);
+s32 v_run();
 
 #endif // VIEWER_H
 

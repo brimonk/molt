@@ -229,7 +229,7 @@ int main(int argc, char **argv)
 
 #ifdef MOLT_VIEWER
 	if (flags & FLAG_VIEWER) {
-		v_run(NULL, 0, 0, NULL);
+		v_run();
 	}
 #endif
 

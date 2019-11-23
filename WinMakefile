@@ -36,7 +36,7 @@ $(TARGET): $(OBJ)
 
 # this is where we have individual targets for modules
 moltcuda.dll: src/custom/moltcuda.cu
-	nvcc -g -G --shared -o $@ src/custom/moltcuda.cu
+	nvcc -cudart static -g -G --shared -o $@ src/custom/moltcuda.cu
 
 clean: clean-obj clean-bin
 

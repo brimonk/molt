@@ -15,7 +15,7 @@ ifeq ($(MOLTDEBUG),1)
 	FLAGS += -g3
 endif
 
-ifeq ($(BUILDVIEWER),1)
+ifeq ($(MOLTVIEWER),1)
 	PPARMS := -DMOLT_VIEWER
 	SRC += src/viewer.c
 	LINKER += -lSDL2 -lGL
