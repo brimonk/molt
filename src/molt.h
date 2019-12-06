@@ -7,6 +7,8 @@
  * Brian Chrzanowski
  * Sat Apr 06, 2019 22:21
  *
+ * Documentation
+ *
  * TODO Create a Single-Header file Lib (Brian)
  * 1. Dimensionality should be u64 vec3_t, lvec3_t
  * 2. Possibly reorder the parameters in molt_cfg_parampull_gen
@@ -37,9 +39,6 @@
  * ?. Debug/Test
  * ?. Remove use CSTDLIB math.h? stdio.h? stdlib.h?
  * ?. Remove dependency of common.h (get our own indexing macro, for instance)
- *
- * TODO Even Higher Amounts of Performance (Brian)
- * 1. In Place Volume Reorganize (HARD)
  */
 
 enum {
@@ -59,11 +58,9 @@ enum {
 #define MOLT_FLAG_FIRSTSTEP 0x01
 #define MOLT_WORKSTORE_AMT  8
 
-// static char molt_staticbuf[BUFSMALL];
-
 struct molt_cfg_t {
 	// simulation values are kept as integers, and are scaled by the
-	// following value
+	// following values
 	f64 time_scale;
 	f64 space_scale;
 
@@ -151,6 +148,42 @@ void molt_makel(f64 *src, f64 *vl, f64 *vr, f64 minval, s64 len);
 /* molt_vect_mul : perform element-wise vector multiplication */
 f64 molt_vect_mul(f64 *veca, f64 *vecb, s32 veclen);
 
+// these functions are used to initialize the WL and WR weights
+/* molt_get_exp_weights : construct local weights for int up to order M */
+void molt_get_exp_weights(f64 nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm);
+
+/* molt_get_exp_ind : get indexes of X for get_exp_weights */
+int molt_get_exp_ind(int i, int n, int m);
+
+/* molt_matflip : our implementation of Matlab's flipud */
+void molt_matflip(double *mat, int n);
+
+/* molt_invvan : create an inverted vandermonde matrix */
+void molt_invvan(double *mat, double *vect, int len);
+
+/* molt_polyget : find coeff of a polyynomial with roots in src. store in dst */
+void molt_polyget(double *dst, double *src, int dstlen, int srclen);
+
+/* molt_polydiv : use synthetic division to find the coefficients the poly */
+void molt_polydiv(double *dst, double *src, double scale, int dstlen, int srclen);
+
+/* molt_polyval : evaluate a polynomial at x = z */
+double molt_polyval(double *vect, double scale, int vectlen);
+
+/* molt_cumsum : perform a cumulative sum over elem along dimension dim */
+void molt_cumsum(double *elem, int len, double x);
+
+/* exp_coeff : find the exponential coefficients, given nu and M */
+void molt_exp_coeff(double *phi, int philen, double nu);
+
+/* molt_exp_int : perform an exponentially recursive integral (???) */
+double molt_exp_int(double nu, int sizem);
+
+/* molt_mat_mv_mult : perform vector matrix multiplication */
+void molt_mat_mv_mult(f64 *out, f64 *inmat, f64 *invec, s32 singledim);
+
+
+// these are functions that implement the custom interface
 /* moltcustom_step : the custom library molt stepper */
 void molt_step_custom(struct molt_custom_t *custom, u32 flags);
 
@@ -399,7 +432,7 @@ void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u
 
 	// u = u + beta ^ 2 * D1
 	for (i = 0; i < totalelem; i++) {
-		next[i] = next[i] * cfg->beta_sq * work_d1[i];
+		next[i] += cfg->beta_sq * work_d1[i];
 	}
 
 	if (flags & MOLT_FLAG_FIRSTSTEP) {
@@ -425,8 +458,7 @@ void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u
 
 			// u = u + (beta ^ 2 * D3 - 2 * beta ^ 4 / 12 * D2 + beta ^ 6 / 360 * D1)
 			for (i = 0; i < totalelem; i++) {
-				tmp = cfg->beta_sq * work_d3[i] - cfg->beta_fo * work_d2[i] + cfg->beta_si * work_d1[i];
-				next[i] += tmp;
+				next[i] += cfg->beta_sq * work_d3[i] - cfg->beta_fo * work_d2[i] + cfg->beta_si * work_d1[i];
 			}
 		}
 	} else {
@@ -452,8 +484,7 @@ void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u
 
 			// u = u + (beta ^ 2 * D3 - 2 * beta ^ 4 / 12 * D2 + beta ^ 6 / 360 * D1)
 			for (i = 0; i < totalelem; i++) {
-				tmp = cfg->beta_sq * work_d3[i] - cfg->beta_fo * work_d2[i] + cfg->beta_si * work_d1[i];
-				next[i] += tmp;
+				next[i] += cfg->beta_sq * work_d3[i] - cfg->beta_fo * work_d2[i] + cfg->beta_si * work_d1[i];
 			}
 		}
 	}
@@ -650,9 +681,9 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 	molt_sweep(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_yzx, y_sweep_params, cfg->dnu, cfg->spaceacc);
 	molt_reorg(work_iz, work_iz, work_tmp, mesh_dim, molt_ord_yzx, molt_ord_xyz);
 
-	// dst = (work_ix + work_iy + work_iz) / 2
+	// C = Ix + Iy + Iz
 	for (i = 0; i < totalelem; i++) {
-		dst[i] = (work_ix[i] + work_iy[i] + work_iz[i]) / 3 - src[i];
+		dst[i] = (work_ix[i] + work_iy[i] + work_iz[i]);
 	}
 }
 
@@ -1201,6 +1232,277 @@ void molt_d_op_custom(struct molt_custom_t *custom)
 		dst[i] = (work_ix[i] + work_iy[i] + work_iz[i]) / 3 - src[i];
 	}
 }
+
+/* molt_get_exp_weights : construct local weights for int up to order M */
+void molt_get_exp_weights(f64 nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm)
+{
+	int i, j, k;
+	int rowlen, reallen;
+	double *x, *phi, *workvect_r, *workvect_l;
+	double *workmat_r, *workmat_l;
+	double tmpnu;
+
+	rowlen = orderm + 1;
+	reallen = nulen + 1;
+
+	/* retrieve temporary working space from the operating system */
+	x          = calloc(sizeof(double), reallen);
+	phi        = calloc(sizeof(double), rowlen);
+	workvect_r = calloc(sizeof(double), rowlen);
+	workvect_l = calloc(sizeof(double), rowlen);
+	workmat_r  = calloc(sizeof(double), rowlen * rowlen);
+	workmat_l  = calloc(sizeof(double), rowlen * rowlen);
+
+	if (!x || !phi || !workvect_r || !workvect_l || !workmat_r || !workmat_l) {
+		PRINT_AND_DIE("Couldn't Get Enough Memory");
+	}
+
+	// fetch the cumulative sum of nu
+	molt_cumsum(x, reallen, nu);
+
+	for (i = 0; i < nulen; i++) {
+		/* get the current coefficients */
+		molt_exp_coeff(phi, rowlen, nu);
+
+		/* determine what indicies we need to operate over */
+		j = molt_get_exp_ind(i, nulen, orderm);
+
+		/* fill our our Z vectors */
+		for (k = 0; k < rowlen; k++) {
+			workvect_l[k] = (x[i + 1] - x[j + k]) / nu;
+			workvect_r[k] = (x[j + k] - x[i    ]) / nu;
+		}
+
+		molt_invvan(workmat_l, workvect_l, rowlen);
+		molt_invvan(workmat_r, workvect_r, rowlen);
+
+		molt_matflip(workmat_l, rowlen);
+		molt_matflip(workmat_r, rowlen);
+
+		/* multiply our phi vector with our working matrix, giving the answer */
+		molt_mat_mv_mult(wl + (i * rowlen), workmat_l, phi, rowlen);
+		molt_mat_mv_mult(wr + (i * rowlen), workmat_r, phi, rowlen);
+	}
+
+	free(x);
+	free(phi);
+	free(workvect_r);
+	free(workvect_l);
+	free(workmat_r);
+	free(workmat_l);
+}
+
+/* molt_cumsum : perform a cumulative sum over elem along dimension dim */
+void molt_cumsum(double *elem, int len, double x)
+{
+	int i;
+
+	for (i = 0, elem[0] = 0.0; i < len - 1; i++) {
+		elem[i + 1] = elem[i] + x;
+	}
+}
+
+/* molt_exp_coeff : find the exponential coefficients, given nu and M */
+void molt_exp_coeff(double *phi, int philen, double nu)
+{
+	double d;
+	int i, sizem;
+
+	/*
+	 * WARNING: the passed in philen NEEDS to be one greater than the initial
+	 * M value, as this *also* operates in place.
+	 */
+
+	memset(phi, 0, sizeof(double) * philen);
+	sizem = philen - 1; /* use sizem as an index */
+
+	/* seed the value of phi, and work backwards */
+	phi[sizem] = molt_exp_int(nu, sizem);
+
+	d = exp(-nu);
+
+	for (i = sizem - 1; i >= 0; i--) {
+		phi[i] = nu / (i + 1) * (phi[i + 1] + d);
+	}
+}
+
+/* molt_get_exp_ind : get indexes of X for get_exp_weights */
+int molt_get_exp_ind(int i, int n, int m)
+{
+	/*
+	 * there are two bounding points for gathering the indicies
+	 *
+	 * left  = m / 2
+	 * right = n + 1 - m / 2
+	 *
+	 * Please, PLEASE be careful editing this.
+	 */
+
+	int left, right;
+	int rc;
+
+	i++;
+	left  = m / 2;
+	right = n + 1 - m / 2;
+
+	if (i <= left)
+		rc = 0;
+	else if (right <= i)
+		rc = n - m;
+	else
+		rc = i - m / 2;
+
+	return rc;
+}
+
+/* molt_invvan : create an inverted Vandermonde matrix */
+void molt_invvan(double *mat, double *vect, int len)
+{
+	double workvect_a[BUFSMALL], workvect_b[BUFSMALL];
+	double currpolyval;
+	int i, j;
+
+	assert(len < BUFSMALL);
+
+	/* clear off some space */
+	memset(workvect_a, 0, sizeof(workvect_b));
+	memset(workvect_b, 0, sizeof(workvect_b));
+	memset(mat, 0, len * len * sizeof(*mat));
+
+	/* get coefficients of p(x) = (x - Z1) ... (x - Zlen) */
+	molt_polyget(workvect_a, vect, len + 1, len);
+
+	for (i = 0; i < len; i++) {
+		molt_polydiv(workvect_b, workvect_a, vect[i], len, len + 1);
+		currpolyval = molt_polyval(workvect_b, vect[i], len);
+
+		for (j = 0; j < len; j++) { /* MATLAB : mat(:,i) = b / p */
+			mat[j * len + i] = workvect_b[j] / currpolyval;
+		}
+	}
+}
+
+/* molt_matflip : our implementation of Matlab's flipud */
+void molt_matflip(double *mat, int n)
+{
+	/* flips mat about the horizontal axis (upside-down) */
+	double *ptra, *ptrb;
+	int i, j;
+
+	for (i = 0; i < n / 2; i++) {
+		ptra = &mat[i * n];
+		ptrb = &mat[(n - 1 - i) * n];
+
+		for (j = 0; j < n; j++, ptra++, ptrb++) {
+			SWAP(*ptra, *ptrb, double);
+		}
+	}
+}
+
+/* molt_polyget : find coeff of a polyynomial with roots in src. store in dst */
+void molt_polyget(double *dst, double *src, int dstlen, int srclen)
+{
+	double workvect[BUFSMALL];
+	int i, j;
+
+	assert(dstlen == srclen + 1);
+
+	memset(workvect, 0, sizeof(workvect));
+	memset(dst,      0, sizeof(double) * dstlen);
+
+	dst[0] = 1; /* leading coefficient is assumed as 1 */
+
+	for (i = 0; i < srclen; i++) {
+		memcpy(workvect, dst, dstlen * sizeof(double));
+
+		for (j = 1; j <= i + 1; j++) {
+			dst[j] = workvect[j] - src[i] * workvect[j - 1];
+		}
+	}
+}
+
+/* molt_polydiv : use synthetic division to find the coefficients the poly */
+void molt_polydiv(double *dst, double *src, double scale, int dstlen, int srclen)
+{
+	/* 
+	 * Performs "b(x) = a(x) / (x - z)" in place
+	 */
+
+	int i;
+
+	assert(dstlen == srclen - 1);
+
+	memset(dst, 0, sizeof(double) * dstlen);
+	dst[0] = src[0];
+
+	for (i = 1; i < dstlen; i++) {
+		dst[i] = src[i] + scale * dst[i - 1];
+	}
+}
+
+/* molt_polyval : evaluate a polynomial at x = z */
+double molt_polyval(double *vect, double scale, int vectlen)
+{
+	double retval;
+	int i;
+
+	for (retval = vect[0], i = 1; i < vectlen; i++) {
+		retval = retval * scale + vect[i];
+	}
+
+	return retval;
+}
+
+/* molt_exp_int : perform an exponential integral (???) */
+double molt_exp_int(double nu, int sizem)
+{
+	double t, s, k, d, phi;
+
+	d = exp(-nu);
+
+	if (nu < 1) { /* avoid precision loss by using a Taylor Series */
+		t = 1;
+		s = 0;
+		k = 1;
+
+		while (t > DBL_EPSILON) {
+			t = t * nu / (sizem + k);
+			s = s + t;
+			k++;
+		}
+
+		phi = d * s;
+
+	} else {
+		t = 1;
+		s = 1;
+
+		for (k = 0; k < sizem; k++) {
+			t = t * nu / k;
+			s = s + t;
+		}
+
+		phi = (1 - d * s) / t;
+	}
+
+	return phi;
+}
+
+/* molt_mat_mv_mult : perform vector matrix multiply */
+void molt_mat_mv_mult(f64 *out, f64 *inmat, f64 *invec, s32 singledim)
+{
+	/* inmatn is the side length of our hopefully square matrix */
+	int i, j;
+
+	memset(out, 0, singledim * sizeof(double));
+
+	for (i = 0; i < singledim; i++) {
+		for (j = 0; j < singledim; j++) {
+			out[i] = out[i] + invec[j] * inmat[j * singledim + i];
+		}
+	}
+}
+
 #endif // MOLT_IMPLEMENTATION
 
 #endif // MOLT_H

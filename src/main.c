@@ -32,7 +32,6 @@
 #include "molt.h"
 
 #include "common.h"
-#include "calcs.h"
 #include "config.h"
 #include "lump.h"
 #include "sys.h"
@@ -674,9 +673,9 @@ int setup_wweight()
 	wlz = calloc(wlz_items, sizeof(f64));
 	wrz = calloc(wrz_items, sizeof(f64));
 
-	get_exp_weights(config.nu[0], wlx, wrx, config.x_params[MOLT_PARAM_POINTS], config.spaceacc);
-	get_exp_weights(config.nu[1], wly, wry, config.y_params[MOLT_PARAM_POINTS], config.spaceacc);
-	get_exp_weights(config.nu[2], wlz, wrz, config.z_params[MOLT_PARAM_POINTS], config.spaceacc);
+	molt_get_exp_weights(config.nu[0], wlx, wrx, config.x_params[MOLT_PARAM_POINTS], config.spaceacc);
+	molt_get_exp_weights(config.nu[1], wly, wry, config.y_params[MOLT_PARAM_POINTS], config.spaceacc);
+	molt_get_exp_weights(config.nu[2], wlz, wrz, config.z_params[MOLT_PARAM_POINTS], config.spaceacc);
 
 	// TODO (brian)
 	// think of an elegant way to error and return here if needed
