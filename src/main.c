@@ -253,6 +253,7 @@ int do_simulation()
 	pdvec6_t vw, ww;
 	pdvec3_t vol;
 	f64 *prev, *curr, *next;
+	f64 ftmp;
 	u32 flags;
 	u64 elems, i, volumebytes;;
 	ivec3_t pinc;
@@ -326,6 +327,12 @@ int do_simulation()
 	vol[2] = prev;
 
 	molt_cfg_set_workstore(&config);
+
+	// init for the initial velocity condition
+	ftmp = config.time_scale * config.t_params[MOLT_PARAM_STEP];
+	for (i = 0; i < elems; i++) {
+		next[i] = curr[i] + ftmp * prev[i];
+	}
 
 	i = config.t_params[MOLT_PARAM_START];
 	flags = MOLT_FLAG_FIRSTSTEP;

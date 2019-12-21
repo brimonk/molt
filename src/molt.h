@@ -32,13 +32,13 @@
  *    dst memory.
  *
  * TODO Custom
- * 1. Include more function pointers for things like 'work_ix[i] -= src[i]'
  *
  * TODO Future
- * ?. Consider putting in the alpha calculation
- * ?. Debug/Test
- * ?. Remove use CSTDLIB math.h? stdio.h? stdlib.h?
- * ?. Remove dependency of common.h (get our own indexing macro, for instance)
+ * - Include more function pointers for things like 'work_ix[i] -= src[i]'
+ * - Consider putting in the alpha calculation
+ * - Debug/Test
+ * - Remove use CSTDLIB math.h? stdio.h? stdlib.h?
+ * - Remove dependency of common.h (get our own indexing macro, for instance)
  */
 
 enum {
@@ -402,7 +402,6 @@ void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u
 	ivec3_t mesh_dim;
 	f64 *work_d1, *work_d2, *work_d3;
 	f64 *next, *curr, *prev;
-	f64 tmp;
 	pdvec2_t opstor;
 
 	// first, we have to acquire some working storage, external to our meshes
@@ -418,15 +417,14 @@ void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u
 	curr = vol[MOLT_VOL_CURR];
 	prev = vol[MOLT_VOL_PREV];
 
-	if (flags & MOLT_FLAG_FIRSTSTEP) {
-		// u1 = 2 * (u0 + d1 * v0)
-		tmp = cfg->time_scale * cfg->t_params[MOLT_PARAM_STEP];
-		for (i = 0; i < totalelem; i++) {
-			next[i] = 2 * (curr[i] + tmp * prev[i]);
-		}
-	}
+	/*
+	 * NOTE (brian) in the original Matlab source, the "first timestep" code
+	 * had `u1 = 2*(u0+dt*v0);`, initializing the destination volume. It is
+	 * understood that the caller will perform any and all initialization of
+	 * the state.
+	 */
 
-	// now we can begin doing work
+	// 2nd order method
 	opstor[0] = work_d1, opstor[1] = next;
 	molt_c_op(cfg, opstor, vw, ww);
 
@@ -435,64 +433,38 @@ void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u
 		next[i] += cfg->beta_sq * work_d1[i];
 	}
 
-	if (flags & MOLT_FLAG_FIRSTSTEP) {
-		if (cfg->timeacc >= 2) {
-			opstor[0] = work_d2, opstor[1] = work_d1;
-			molt_d_op(cfg, opstor, vw, ww);
-			opstor[0] = work_d1, opstor[1] = work_d1;
-			molt_d_op(cfg, opstor, vw, ww);
+	if (cfg->timeacc >= 2) { // 4th order method
+		opstor[0] = work_d2, opstor[1] = work_d1;
+		molt_d_op(cfg, opstor, vw, ww);
+		opstor[0] = work_d1, opstor[1] = work_d1;
+		molt_c_op(cfg, opstor, vw, ww);
 
-			// u = u - beta ^ 2 * D2 + beta ^ 4 / 12 * D1
-			for (i = 0; i < totalelem; i++) {
-				next[i] -= cfg->beta_sq * work_d2[i] + cfg->beta_fo * work_d1[i];
-			}
-		}
-
-		if (cfg->timeacc >= 3) {
-			opstor[0] = work_d3, opstor[1] = work_d2;
-			molt_d_op(cfg, opstor, vw, ww);
-			opstor[0] = work_d2, opstor[1] = work_d2;
-			molt_d_op(cfg, opstor, vw, ww);
-			opstor[0] = work_d1, opstor[1] = work_d1;
-			molt_c_op(cfg, opstor, vw, ww);
-
-			// u = u + (beta ^ 2 * D3 - 2 * beta ^ 4 / 12 * D2 + beta ^ 6 / 360 * D1)
-			for (i = 0; i < totalelem; i++) {
-				next[i] += cfg->beta_sq * work_d3[i] - cfg->beta_fo * work_d2[i] + cfg->beta_si * work_d1[i];
-			}
-		}
-	} else {
-		if (cfg->timeacc >= 2) {
-			opstor[0] = work_d2, opstor[1] = work_d1;
-			molt_d_op(cfg, opstor, vw, ww);
-			opstor[0] = work_d1, opstor[1] = work_d1;
-			molt_c_op(cfg, opstor, vw, ww);
-
-			// u = u - beta ^ 2 * D2 + beta ^ 4 / 12 * D1
-			for (i = 0; i < totalelem; i++) {
-				next[i] -= cfg->beta_sq * work_d2[i] + cfg->beta_fo * work_d1[i];
-			}
-		}
-
-		if (cfg->timeacc >= 3) {
-			opstor[0] = work_d3, opstor[1] = work_d2;
-			molt_d_op(cfg, opstor, vw, ww);
-			opstor[0] = work_d2, opstor[1] = work_d2;
-			molt_c_op(cfg, opstor, vw, ww);
-			opstor[0] = work_d1, opstor[1] = work_d1;
-			molt_c_op(cfg, opstor, vw, ww);
-
-			// u = u + (beta ^ 2 * D3 - 2 * beta ^ 4 / 12 * D2 + beta ^ 6 / 360 * D1)
-			for (i = 0; i < totalelem; i++) {
-				next[i] += cfg->beta_sq * work_d3[i] - cfg->beta_fo * work_d2[i] + cfg->beta_si * work_d1[i];
-			}
+		// u = u - beta ^ 2 * D2 + beta ^ 4 / 12 * D1
+		for (i = 0; i < totalelem; i++) {
+			next[i] -= cfg->beta_sq * work_d2[i] + cfg->beta_fo * work_d1[i];
 		}
 	}
 
-	if (flags & MOLT_FLAG_FIRSTSTEP) {
+	if (cfg->timeacc >= 3) { // 6th order method
+		opstor[0] = work_d3, opstor[1] = work_d2;
+		molt_d_op(cfg, opstor, vw, ww);
+		opstor[0] = work_d2, opstor[1] = work_d2;
+		molt_c_op(cfg, opstor, vw, ww);
+		opstor[0] = work_d1, opstor[1] = work_d1;
+		molt_c_op(cfg, opstor, vw, ww);
+
+		// u = u + (beta ^ 2 * D3 - 2 * beta ^ 4 / 12 * D2 + beta ^ 6 / 360 * D1)
+		for (i = 0; i < totalelem; i++) {
+			next[i] += cfg->beta_sq * work_d3[i] - cfg->beta_fo * work_d2[i] + cfg->beta_si * work_d1[i];
+		}
+	}
+
+	if (!(flags & MOLT_FLAG_FIRSTSTEP)) {
+#if 0
 		// next = next / 2;
 		for (i = 0; i < totalelem; i++) { next[i] /= 2; }
 	} else {
+#endif
 		// next = next + 2 * curr - prev
 		for (i = 0; i < totalelem; i++) { next[i] += 2 * curr[i] - prev[i]; }
 	}
