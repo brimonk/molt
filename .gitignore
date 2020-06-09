@@ -1,3 +1,6 @@
+# ignore all experiment binaries
+experiments/test
+
 # ignore all object files
 *.o
 
@@ -7,8 +10,9 @@
 # ignore .gdb_history
 .gdb_history
 
-# don't put databases in git history either
+# don't put databases / data in git history
 *.dat
+*.db
 
 # don't keep the binary in source control either
 molt*
@@ -24,3 +28,4 @@ lib*
 *.pdb
 *.exp
 *.lib
+

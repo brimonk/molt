@@ -28,17 +28,15 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#define COMMON_IMPLEMENTATION
+#include "common.h"
+
 #define MOLT_IMPLEMENTATION
 #include "molt.h"
 
-#include "common.h"
 #include "config.h"
 #include "lump.h"
 #include "sys.h"
-
-#ifdef MOLT_VIEWER
-#include "viewer.h"
-#endif
 
 struct user_cfg_t {
 	s64 isset;
@@ -71,6 +69,26 @@ struct configthreadargs_t {
 	dvec3_t fdim;
 	f64 *vol;
 };
+
+/* hunklog_1 : creates a readable log of the 1d data at p with dimensions dim */
+s32 hunklog_1(char *file, int line, char *msg, s32 dim, f64 *p);
+/* hunklog_2 : creates a readable log of the 2d data at p with dimensions dim */
+s32 hunklog_2(char *file, int line, char *msg, s32 dim[2], f64 *p);
+/* hunklog_3 : creates a readable log of the 3d data at p with dimensions dim */
+s32 hunklog_3(char *file, int line, char *msg, s32 dim[3], f64 *p);
+/* hunklog_3ord : hunk log in 3d; however, orders vars by ascii vals in ord */
+s32 hunklog_3ord(char *file, int line, char *msg, ivec3_t dim, f64 *p, char ord[3]);
+
+#define LOG1D(p, d, m) hunklog_1(__FILE__, __LINE__, (m), (d), (p))
+#define LOG2D(p, d, m) hunklog_2(__FILE__, __LINE__, (m), (d), (p))
+#define LOG3D(p, d, m) hunklog_3(__FILE__, __LINE__, (m), (d), (p))
+
+#define LOG3DORD(p, d, m, o) \
+		hunklog_3ord(__FILE__, __LINE__, (m), (d), (p), (o))
+
+#define LOG_NEWLINESEP 1
+#define LOG_FLOATFMT "% 4.5e"
+// #define LOG_FLOATFMT "%.15lf"
 
 /* parse_config : parses the config file */
 int parse_config(struct user_cfg_t *usercfg, char *file);
@@ -129,13 +147,12 @@ enum {
 #define MOLTSTR_VEL    "VEL"
 #define MOLTSTR_AMP    "AMP"
 
-#define USAGE "USAGE : %s [--config <config>] [--viewer] [--custom <customlib>] [--nosim] [-v] [-h] outfile\n"
+#define USAGE "USAGE : %s [--config <config>] [--custom <customlib>] [--nosim] [-v] [-h] outfile\n"
 
 #define FLAG_VERBOSE 0x01
-#define FLAG_VIEWER  0x02
-#define FLAG_SIM     0x04
-#define FLAG_CUSTOM  0x08
-#define FLAG_USERCFG 0x10
+#define FLAG_SIM     0x02
+#define FLAG_CUSTOM  0x04
+#define FLAG_USERCFG 0x08
 
 #define DEFAULT_FLAGS (FLAG_SIM)
 
@@ -159,9 +176,7 @@ int main(int argc, char **argv)
 	while (--targc > 0 && (*++targv)[0] == '-') {
 		s = targv[0] + 1;
 
-		if (strcmp(s, "-viewer") == 0) {
-			flags |= FLAG_VIEWER;
-		} else if (strcmp(s, "-nosim") == 0) {
+		if (strcmp(s, "-nosim") == 0) {
 			flags &= ~FLAG_SIM;
 		} else if (strcmp(s, "-custom") == 0) {
 			flags |= FLAG_CUSTOM;
@@ -226,12 +241,6 @@ int main(int argc, char **argv)
 		dump_lumps();
 	}
 
-#ifdef MOLT_VIEWER
-	if (flags & FLAG_VIEWER) {
-		v_run();
-	}
-#endif
-
 	if (flags & FLAG_CUSTOM) {
 		sys_libclose(lib);
 	}
@@ -244,7 +253,7 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-#define PRINTANDFAIL(x)  ({fprintf(stderr, "ERR : %s\n", (x)); return -1;})
+#define PRINTANDFAIL(x)  ({ERR(x); return -1;})
 
 /* do_simulation : actually does the simulating */
 int do_simulation()
@@ -825,7 +834,7 @@ void *setup_customprog_write(void *arg)
 	}
 
 	if (lines != elements) {
-		fprintf(stderr,"ERR : expected to read %lld lines from init program, got %lld\n",
+		fprintf(stderr,"ERR : expected to read %ld lines from init program, got %ld\n",
 				elements, lines);
 	}
 
@@ -860,7 +869,7 @@ void *setup_customprog_read(void *arg)
 	}
 
 	if (lines != elements) {
-		fprintf(stderr, "ERR : expected to read %lld lines from init program, got %lld\n",
+		fprintf(stderr, "ERR : expected to read %ld lines from init program, got %ld\n",
 				elements, lines);
 	}
 
@@ -894,9 +903,9 @@ int dump_lumps()
 	printf("header:\n");
 	printf("\tmagic      : %s\n",   (char *)&lheader.magic);
 	printf("\tflags      : 0x%X\n", lheader.flags);
-	printf("\tts_created : %lld\n",  lheader.ts_created);
-	printf("\tsize       : %lld\n",  lheader.size);
-	printf("\tlumps      : %lld\n",  lheader.lumps);
+	printf("\tts_created : %ld\n",  lheader.ts_created);
+	printf("\tsize       : %ld\n",  lheader.size);
+	printf("\tlumps      : %ld\n",  lheader.lumps);
 
 	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
 	if (rc < 0) {
@@ -912,7 +921,7 @@ int dump_lumps()
 
 		rc = strnlen(linfo.tag, 8); // WARNING UNSAFE FOR 8 CHAR STRINGS!!!
 
-		printf("Lump [%s%*s][%4lld] off: 0x%010llX, entry: %4lld, bytes : %lld\n",
+		printf("Lump [%s%*s][%4ld] off: 0x%010lX, entry: %4ld, bytes : %ld\n",
 				linfo.tag, 8 - rc, "", i, linfo.offset, linfo.entry, linfo.size);
 	}
 
@@ -1021,7 +1030,7 @@ int dump_lumps()
 
 		} else if (strncmp(linfo.tag, MOLTSTR_AMP, sizeof(linfo.tag)) == 0) {
 			if (rc < 0) { return -1; }
-			snprintf(buf, sizeof buf, "AMP[%lld]", linfo.entry);
+			snprintf(buf, sizeof buf, "AMP[%ld]", linfo.entry);
 			LOG3D(fptr, dim, buf);
 
 		} else {
@@ -1037,11 +1046,10 @@ int dump_lumps()
 /* print_help : prints some help text */
 void print_help(char *prog)
 {
-#define HELP_EXAMPLE "EX    : %s --viewer -v output.db > log.txt\n"
+#define HELP_EXAMPLE "EX    : %s -v output.db > log.txt\n"
 	fprintf(stderr, "--config <file> specifies a custom config file to load experiment parameters from\n");
 	fprintf(stderr, "--custom <file> specifies a custom library to load sweep and reorg functions from\n");
 	fprintf(stderr, "--nosim         runs everything BUT the simulation itself\n");
-	fprintf(stderr, "--viewer        runs the viewer program\n");
 	fprintf(stderr, "-h              prints this help text\n");
 	fprintf(stderr, "-v              displays verbose simulation info\n");
 	fprintf(stderr, USAGE, prog);
@@ -1138,3 +1146,217 @@ int parse_config(struct user_cfg_t *usercfg, char *file)
 	return 0;
 }
 
+/* 
+ * the hunklog_{1,2,3} functions generically exist to log out 1d, 2d, or 3d
+ * data, given the double pointer to the "base" of the data, and the
+ * dimensionality of the item being pointed to
+ */
+
+/* hunklog_1 : creates a readable log of the 1d data at p with dimensions dim */
+s32 hunklog_1(char *file, int line, char *msg, s32 dim, f64 *p)
+{
+	/*
+	 * returns the number of lines printed
+	 * NOTE (brian) dim must be the number of ELEMENTS 
+	 */
+
+	s32 lines;
+	s32 x, tmp;
+	char fmt[BUFLARGE];
+
+	// load up our printf format
+	// (%xd) : %lf\n
+	snprintf(fmt, sizeof fmt, "%d", dim);
+	tmp = strlen(fmt);
+	snprintf(fmt, sizeof fmt, "%s %%%dd : %s\n", msg, tmp, LOG_FLOATFMT);
+
+	// print a preamble to stdout
+	printf("%s %d %s\n", file, line, msg);
+
+	lines = 0;
+	for (x = 0; x < dim; x++, lines++) {
+		printf(fmt, x, p[x]);
+	}
+
+#ifdef LOG_NEWLINESEP
+	printf("\n");
+#endif
+
+	return lines;
+}
+
+/* hunklog_2 : creates a readable log of the 2d data at p with dimensions dim */
+s32 hunklog_2(char *file, int line, char *msg, s32 dim[2], f64 *p)
+{
+	/*
+	 * returns the number of lines printed
+	 * NOTE (brian) dim must be the number of ELEMENTS 
+	 */
+
+	s32 lines;
+	s32 x, y, i, tmp;
+	char fmt[BUFLARGE];
+
+	// find which dimension is bigger
+	for (i = 0, tmp = 0; i < 2; i++) {
+		if (tmp < dim[i])
+			tmp = dim[i];
+	}
+
+	// load up our printf format
+	// %s (%xd, %yd) : %lf\n
+	snprintf(fmt, sizeof fmt, "%d", tmp);
+	tmp = strlen(fmt);
+	snprintf(fmt, sizeof fmt, "%s %%%dd %%%dd %s\n", msg, tmp, tmp, LOG_FLOATFMT);
+
+	// print a preamble to stdout
+	printf("%s:%d %s\n", file, line, msg);
+
+	// NOTE (brian) the following loop is supposed to present display parity
+	// with Matlab's display of wLx and similar.
+
+	lines = 0;
+	for (x = 0; x < dim[0]; x++) {
+		for (y = 0; y < dim[1]; y++) {
+			i = IDX2D(y, x, dim[1]);
+			printf(fmt, x, y, p[i]);
+			lines++;
+		}
+	}
+
+#ifdef LOG_NEWLINESEP
+	printf("\n");
+#endif
+
+	return lines;
+}
+
+/* hunklog_3 : creates a readable log of the 3d data at p with dimensions dim */
+s32 hunklog_3(char *file, int line, char *msg, s32 dim[3], f64 *p)
+{
+	/*
+	 * returns the number of lines printed
+	 * NOTE (brian) dim must be the number of ELEMENTS 
+	 */
+
+	s32 lines;
+	s32 x, y, z, i, tmp;
+	char fmt[BUFLARGE];
+
+	// find which dimension is bigger
+	for (i = 0, tmp = 0; i < 3; i++) {
+		if (tmp < dim[i])
+			tmp = dim[i];
+	}
+
+	// load up our printf format
+	// (%xd, %yd, %zd) : %lf\n
+	snprintf(fmt, sizeof fmt, "%d", tmp);
+	tmp = strlen(fmt);
+	snprintf(fmt, sizeof fmt, "%s %%%dd %%%dd %%%dd %s\n",
+			msg, tmp, tmp, tmp, LOG_FLOATFMT);
+
+	// print a preamble to stdout
+	printf("%s:%d %s\n", file, line, msg);
+
+	lines = 0;
+	for (z = 0; z < dim[2]; z++) {
+		for (y = 0; y < dim[1]; y++) {
+			for (x = 0; x < dim[0]; x++, lines++) {
+				i = IDX3D(x, y, z, dim[1], dim[2]);
+				printf(fmt, x, y, z, p[i]);
+			}
+		}
+	}
+
+#ifdef LOG_NEWLINESEP
+	printf("\n");
+#endif
+
+	return lines;
+}
+
+/* hunklog_3ord : hunk log in 3d; however, orders vars by ascii vals in ord */
+s32 hunklog_3ord(char *file, int line, char *msg, s32 dim[3], f64 *p, cvec3_t ord)
+{
+	/*
+	 * returns the number of lines printed
+	 * NOTE (brian) dim must be the number of ELEMENTS 
+	 *
+	 * TODO (brian) fix this and actuall make it work instead of just having it
+	 * be a nice idea
+	 */
+
+	s32 lines;
+	s32 x, y, z, i, tmp;
+	char fmt[BUFLARGE];
+
+	// find which dimension is bigger
+	for (i = 0, tmp = 0; i < 3; i++) {
+		if (tmp < dim[i])
+			tmp = dim[i];
+	}
+
+	// load up our printf format
+	// (%xd, %yd, %zd) : %lf\n
+	snprintf(fmt, sizeof fmt, "%d", tmp);
+	tmp = strlen(fmt);
+	snprintf(fmt, sizeof fmt, "%s %%%dd %%%dd %%%dd %s\n",
+			msg, tmp, tmp, tmp, LOG_FLOATFMT);
+
+	// print a preamble to stdout
+	printf("%s:%d %s\n", file, line, msg);
+
+	lines = 0;
+	for (x = 0, y = 0, z = 0; x < dim[0] && y < dim[1] && z < dim[2];) {
+		i = IDX3D(x, y, z, dim[1], dim[2]);
+		printf(fmt, x, y, z, p[i]);
+
+		// now do our bounds checking
+		for (i = 0; i < 3; i++) {
+			switch (i) {
+			case 0:
+			case 1:
+				switch (ord[i]) {
+				case 'x':
+					if (++x == dim[0])
+						x = 0;
+					break;
+				case 'y':
+					if (++y == dim[1])
+						y = 0;
+					break;
+				case 'z':
+					if (++z == dim[2])
+						z = 0;
+					break;
+				default:
+					fprintf(stderr, "%c is not a valid x, y, z param at %s:%d\n",
+							ord[i], __FILE__, __LINE__);
+					x = dim[0]; // break out of the loop
+					break;
+				}
+
+			case 2:
+				switch (ord[i]) {
+				case 'x': x++; break;
+				case 'y': y++; break;
+				case 'z': z++; break;
+				default:
+					fprintf(stderr, "%c is not a valid x, y, z param at %s:%d\n",
+							ord[i], __FILE__, __LINE__);
+					x = dim[0]; // break out of the loop
+					break;
+				}
+				break;
+			}
+
+		}
+	}
+
+#ifdef LOG_NEWLINESEP
+	printf("\n");
+#endif
+
+	return lines;
+}

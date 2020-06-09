@@ -9,7 +9,7 @@
  *
  * Documentation
  *
- * TODO Create a Single-Header file Lib (Brian)
+ * TODO
  * 1. Dimensionality should be u64 vec3_t, lvec3_t
  * 2. Possibly reorder the parameters in molt_cfg_parampull_gen
  *    Also might want to change the name, as it requires an order...
@@ -207,8 +207,6 @@ static cvec3_t molt_ord_yzx = {'y', 'z', 'x'};
 static cvec3_t molt_ord_zxy = {'z', 'x', 'y'};
 static cvec3_t molt_ord_zyx = {'z', 'y', 'x'};
 
-static s32 molt_gfquad_bound(s32 idx, s32 m2, s32 len);
-
 /* molt_genericidx : retrieves a generic index from input dimensionality */
 static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order);
 
@@ -384,10 +382,10 @@ void molt_cfg_print(struct molt_cfg_t *cfg)
 	s32 i;
 	printf("space_scale : %lf\n", cfg->space_scale);
 	printf("time_scale  : %lf\n", cfg->time_scale);
-	printf("t_params : "); for (i = 0; i < 5; i++) { printf("%lld%c", cfg->t_params[i], i == 4 ? '\n' : ','); }
-	printf("x_params : "); for (i = 0; i < 5; i++) { printf("%lld%c", cfg->x_params[i], i == 4 ? '\n' : ','); }
-	printf("y_params : "); for (i = 0; i < 5; i++) { printf("%lld%c", cfg->y_params[i], i == 4 ? '\n' : ','); }
-	printf("z_params : "); for (i = 0; i < 5; i++) { printf("%lld%c", cfg->z_params[i], i == 4 ? '\n' : ','); }
+	printf("t_params : "); for (i = 0; i < 5; i++) { printf("%ld%c", cfg->t_params[i], i == 4 ? '\n' : ','); }
+	printf("x_params : "); for (i = 0; i < 5; i++) { printf("%ld%c", cfg->x_params[i], i == 4 ? '\n' : ','); }
+	printf("y_params : "); for (i = 0; i < 5; i++) { printf("%ld%c", cfg->y_params[i], i == 4 ? '\n' : ','); }
+	printf("z_params : "); for (i = 0; i < 5; i++) { printf("%ld%c", cfg->z_params[i], i == 4 ? '\n' : ','); }
 
 	printf("workstore :\n");
 	for (i = 0; i < MOLT_WORKSTORE_AMT; i++) {
@@ -775,25 +773,6 @@ void molt_gfquad_m(f64 *dst, f64 *src, f64 dnu, f64 *wl, f64 *wr, s64 len, s32 M
 	// I = I / 2
 	for (i = 0; i < len; i++)
 		dst[i] /= 2;
-}
-
-/* molt_gfquad_bound : return easy bound parameters for gfquad */
-static s32 molt_gfquad_bound(s32 idx, s32 m2, s32 len)
-{
-	if (0 <= idx && idx < m2) {
-		return -1;
-	}
-
-	if (m2 <= idx && idx <= len - m2) {
-		return 0;
-	}
-
-	if (len - m2 <= idx && idx <= len) {
-		return 1;
-	}
-
-	assert(0);
-	return 0;
 }
 
 /* molt_makel : applies dirichlet boundary conditions to the line in */
@@ -1226,7 +1205,8 @@ void molt_get_exp_weights(f64 nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm)
 	workmat_l  = calloc(sizeof(double), rowlen * rowlen);
 
 	if (!x || !phi || !workvect_r || !workvect_l || !workmat_r || !workmat_l) {
-		PRINT_AND_DIE("Couldn't Get Enough Memory");
+		ERR("Couldn't Get Enough Memory!\n");
+		exit(1);
 	}
 
 	// fetch the cumulative sum of nu

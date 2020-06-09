@@ -69,7 +69,6 @@ int lump_getinfo(struct lumpinfo_t *info, u64 index)
 {
 	struct lumpheader_t header;
 	size_t bytes, offset;
-	u64 i;
 
 	memset(info, 0, sizeof(*info));
 
@@ -171,6 +170,9 @@ int lump_write(char *tag, size_t size, void *src, u64 *entry)
 	// writing our data
 
 	bytes = sys_read(g_lumpfile, 0, sizeof(header), &header);
+	if (bytes < 0) {
+		return -1;
+	}
 
 	if (header.lumps == LUMP_MAXINFO) {
 		return -1;

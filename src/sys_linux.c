@@ -217,6 +217,9 @@ int sys_timestamp(u64 *sec, u64 *usec)
 	int rc;
 
 	rc = gettimeofday(&tv, &tz);
+	if (rc < 0) {
+		sys_errorhandle();
+	}
 
 	if (sec) {
 		*sec = tv.tv_sec;
@@ -239,7 +242,7 @@ static void *sys_threadwrap(void *arg)
 
 	p = thread->func(thread->arg);
 
-	return NULL;
+	return p;
 }
 
 

@@ -3,46 +3,39 @@
 #
 # MOLT Specific (GNU) Makefile
 
-CC = gcc
-LINKER = -lm -ldl -lpthread
-FLAGS = -Wall -march=native
-TARGET = molt
-SRC = src/common.c src/lump.c src/main.c src/sys_linux.c
-OBJ = $(SRC:.c=.o)
-DEP = $(OBJ:.o=.d) # one dependency file for each source
+CC=gcc
+LINKER=-lm -ldl -lpthread
+CFLAGS=-Wall -g3 -march=native
+TARGET=molt
+SRC=src/lump.c src/main.c src/sys_linux.c
+OBJ=$(SRC:.c=.o)
+DEP=$(OBJ:.o=.d) # one dependency file for each source
 
-ifeq ($(MOLTDEBUG),1)
-	FLAGS += -g3
-endif
-
-ifeq ($(MOLTVIEWER),1)
-	PPARMS := -DMOLT_VIEWER
-	SRC += src/viewer.c
-	LINKER += -lSDL2 -lGL
-endif
-
-all: $(TARGET) moltthreaded.so
+all: $(TARGET) moltthreaded.so experiments/test
 
 %.d: %.c
-	@$(CC) $(FLAGS) $(PPARMS) $< -MM -MT $(@:.d=.o) >$@
+	@$(CC) $(CFLAGS) $< -MM -MT $(@:.d=.o) >$@
 
 %.o: %.c
-	$(CC) -c $(FLAGS) $(PPARMS) -o $@ $<
+	$(CC) -c $(CFLAGS) -o $@ $<
 
 -include $(DEP)
 
 $(TARGET): $(OBJ)
-	$(CC) $(FLAGS) -o $(TARGET) $(OBJ) $(LINKER)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJ) $(LINKER)
 
 # this is where we have individual targets for our modules
 moltthreaded.so: src/custom/moltthreaded.c src/custom/thpool.c
-	$(CC) -fPIC -shared $(FLAGS) -o $@ src/custom/moltthreaded.c src/custom/thpool.c -lm -lpthread
+	$(CC) -fPIC -shared $(CFLAGS) -o $@ src/custom/moltthreaded.c src/custom/thpool.c -lm -lpthread
+
+experiments/test: experiments/test.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LINKER)
 
 clean: clean-obj clean-bin
 
 clean-obj:
-	rm src/*.o src/*.d
+	rm -f src/*.o src/*.d
 	
 clean-bin:
-	rm $(TARGET) moltthreaded.so
+	rm -f $(TARGET) moltthreaded.so experiments/test
 

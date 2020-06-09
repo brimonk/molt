@@ -29,7 +29,7 @@ int main(int argc, char **argv)
 	f64 dim[3];
 	f64 curr[3];
 	f64 ans;
-	long line, i;
+	long line;
 	int rc, velocitymode;
 	char buf[256];
 
