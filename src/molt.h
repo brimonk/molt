@@ -205,7 +205,11 @@ static cvec3_t molt_ord_xzy = {'x', 'z', 'y'};
 static cvec3_t molt_ord_yxz = {'y', 'x', 'z'};
 static cvec3_t molt_ord_yzx = {'y', 'z', 'x'};
 static cvec3_t molt_ord_zxy = {'z', 'x', 'y'};
+#if 0
+// NOTE (brian): I'm leaving this here to have a "complete" set of tensor orderings; however, we
+// do not use ZYX currently. You easily could.
 static cvec3_t molt_ord_zyx = {'z', 'y', 'x'};
+#endif
 
 /* molt_genericidx : retrieves a generic index from input dimensionality */
 static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order);
@@ -1191,7 +1195,6 @@ void molt_get_exp_weights(f64 nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm)
 	int rowlen, reallen;
 	double *x, *phi, *workvect_r, *workvect_l;
 	double *workmat_r, *workmat_l;
-	double tmpnu;
 
 	rowlen = orderm + 1;
 	reallen = nulen + 1;

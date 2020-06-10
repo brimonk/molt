@@ -34,7 +34,6 @@
 #include <assert.h>
 
 #define SWAP(x, y, T) do { T SWAP = x; x = y; y = SWAP; } while (0)
-#define IDX2D(x, y, ylen) ((x) + (y) * (ylen))
 	
 #define ARRSIZE(x)   (sizeof((x))/sizeof((x)[0]))
 
