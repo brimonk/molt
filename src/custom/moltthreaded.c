@@ -248,6 +248,8 @@ void molt_custom_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_o
 
 	s64 i, j;
 
+	memset(work, 0, sizeof(*work) * dim[0] * dim[1] * dim[2]);
+
 	for (i = 0; i < dim[1]; i++) {
 		for (j = 0; j < dim[2]; j++) {
 			// we setup our arguments for 'molt_reorg_custom_work'
