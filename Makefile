@@ -6,12 +6,11 @@
 CC=gcc
 LINKER=-lm -ldl -lpthread
 CFLAGS=-Wall -g3 -march=native
-TARGET=molt
-SRC=src/lump.c src/main.c src/sys_linux.c
+SRC=src/lump.c src/main.c src/sys_linux.c src/molttest.c
 OBJ=$(SRC:.c=.o)
 DEP=$(OBJ:.o=.d) # one dependency file for each source
 
-all: $(TARGET) moltthreaded.so experiments/test
+all: molt molttest moltthreaded.so experiments/test
 
 %.d: %.c
 	@$(CC) $(CFLAGS) $< -MM -MT $(@:.d=.o) >$@
@@ -21,8 +20,11 @@ all: $(TARGET) moltthreaded.so experiments/test
 
 -include $(DEP)
 
-$(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJ) $(LINKER)
+molt: src/lump.o src/main.o src/sys_linux.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LINKER)
+
+molttest: src/molttest.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LINKER)
 
 # this is where we have individual targets for our modules
 moltthreaded.so: src/custom/moltthreaded.c src/custom/thpool.c
@@ -37,5 +39,5 @@ clean-obj:
 	rm -f src/*.o src/*.d
 	
 clean-bin:
-	rm -f $(TARGET) moltthreaded.so experiments/test
+	rm -f molt molttest moltthreaded.so experiments/test
 

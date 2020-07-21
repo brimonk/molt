@@ -419,6 +419,8 @@ void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u
 	curr = vol[MOLT_VOL_CURR];
 	prev = vol[MOLT_VOL_PREV];
 
+	assert(next != curr && curr != prev);
+
 	/*
 	 * NOTE (brian) in the original Matlab source, the "first timestep" code
 	 * had `u1 = 2*(u0+dt*v0);`, initializing the destination volume. It is
@@ -427,7 +429,8 @@ void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u
 	 */
 
 	// 2nd order method
-	opstor[0] = work_d1, opstor[1] = next;
+	opstor[0] = work_d1;
+	opstor[1] = next;
 	molt_c_op(cfg, opstor, vw, ww);
 
 	// u = u + beta ^ 2 * D1
@@ -436,9 +439,11 @@ void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u
 	}
 
 	if (cfg->timeacc >= 2) { // 4th order method
-		opstor[0] = work_d2, opstor[1] = work_d1;
+		opstor[0] = work_d2;
+		opstor[1] = work_d1;
 		molt_d_op(cfg, opstor, vw, ww);
-		opstor[0] = work_d1, opstor[1] = work_d1;
+		opstor[0] = work_d1;
+		opstor[1] = work_d1;
 		molt_c_op(cfg, opstor, vw, ww);
 
 		// u = u - beta ^ 2 * D2 + beta ^ 4 / 12 * D1
@@ -448,11 +453,14 @@ void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u
 	}
 
 	if (cfg->timeacc >= 3) { // 6th order method
-		opstor[0] = work_d3, opstor[1] = work_d2;
+		opstor[0] = work_d3;
+		opstor[1] = work_d2;
 		molt_d_op(cfg, opstor, vw, ww);
-		opstor[0] = work_d2, opstor[1] = work_d2;
+		opstor[0] = work_d2;
+		opstor[1] = work_d2;
 		molt_c_op(cfg, opstor, vw, ww);
-		opstor[0] = work_d1, opstor[1] = work_d1;
+		opstor[0] = work_d1;
+		opstor[1] = work_d1;
 		molt_c_op(cfg, opstor, vw, ww);
 
 		// u = u + (beta ^ 2 * D3 - 2 * beta ^ 4 / 12 * D2 + beta ^ 6 / 360 * D1)
@@ -577,12 +585,13 @@ void molt_d_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 {
 	/*
-	 * NOTE (brian)
+	 * NOTE (brian): This function looks the way it does because of the reasoning in the D operator.
+	 * HOWEVER, this one's special because we have to subtract off src from the results of our first
+	 * sweep. Not a big deal when it's organized in X, but when it's in Y and Z, this is a pretty
+	 * big issue.
 	 *
-	 * This function looks the way it does because of the reasoning in the D
-	 * operator. HOWEVER, this one's special because we have to subtract off
-	 * src from the results of our first sweep. Not a big deal when it's
-	 * organized in X, but when it's in Y and Z, this is a pretty big issue.
+	 * NOTE (brian): This function assumes the volumes are passed in, in X major order, and will be
+	 * left in X major order when it returns.
 	 */
 
 	u64 totalelem, i;
@@ -833,7 +842,12 @@ void molt_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_ord, cve
 	u64 src_i, dst_i, total;
 	ivec3_t idx;
 
+	// NOTE (brian): at least one of the output arrays needs to be different
+	assert(dst != work || work != src);
+
 	total = ((u64)dim[0]) * (u64)dim[1] * (u64)dim[2];
+
+	memset(work, 0, sizeof(*work) * total);
 
 	for (idx[2] = 0; idx[2] < dim[2]; idx[2]++) {
 		for (idx[1] = 0; idx[1] < dim[1]; idx[1]++) {
