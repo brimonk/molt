@@ -15,8 +15,7 @@ experiments/test
 *.db
 
 # don't keep the binary in source control either
-molt*
-./molt
+./molt*
 
 # don't keep any libs
 lib*
