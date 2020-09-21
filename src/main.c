@@ -60,6 +60,8 @@ struct user_cfg_t {
 	f64 alpha;
 	char *initamp;
 	char *initvel;
+	u32 *flags;
+	char **libname;
 };
 
 struct configthreadargs_t {
@@ -180,7 +182,7 @@ int main(int argc, char **argv)
 			flags &= ~FLAG_SIM;
 		} else if (strcmp(s, "-custom") == 0) {
 			flags |= FLAG_CUSTOM;
-			libname = *(++targv);
+			libname = strdup(*(++targv));
 			targc--;
 		} else if (strcmp(s, "-config") == 0) {
 			flags |= FLAG_USERCFG;
@@ -209,6 +211,8 @@ int main(int argc, char **argv)
 	}
 
 	if (flags & FLAG_USERCFG) { // read and parse our user config
+		usercfg.flags = &flags;
+		usercfg.libname = &libname;
 		parse_config(&usercfg, usercfgfile);
 	}
 
@@ -246,6 +250,8 @@ int main(int argc, char **argv)
 	}
 
 	lump_close();
+
+	free(usercfg.libname);
 
 	free(usercfg.initamp);
 	free(usercfg.initvel);
@@ -1063,8 +1069,6 @@ int parse_config(struct user_cfg_t *usercfg, char *file)
 	char *key, *val, *tmp;
 	char buf[BUFLARGE];
 
-	memset(usercfg, 0, sizeof(*usercfg));
-
 	fp = fopen(file, "r");
 
 	if (!fp) {
@@ -1136,6 +1140,10 @@ int parse_config(struct user_cfg_t *usercfg, char *file)
 			usercfg->initamp = strdup(val);
 		} else if (strcmp("initvel", key) == 0) {
 			usercfg->initvel = strdup(val);
+		} else if (strcmp("library", key) == 0 && val && strlen(val) > 0) {
+			// we only include a library if we actually have one (empty for default)
+			*usercfg->flags |= FLAG_CUSTOM;
+			*usercfg->libname = strdup(val);
 		}
 	}
 

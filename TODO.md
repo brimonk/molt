@@ -2,7 +2,14 @@
 
 to do list before we can write the thesis
 
-1. ensure serial + parallel (cpu) and parallel (gpu) implementations match
-2. add windows threaded - unless we can just run on KUHPC
-3. include timestamps in output (its own lump, I think)
+## Completed
+
+* make it easy to run the program a whole shitload of times
+
+## Remaining
+
+* find a way to easily compare all of them
+* ensure serial + parallel (cpu) and parallel (gpu) implementations match
+* add windows threaded
+* include timestamps in output (its own lump, I think)
 

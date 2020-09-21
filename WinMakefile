@@ -5,7 +5,7 @@
 
 CC=gcc
 LINKER=-lm -lmingw32
-CFLAGS=-Wall -march=native -D__USE_MINGW_ANSI_STDIO=1
+CFLAGS=-Wall -g3 -march=native -D__USE_MINGW_ANSI_STDIO=1
 SRC=src/lump.c src/main.c src/sys_win32.c src/molttest.c
 OBJ=$(SRC:.c=.o)
 DEP=$(OBJ:.o=.d) # one dependency file for each source

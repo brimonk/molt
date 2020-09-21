@@ -4,9 +4,12 @@
 #
 # A Small Script to TEST ALL THE THINGS
 
-TESTDIR="tests"
+TEMPLATE="./template.cfg"
+
 DEFAULTSZ=100
 DEFAULTTM=10
+
+MOLTEXE="./molt.exe"
 
 # usage : print usage info
 function usage
@@ -33,27 +36,43 @@ function usage
 	exit 1
 }
 
+function gettest
+{
+	[ -f "$1" ] && echo $1 || echo ""
+}
+
+# getfilets : returns the file's timestamp or -1 if none was found
+function getfilets
+{
+	[ -f "$1" ] && stat -c "%Y" $1 || echo "-1"
+}
+
 # add : makes a molt config file for the given size (L x W x H)
 function add
 {
-	echo "in func $@"
-
 	# check that we have length, width, height
 	if [[ "$#" -lt 1 ]]; then
 		echo "add needs 1 argument"
 		exit 1
 	fi
 
-	if [ ! -f "./template.cfg" ]; then
-		echo "Error: Couldn't read './template.cfg' to make a special config file"
+	if [ ! -f $TEMPLATE ]; then
+		echo "Error: Couldn't read '$TEMPLATE' to make a special config file"
 		exit 1
 	fi
+
+	# file test x y z t
+	realtest=$(gettest $2)
+
+	# make the config file
+	sed "s~VAR_T~$6~; s~VAR_X~$3~; s~VAR_Y~$4~; s~VAR_Z~$5~; s~VAR_LIBRARY~$realtest~;" \
+		< $TEMPLATE > "$1.cfg"
 }
 
 # clean : cleans up the tests
 function clean
 {
-	rm -rf $TESTDIR
+	rm -rf $1
 }
 
 # runall : run all of the tests
@@ -63,23 +82,49 @@ function runall
 		echo "run needs to be given the directory with your tests"
 		exit 1
 	fi
-}
 
-[ ! -d $TESTDIR ] && mkdir -pv $TESTDIR
+	if [ ! -d "$1" ]; then
+		echo "run needs to be given a directory"
+		exit 1
+	fi
+
+	for i in $(find $1 -name "*.cfg");
+	do
+		odat="${i%.cfg}.dat"
+		olog="${i%.cfg}.log"
+
+		tsodat=$(getfilets $odat)
+		tsolog=$(getfilets $olog)
+		tsinpt=$(getfilets $i)
+
+		if (( $tsinpt > $tsodat )); then
+			echo $i
+			$MOLTEXE --config $i -v $odat > $olog
+			echo $odat
+		fi
+	done
+}
 
 # handle arguments
 case "$1" in
 	"clean")
-		clean
+		shift
+		[ ! -d "$(dirname $1)" ] && mkdir -pv "$(dirname $1)"
+		clean "$@"
 	;;
 
 	"add")
 		shift
+		# make sure we have a directory to add tests into
+		[ ! -d "$(dirname $1)" ] && mkdir -pv "$(dirname $1)"
 		add "$@"
 	;;
 
 	"run")
-		runall
+		shift
+		# make sure we have a directory to add tests into
+		[ ! -d "$(dirname $1)" ] && mkdir -pv "$(dirname $1)"
+		runall "$@"
 	;;
 
 	"help")
