@@ -384,12 +384,15 @@ void molt_cfg_parampull_xyz(struct molt_cfg_t *cfg, s32 *dst, s32 param)
 void molt_cfg_print(struct molt_cfg_t *cfg)
 {
 	s32 i;
+
+	// NOTE (brian) this is a small macro hack to get around the differences in compilers
+
 	printf("space_scale : %lf\n", cfg->space_scale);
 	printf("time_scale  : %lf\n", cfg->time_scale);
-	printf("t_params : "); for (i = 0; i < 5; i++) { printf("%ld%c", cfg->t_params[i], i == 4 ? '\n' : ','); }
-	printf("x_params : "); for (i = 0; i < 5; i++) { printf("%ld%c", cfg->x_params[i], i == 4 ? '\n' : ','); }
-	printf("y_params : "); for (i = 0; i < 5; i++) { printf("%ld%c", cfg->y_params[i], i == 4 ? '\n' : ','); }
-	printf("z_params : "); for (i = 0; i < 5; i++) { printf("%ld%c", cfg->z_params[i], i == 4 ? '\n' : ','); }
+	printf("t_params : "); for (i = 0; i < 5; i++) { printf("%lld%c", cfg->t_params[i], i == 4 ? '\n' : ','); }
+	printf("x_params : "); for (i = 0; i < 5; i++) { printf("%lld%c", cfg->x_params[i], i == 4 ? '\n' : ','); }
+	printf("y_params : "); for (i = 0; i < 5; i++) { printf("%lld%c", cfg->y_params[i], i == 4 ? '\n' : ','); }
+	printf("z_params : "); for (i = 0; i < 5; i++) { printf("%lld%c", cfg->z_params[i], i == 4 ? '\n' : ','); }
 
 	printf("workstore :\n");
 	for (i = 0; i < MOLT_WORKSTORE_AMT; i++) {
@@ -1214,15 +1217,15 @@ void molt_get_exp_weights(f64 nu, f64 *wl, f64 *wr, s32 nulen, s32 orderm)
 	reallen = nulen + 1;
 
 	/* retrieve temporary working space from the operating system */
-	x          = calloc(sizeof(double), reallen);
-	phi        = calloc(sizeof(double), rowlen);
-	workvect_r = calloc(sizeof(double), rowlen);
-	workvect_l = calloc(sizeof(double), rowlen);
-	workmat_r  = calloc(sizeof(double), rowlen * rowlen);
-	workmat_l  = calloc(sizeof(double), rowlen * rowlen);
+	x          = (f64 *)calloc(sizeof(double), reallen);
+	phi        = (f64 *)calloc(sizeof(double), rowlen);
+	workvect_r = (f64 *)calloc(sizeof(double), rowlen);
+	workvect_l = (f64 *)calloc(sizeof(double), rowlen);
+	workmat_r  = (f64 *)calloc(sizeof(double), rowlen * rowlen);
+	workmat_l  = (f64 *)calloc(sizeof(double), rowlen * rowlen);
 
 	if (!x || !phi || !workvect_r || !workvect_l || !workmat_r || !workmat_l) {
-		ERR("Couldn't Get Enough Memory!\n");
+		fprintf(stderr, "Couldn't Get Enough Memory!\n");
 		exit(1);
 	}
 

@@ -3,46 +3,36 @@
 #
 # Windows Makefile
 
-CC = gcc
-LINKER = -lm -lmingw32
-FLAGS = -Wall -march=native -D__USE_MINGW_ANSI_STDIO=1
-TARGET = molt.exe
-SRC = src/calcs.c src/common.c src/lump.c src/main.c src/sys_win32.c
-OBJ = $(SRC:.c=.o)
-DEP = $(OBJ:.o=.d) # one dependency file for each source
+CC=gcc
+LINKER=-lm -lmingw32
+CFLAGS=-Wall -march=native -D__USE_MINGW_ANSI_STDIO=1
+SRC=src/lump.c src/main.c src/sys_win32.c src/molttest.c
+OBJ=$(SRC:.c=.o)
+DEP=$(OBJ:.o=.d) # one dependency file for each source
 
-ifeq ($(MOLTDEBUG),1)
-	FLAGS += -g3
-endif
-
-ifeq ($(MOLTVIEWER),1)
-	PPARMS := -DMOLT_VIEWER
-	SRC += src/viewer.c
-	LINKER += -lSDL2main -lSDL2 -lopengl32
-endif
-
-all: $(TARGET) moltcuda.dll
+all: molt.exe molttest.exe moltcuda.dll experiments/test.exe
 
 %.d: %.c
-	@$(CC) $(FLAGS) $(PPARMS) $< -MM -MT $(@:.d=.o) >$@
+	@$(CC) $(CFLAGS) $(PPARMS) $< -MM -MT $(@:.d=.o) >$@
 
 %.o: %.c
-	$(CC) -c $(FLAGS) $(PPARMS) $(PREPROCESSPARMS) -o $@ $<
+	$(CC) -c $(CFLAGS) $(PPARMS) $(PREPROCESSPARMS) -o $@ $<
 
 -include $(DEP)
 
-$(TARGET): $(OBJ)
-	$(CC) $(FLAGS) -o $(TARGET) $(OBJ) $(LINKER)
+molt.exe: src/lump.o src/main.o src/sys_win32.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LINKER)
+
+molttest.exe: src/molttest.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LINKER)
 
 # this is where we have individual targets for modules
 moltcuda.dll: src/custom/moltcuda.cu
 	nvcc -cudart static -g -G --shared -o $@ src/custom/moltcuda.cu
 
-clean: clean-obj clean-bin
+experiments/test.exe: experiments/test.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LINKER)
 
-clean-obj:
-	del src\*.o src\*.d moltcuda.* *.pdb
-	
-clean-bin:
-	del $(TARGET)
+clean:
+	del src\*.o src\*.d molt*.* *.pdb del experiments\test.exe
 
