@@ -389,10 +389,10 @@ void molt_cfg_print(struct molt_cfg_t *cfg)
 
 	printf("space_scale : %lf\n", cfg->space_scale);
 	printf("time_scale  : %lf\n", cfg->time_scale);
-	printf("t_params : "); for (i = 0; i < 5; i++) { printf("%lld%c", cfg->t_params[i], i == 4 ? '\n' : ','); }
-	printf("x_params : "); for (i = 0; i < 5; i++) { printf("%lld%c", cfg->x_params[i], i == 4 ? '\n' : ','); }
-	printf("y_params : "); for (i = 0; i < 5; i++) { printf("%lld%c", cfg->y_params[i], i == 4 ? '\n' : ','); }
-	printf("z_params : "); for (i = 0; i < 5; i++) { printf("%lld%c", cfg->z_params[i], i == 4 ? '\n' : ','); }
+	printf("t_params : "); for (i = 0; i < 5; i++) { printf("%ld%c", cfg->t_params[i], i == 4 ? '\n' : ','); }
+	printf("x_params : "); for (i = 0; i < 5; i++) { printf("%ld%c", cfg->x_params[i], i == 4 ? '\n' : ','); }
+	printf("y_params : "); for (i = 0; i < 5; i++) { printf("%ld%c", cfg->y_params[i], i == 4 ? '\n' : ','); }
+	printf("z_params : "); for (i = 0; i < 5; i++) { printf("%ld%c", cfg->z_params[i], i == 4 ? '\n' : ','); }
 
 	printf("workstore :\n");
 	for (i = 0; i < MOLT_WORKSTORE_AMT; i++) {

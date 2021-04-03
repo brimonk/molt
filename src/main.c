@@ -840,7 +840,7 @@ void *setup_customprog_write(void *arg)
 	}
 
 	if (lines != elements) {
-		fprintf(stderr,"ERR : expected to read %lld lines from init program, got %lld\n",
+		fprintf(stderr,"ERR : expected to read %ld lines from init program, got %ld\n",
 				elements, lines);
 	}
 
@@ -875,7 +875,7 @@ void *setup_customprog_read(void *arg)
 	}
 
 	if (lines != elements) {
-		fprintf(stderr, "ERR : expected to read %lld lines from init program, got %lld\n",
+		fprintf(stderr, "ERR : expected to read %ld lines from init program, got %ld\n",
 				elements, lines);
 	}
 
@@ -909,9 +909,9 @@ int dump_lumps()
 	printf("header:\n");
 	printf("\tmagic      : %s\n",   (char *)&lheader.magic);
 	printf("\tflags      : 0x%X\n", lheader.flags);
-	printf("\tts_created : %lld\n",  lheader.ts_created);
-	printf("\tsize       : %lld\n",  lheader.size);
-	printf("\tlumps      : %lld\n",  lheader.lumps);
+	printf("\tts_created : %ld\n",  lheader.ts_created);
+	printf("\tsize       : %ld\n",  lheader.size);
+	printf("\tlumps      : %ld\n",  lheader.lumps);
 
 	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
 	if (rc < 0) {
@@ -927,7 +927,7 @@ int dump_lumps()
 
 		rc = strnlen(linfo.tag, 8); // WARNING UNSAFE FOR 8 CHAR STRINGS!!!
 
-		printf("Lump [%s%*s][%4lld] off: 0x%010llX, entry: %4lld, bytes : %lld\n",
+		printf("Lump [%s%*s][%4ld] off: 0x%010lX, entry: %4ld, bytes : %ld\n",
 				linfo.tag, 8 - rc, "", i, linfo.offset, linfo.entry, linfo.size);
 	}
 
@@ -1036,7 +1036,7 @@ int dump_lumps()
 
 		} else if (strncmp(linfo.tag, MOLTSTR_AMP, sizeof(linfo.tag)) == 0) {
 			if (rc < 0) { return -1; }
-			snprintf(buf, sizeof buf, "AMP[%lld]", linfo.entry);
+			snprintf(buf, sizeof buf, "AMP[%ld]", linfo.entry);
 			LOG3D(fptr, dim, buf);
 
 		} else {

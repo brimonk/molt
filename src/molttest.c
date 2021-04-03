@@ -35,7 +35,7 @@ int test_molt_reorg(void)
 	ivec3_t dim;
 	ivec3_t idx;
 	s64 elem;
-	int i, j, rc;
+	int i, rc;
 
 	rc = 0;
 
@@ -76,7 +76,7 @@ int test_molt_reorg(void)
 			for (idx[1] = 0; idx[1] < i; idx[1]++)
 			for (idx[0] = 0; idx[0] < i; idx[0]++) {
 				v = molt_genericidx(idx, dim, molt_ord_xyz);
-				printf("[%lld] A %lf C %lf\n", v, a[v], c[v]);
+				printf("[%ld] A %lf C %lf\n", v, a[v], c[v]);
 			}
 		} else {
 			rc++;

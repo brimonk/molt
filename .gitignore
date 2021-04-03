@@ -20,6 +20,9 @@ experiments/test
 # don't keep any libs
 lib*
 
+molt
+molttest
+
 # don't commit binaries to the source tree
 *.dll
 *.so
