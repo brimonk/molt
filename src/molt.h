@@ -690,11 +690,26 @@ void molt_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, pdvec6_
 	 * 'params' is the sweep parameters as setup in the C and D operators.
 	 */
 
+	// NOTE (Brian) I noticed this pretty darn late in development, that I wasn't actually treating
+	// the 'dim' and 'ord' parameters the same way as I was in 'molt_reorg'.
+	//
+	// To rectify this, we have to fetch the length and the number of rows by reading values from
+	// 'ord'. We'll use our knowledge of the ASCII table, and the fact that hopefully, we'll
+	// only be operating on XYZ to make the mapping easier.
+
+	// NOTE (Brian) this is just a small test, that in a real production program, you'd probably
+	// want to remove.
+
+	for (i = 0; i < 3; i++)
+		assert(ord[i] - 'x' < 3);
+
 	// first, get the row's length
-	rowlen = dim[0];
+	// rowlen = dim[0];
+	rowlen = dim[ord[0] - 'x'];
 
 	// then, get the number of rows
-	rownum = dim[1] * dim[2];
+	// rownum = dim[1] * dim[2];
+	rownum = dim[ord[1] - 'x'] * dim[ord[2] - 'x'];
 
 	// get our weighting parameters all setup
 	vl = params[0];
@@ -710,20 +725,7 @@ void molt_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, pdvec6_
 	}
 
 	// then figure out the correct dnu to use
-	switch(ord[0]) {
-	case 'x':
-		usednu = dnu[0];
-		break;
-	case 'y':
-		usednu = dnu[1];
-		break;
-	case 'z':
-		usednu = dnu[2];
-		break;
-	default:
-		assert(0);
-		break;
-	}
+	usednu = dnu[ord[0] - 'x'];
 
 	memset(work, 0, sizeof(f64) * rowlen * rownum);
 
