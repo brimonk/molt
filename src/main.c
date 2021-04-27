@@ -26,6 +26,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <fcntl.h>
 
 #define COMMON_IMPLEMENTATION
@@ -70,6 +71,11 @@ struct configthreadargs_t {
 	ivec3_t dim;
 	dvec3_t fdim;
 	f64 *vol;
+};
+
+struct simtimeinfo_t {
+	struct timeval start;
+	struct timeval end;
 };
 
 /* hunklog_1 : creates a readable log of the 1d data at p with dimensions dim */
@@ -148,6 +154,7 @@ enum {
 #define MOLTSTR_WRZ    "WRZ"
 #define MOLTSTR_VEL    "VEL"
 #define MOLTSTR_AMP    "AMP"
+#define MOLTSTR_TIME   "TIME"
 
 #define USAGE "USAGE : %s [--config <config>] [--custom <customlib>] [--nosim] [-v] [-h] outfile\n"
 
@@ -273,10 +280,12 @@ int do_simulation()
 	f64 *prev, *curr, *next;
 	f64 ftmp;
 	u32 flags;
-	u64 elems, i, volumebytes;;
+	u64 elems, i, j, volumebytes;
 	ivec3_t pinc;
 	ivec3_t points;
 	int rc;
+
+	struct simtimeinfo_t *timings;
 
 	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
 	if (rc < 0) { PRINTANDFAIL("couldn't read config from lump system"); }
@@ -352,11 +361,19 @@ int do_simulation()
 		next[i] = curr[i] + ftmp * prev[i];
 	}
 
+	timings = calloc(config.t_params[MOLT_PARAM_STOP], sizeof(*timings));
+
 	i = config.t_params[MOLT_PARAM_START];
 	flags = MOLT_FLAG_FIRSTSTEP;
 
+	j = 0;
+
 	do {
+		gettimeofday(&timings[j].start, NULL);
+
 		molt_step(&config, vol, vw, ww, flags);
+
+		gettimeofday(&timings[j++].end, NULL);
 
 		rc = lump_write(MOLTSTR_AMP, sizeof(f64) * elems, next, NULL);
 
@@ -367,6 +384,8 @@ int do_simulation()
 		flags = 0;
 		i += config.t_params[MOLT_PARAM_STEP];
 	} while (i < config.t_params[MOLT_PARAM_STOP]);
+
+	rc = lump_write(MOLTSTR_TIME, sizeof(*timings) * j, timings, NULL);
 
 	molt_cfg_free_workstore(&config);
 
@@ -893,8 +912,9 @@ int dump_lumps()
 	struct lumpheader_t lheader;
 	struct lumpinfo_t linfo;
 	struct molt_cfg_t config;
+	struct simtimeinfo_t *timeinfo;
 	f64 *fptr;
-	u64 i;
+	u64 i, j;
 	ivec3_t dim;
 	ivec2_t weight_dim;
 	int rc;
@@ -1041,6 +1061,30 @@ int dump_lumps()
 			if (rc < 0) { return -1; }
 			snprintf(buf, sizeof buf, "AMP[%ld]", linfo.entry);
 			LOG3D(fptr, dim, buf);
+
+		} else if (strncmp(linfo.tag, MOLTSTR_TIME, sizeof(linfo.tag)) == 0) {
+			timeinfo = calloc(1, linfo.size);
+			rc = lump_read(MOLTSTR_TIME, 0, timeinfo);
+
+			if (rc < 0) {
+				free(timeinfo);
+				return -1;
+			}
+
+			for (j = 0; j < config.t_params[MOLT_PARAM_STOP]; j++) {
+				struct timeval s, e; 
+				f64 elapsed;
+
+				s = timeinfo[j].start;
+				e = timeinfo[j].end;
+
+				elapsed =  e.tv_sec + (1e-6 * e.tv_usec);
+				elapsed -= s.tv_sec + (1e-6 * s.tv_usec);
+
+				printf("Step: %ld\tElapsed Time (sec): %lf\n", j, elapsed);
+			}
+
+			free(timeinfo);
 
 		} else {
 			printf("Lump [%.*s] doesn't have any logging logic!\n", (int)sizeof(linfo.tag), linfo.tag);

@@ -31,3 +31,5 @@ molttest
 *.exp
 *.lib
 
+*.log
+
