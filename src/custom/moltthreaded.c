@@ -148,11 +148,15 @@ void molt_custom_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, 
 	 * 'params' is the sweep parameters as setup in the C and D operators.
 	 */
 
+	for (i = 0; i < 3; i++)
+		assert(ord[i] - 'x' < 3);
+
 	// first, get the row's length
-	rowlen = dim[0];
+	rowlen = dim[ord[0] - 'x'];
 
 	// then, get the number of rows
-	rownum = dim[1] * dim[2];
+	// rownum = dim[1] * dim[2];
+	rownum = dim[ord[1] - 'x'] * dim[ord[2] - 'x'];
 
 	// get our weighting parameters all setup
 	vl = params[0];
@@ -167,20 +171,7 @@ void molt_custom_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, 
 			minval = vl[i];
 	}
 
-	// then figure out the correct dnu to use
-	switch(ord[0]) {
-	case 'x':
-		usednu = dnu[0];
-		break;
-	case 'y':
-		usednu = dnu[1];
-		break;
-	case 'z':
-		usednu = dnu[2];
-		break;
-	default: // assert here? it's an illegal parameter
-		break;
-	}
+	usednu = dnu[ord[0] - 'x'];
 
 	memset(work, 0, sizeof(f64) * rowlen * rownum);
 

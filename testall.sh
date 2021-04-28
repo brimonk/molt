@@ -30,6 +30,18 @@ function usage
 	exit 1
 }
 
+# run : runs simulations for all of the config files present
+function run
+{
+	for f in $(find . -type f -iname "*.cfg" ! -name "default.cfg" ! -name "template.cfg"); do
+		DAT="${f%.cfg}.dat"
+		LOG="${f%.cfg}.log"
+
+		./molt --config "$f" -v "$DAT" > "$LOG"
+		echo "$DAT"
+	done
+}
+
 # add : makes a molt config file for the given size (L x W x H)
 function add
 {
@@ -44,12 +56,14 @@ function add
 		exit 1
 	fi
 
+	echo $1
+
 	# check to see if we have a library
-	if ! [[ "$1" =~ '^[0-9]+$' ]]; then
+	if [[ "$1" =~ '^[0-9]+$' ]]; then
+		THELIBRARY=""
+	else
 		THELIBRARY="$1"
 		shift
-	else
-		THELIBRARY=""
 	fi
 
 	# get the volume
@@ -75,6 +89,10 @@ case "$1" in
 		# make sure we have a directory to add tests into
 		[ ! -d "$(dirname $1)" ] && mkdir -pv "$(dirname $1)"
 		add "$@"
+	;;
+
+	"run")
+		run
 	;;
 
 	"help")
