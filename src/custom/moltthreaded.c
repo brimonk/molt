@@ -25,15 +25,18 @@
 #include <dlfcn.h>
 
 #include "../common.h"
+
 #define MOLT_IMPLEMENTATION
 #include "../molt.h"
 
+#include "../sys.h"
+
 #include "thpool.h"
+
+#define DEFAULT_THREADS (6)
 
 // now we can actually define the functions that are going to be called
 // from the molt module
-
-#define THREADS 4
 
 struct sweep_args_t {
 	f64 *src;
@@ -73,9 +76,19 @@ int molt_custom_open(struct molt_custom_t *custom)
 	int a, b, c;
 	s64 len;
 	ivec3_t dim;
+	int cores;
+
+#if 0
+	cores = sys_numcores();
+	if (cores < 0) {
+		cores = DEFAULT_THREADS;
+	}
+#else
+	cores = DEFAULT_THREADS;
+#endif
 
 	// testing the threading pool
-	g_pool = thpool_init(THREADS);
+	g_pool = thpool_init(cores);
 
 	// find the biggest dimension, and use that to know how many
 	// sweep args we're going to need

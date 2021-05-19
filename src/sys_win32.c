@@ -334,6 +334,16 @@ int sys_threadwait(struct sys_thread *thread)
 	return 0;
 }
 
+/* sys_numcores : returns the number of cores available in the system */
+int sys_numcores(void)
+{
+	SYSTEM_INFO info;
+
+	GetSystemInfo(&info);
+
+	return info.dwNumberOfProcessors;
+}
+
 /* sys_bipopen : creates a "bi directional" popen */
 int sys_bipopen(FILE **readfp, FILE **writefp, char *command)
 {

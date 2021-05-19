@@ -170,12 +170,9 @@ int main(int argc, char **argv)
 	char *s, **targv, targc;
 	u32 flags;
 	void *lib;
-	char *libname;
 	struct user_cfg_t usercfg;
 	char *usercfgfile;
 	int rc;
-
-	libname = NULL;
 
 	memset(&usercfg, 0, sizeof usercfg);
 
@@ -191,7 +188,7 @@ int main(int argc, char **argv)
 			flags &= ~FLAG_SIM;
 		} else if (strcmp(s, "-custom") == 0) {
 			flags |= FLAG_CUSTOM;
-			libname = strdup(*(++targv));
+			usercfg.libname = strdup(*(++targv));
 			targc--;
 		} else if (strcmp(s, "-config") == 0) {
 			flags |= FLAG_USERCFG;
@@ -221,12 +218,13 @@ int main(int argc, char **argv)
 
 	if (flags & FLAG_USERCFG) { // read and parse our user config
 		usercfg.flags = flags;
-		usercfg.libname = libname;
 		parse_config(&usercfg, usercfgfile);
 	}
 
-	if (flags & FLAG_CUSTOM) { // open and load our custom library
-		lib = sys_libopen(libname);
+	if (flags & FLAG_CUSTOM || usercfg.libname) { // open and load our custom library
+		flags |= FLAG_CUSTOM;
+
+		lib = sys_libopen(usercfg.libname);
 
 		if (lib == NULL) {
 			flags &= ~FLAG_CUSTOM; // ?
@@ -263,8 +261,6 @@ int main(int argc, char **argv)
 	free(usercfg.libname);
 	free(usercfg.initamp);
 	free(usercfg.initvel);
-
-	free(libname);
 
 	return 0;
 }
@@ -407,10 +403,12 @@ int do_custom_simulation(void *lib)
 	struct molt_cfg_t config;
 	struct molt_custom_t custom;
 	u32 flags;
-	u64 elems, i, volumebytes;;
+	u64 elems, i, j, volumebytes;
 	ivec3_t pinc;
 	ivec3_t points;
 	int rc;
+
+	struct simtimeinfo_t *timings;
 
 	rc = lump_read(MOLTSTR_CONFIG, 0, &config);
 	if (rc < 0) { PRINTANDFAIL("couldn't read config from lump system"); }
@@ -487,11 +485,19 @@ int do_custom_simulation(void *lib)
 	rc = custom.func_open(&custom);
 	if (rc < 0) { PRINTANDFAIL("couldn't init custom library"); }
 
+	timings = calloc(config.t_params[MOLT_PARAM_STOP], sizeof(*timings));
+
 	i = config.t_params[MOLT_PARAM_START];
 	flags = MOLT_FLAG_FIRSTSTEP;
 
+	j = 0;
+
 	do {
+		gettimeofday(&timings[j].start, NULL);
+
 		molt_step_custom(&custom, flags);
+
+		gettimeofday(&timings[j++].end, NULL);
 
 		rc = lump_write(MOLTSTR_AMP, sizeof(f64) * elems, custom.next, NULL);
 
@@ -502,6 +508,8 @@ int do_custom_simulation(void *lib)
 		flags = 0;
 		i += config.t_params[MOLT_PARAM_STEP];
 	} while (i < config.t_params[MOLT_PARAM_STOP]);
+
+	rc = lump_write(MOLTSTR_TIME, sizeof(*timings) * j, timings, NULL);
 
 	rc = custom.func_close(&custom);
 	if (rc < 0) { PRINTANDFAIL("couldn't close custom library"); }
@@ -1189,6 +1197,9 @@ int parse_config(struct user_cfg_t *usercfg, char *file)
 			usercfg->initvel = strdup(val);
 		} else if (strcmp("library", key) == 0 && val && strlen(val) > 0) {
 			// we only include a library if we actually have one (empty for default)
+			if (usercfg->libname) {
+				free(usercfg->libname);
+			}
 			usercfg->flags |= FLAG_CUSTOM;
 			usercfg->libname = strdup(val);
 		}

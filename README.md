@@ -3,6 +3,21 @@
 This project aims to create a truly parallel implementation of MOLT, researched by Matthew Causley,
 Andrew Christlieb, et al.
 
+## Purpose
+
+When I started this thesis, no one had yet taken the [Method of Lines Transpose
+(MOLT)](https://arxiv.org/pdf/1306.6902.pdf) and implemented it in anything other than Matlab, or in
+parallel. All of the mathematics had come together to show off that the algorithm devised in that
+paper _should_ be embarrassingly parallel; however, it hadn't been proven.
+
+That's what this project set out to do: implement the MOLT algorithm in parallel, and prove the
+theory.
+
+Among other things, the Kettering Undergraduate Thesis project is _supposed_ to show off what an
+engineer can accomplish in a single 12 week period (the length of a single co-op term). I've taken
+WAY more time than that, and I hope the features and thought that went into this shows, and is a
+half decent demonstration of my skills as a software engineer.
+
 ## Setup
 
 ### Easy Setup

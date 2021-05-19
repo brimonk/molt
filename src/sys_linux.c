@@ -17,6 +17,7 @@
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/sysinfo.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <dlfcn.h>
@@ -306,6 +307,12 @@ static void sigchld_handler(int signum)
 	if (signum == SIGCHLD) {
 		wait(NULL);
 	}
+}
+
+/* sys_numcores : returns the number of cores available in the system */
+int sys_numcores(void)
+{
+	return get_nprocs_conf();
 }
 
 /* sys_bipopen : system's bi-directional popen */

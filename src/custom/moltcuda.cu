@@ -43,11 +43,17 @@
 #define MOLT_IMPLEMENTATION
 #include "../molt.h"
 
+#if !(defined(_WIN32) || defined(_WIN64))
+#define __declspec(x)
+#endif
+
 struct molt_custommod_t {
 	f64 *d_src, *d_work, *d_dst;
 	f64 *l_src, *l_dst; // the last pointers we've seen
 
 	struct molt_cfg_t config;
+
+	ivec3_t *d_dim;
 
 	f64 *d_v[6];
 	f64 *d_w[6];
@@ -56,6 +62,17 @@ struct molt_custommod_t {
 };
 
 static struct molt_custommod_t g_mod;
+
+#define GPUASSERT(v) { gpu_assert((v), (char *)__FILE__, __LINE__); }
+
+/* gpu_assert : exits if the condition is true */
+inline void gpu_assert(cudaError_t code, char *file, int line)
+{
+	if (code != cudaSuccess) {
+		fprintf(stderr, "GPUASSERT: %s:%d %s\n", file, line, cudaGetErrorString(code));
+		exit(1);
+	}
+}
 
 /* alloc_and_copy : allocs space on device, copies 'size' bytes from host */
 int alloc_and_copy(f64 **d, f64 **newh, f64 *oldh, size_t size);
@@ -84,7 +101,7 @@ int alloc_and_copy(f64 **d, f64 **newh, f64 *oldh, size_t size)
 
 	err = cudaMalloc((void **)d, size);
 	if (err != cudaSuccess) {
-		return -1;
+		return -2;
 	}
 
 	err = cudaMemcpy((void *)*d, (void *)oldh, size, cudaMemcpyHostToDevice);
@@ -164,6 +181,15 @@ int molt_custom_open(struct molt_custom_t *custom)
 	err = cudaMalloc(&g_mod.d_dst, elements * sizeof(f64));
 	if (err != cudaSuccess) { return -1; }
 	err = cudaMalloc(&g_mod.d_work, elements * sizeof(f64));
+	if (err != cudaSuccess) { return -1; }
+
+	// NOTE (Brian) somehow, when I was testing on WIN32 this completely evaded me, but as far
+	// as I can tell, you have to setup the CUDA system in a very special mode to seamlessly pass
+	// host pointers and things to the device.
+	//
+	// Doing so would completely pollute the 'core' molt library and have a dependence on CUDA.
+	// So, we'll just copy the ~12 bytes every time, and be done with it.
+	err = cudaMalloc(&g_mod.d_dim, sizeof g_mod.d_dim);
 	if (err != cudaSuccess) { return -1; }
 
 	return 0;
@@ -298,7 +324,7 @@ __device__ void cuda_makel(f64 *src, f64 *vl, f64 *vr, f64 minval, s64 len)
 }
 
 /* cuda_sweep : the cuda parallel'd sweeping function */
-__global__ void cuda_sweep(f64 *dst, f64 *src, f64 *vl, f64 *vr, f64 *wl, f64 *wr, f64 minval, f64 dnu, s32 M, ivec3_t dim)
+__global__ void cuda_sweep(f64 *dst, f64 *src, f64 *vl, f64 *vr, f64 *wl, f64 *wr, f64 minval, f64 dnu, s32 M, ivec3_t *dim)
 {
 	/*
 	 * NOTE (brian)
@@ -317,20 +343,20 @@ __global__ void cuda_sweep(f64 *dst, f64 *src, f64 *vl, f64 *vr, f64 *wl, f64 *w
 
 	// use our volume dimensionality to determine the REAL y and z values from that
 	// this assumes that we think about the problem in a "2D" sense
-	y = i % dim[1];
-	z = i / dim[1];
+	y = i % (*dim)[1];
+	z = i / (*dim)[1];
 
-	i = IDX3D(0, y, z, dim[1], dim[2]);
+	i = IDX3D(0, y, z, (*dim)[1], (*dim)[2]);
 
 	// don't perform the computation if we're out of range
-	if (((u64)dim[0] * dim[1] * dim[2]) < i) {
+	if (((u64)(*dim)[0] * (*dim)[1] * (*dim)[2]) < i) {
 		return;
 	}
 
 	// now that we have this thread's starting point, perform the algorithm
 	// on this thread, for this row in x
-	cuda_gfquad_m(dst + i, src + i, dnu, wl, wr, dim[0], M);
-	cuda_makel(dst + i, vl, vr, minval, dim[0]);
+	cuda_gfquad_m(dst + i, src + i, dnu, wl, wr, (*dim)[0], M);
+	cuda_makel(dst + i, vl, vr, minval, (*dim)[0]);
 }
 
 /* molt_custom_sweep : performs a threaded sweep across the mesh in the dimension specified */
@@ -358,7 +384,6 @@ void molt_custom_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, 
 	f64 usednu, minval;
 	u64 elements, i;
 	size_t bytes;
-	dim3 block, grid;
 
 	elements = (u64)dim[0] * dim[1] * dim[2];
 	bytes = elements * sizeof(f64);
@@ -424,10 +449,12 @@ void molt_custom_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, 
 	threads = 256;
 	blocks = (iterations + threads - 1) / threads;
 
+	cudaMemcpy(g_mod.d_dim, dim, sizeof g_mod.d_dim, cudaMemcpyHostToDevice);
+
 	// Launch kernel with dimensionality Y by Z, to sweep through the volume in a plane.
 	// init dimensionality dim3s, launch our kernel, then wait for the sync
-	cuda_sweep<<<blocks, threads>>>(d_dst, d_src, d_vl, d_vr, d_wl, d_wr, minval, usednu, M, dim);
-	cudaDeviceSynchronize();
+	cuda_sweep<<<blocks, threads>>>(d_dst, d_src, d_vl, d_vr, d_wl, d_wr, minval, usednu, M, g_mod.d_dim);
+	GPUASSERT(cudaDeviceSynchronize());
 
 	// copy from device to host, so the library's expectations are met
 	cudaMemcpy((void *)dst, (void *)d_dst, bytes, cudaMemcpyDeviceToHost);
@@ -467,7 +494,7 @@ __device__ u64 cuda_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order)
 }
 
 /* cuda_reorg : the cuda parallel'd transposition function */
-__global__ void cuda_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_ord, cvec3_t dst_ord)
+__global__ void cuda_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t *dim, cvec3_t src_ord, cvec3_t dst_ord)
 {
 	u64 src_i, dst_i;
 	ivec3_t curr;
@@ -476,8 +503,8 @@ __global__ void cuda_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t s
 	curr[1] = threadIdx.y + blockDim.y * blockIdx.y;
 	curr[2] = threadIdx.z + blockDim.z * blockIdx.z;
 
-	src_i = cuda_genericidx(curr, dim, src_ord);
-	dst_i = cuda_genericidx(curr, dim, src_ord);
+	src_i = cuda_genericidx(curr, (*dim), src_ord);
+	dst_i = cuda_genericidx(curr, (*dim), src_ord);
 
 	dst[dst_i] = src[src_i];
 }
@@ -501,14 +528,16 @@ void molt_custom_reorg(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t src_o
 
 	cudaMemset(d_work, 0, bytes);
 
+	cudaMemcpy(g_mod.d_dim, dim, sizeof g_mod.d_dim, cudaMemcpyHostToDevice);
+
 	// Unlike the cuda sweep, where we launch the kernel in a
 	// "single dimension", we launch this one 3 dimensions.
-	block = dim3(64, 64, 64);
+	block = dim3(16, 16, 16);
 	grid = dim3(ceil(dim[0] / block.x), ceil(dim[1] / block.y), ceil(dim[2] / block.z));
 
-	cuda_reorg<<<grid, block>>>(d_dst, d_src, d_work, dim, src_ord, dst_ord);
+	cuda_reorg<<<grid, block>>>(d_dst, d_src, d_work, g_mod.d_dim, src_ord, dst_ord);
 
-	cudaDeviceSynchronize();
+	GPUASSERT(cudaDeviceSynchronize());
 
 	cudaMemcpy((void *)dst, (void *)d_dst, bytes, cudaMemcpyDeviceToHost);
 }

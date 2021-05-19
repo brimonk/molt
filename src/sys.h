@@ -65,6 +65,9 @@ int sys_threadstart(struct sys_thread *thread);
 /* sys_threadwait : waits for the given thread to exit, then returns */
 int sys_threadwait(struct sys_thread *thread);
 
+/* sys_numcores : returns the number of cores available in the system */
+int sys_numcores(void);
+
 /* sys_bipopen : creates a "bi directional" popen */
 int sys_bipopen(FILE **readfp, FILE **writefp, char *command);
 
