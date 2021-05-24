@@ -3,43 +3,112 @@
 
 #include "common.h"
 
-/*
- * Brian Chrzanowski
- * Sat Apr 06, 2019 22:21
- *
- * Documentation
- *
- * TODO
- * 1. Dimensionality should be u64 vec3_t, lvec3_t
- * 2. Possibly reorder the parameters in molt_cfg_parampull_gen
- *    Also might want to change the name, as it requires an order...
- * 3. Define DBL_MAX and friends without the C standard library (?)
- * 4. Change the vectored datatypes to be "mo_*" or "molt_*"
- *    The latter has a lot of typing.
- * 5. Define enums or macros for param indicies
- *
- *    Maybe we could just have #defines setup to turn on or off parts of
- *    the library? Dunno.
- *
- * 5. Include file-configurable function qualifier (static, static inline, etc)
- *
- * 6. Fix the molt_step function.
- *
- * 7. Do we really need working memory for the transpose? Reevaluating it for
- *    a custom function, it seems like we don't.
- *    For that matter, we _maybe_ don't need it for our sweeps. If everything
- *    were bookkept correctly, we could probably get it to off of just src and
- *    dst memory.
- *
- * TODO Custom
- *
- * TODO Future
- * - Include more function pointers for things like 'work_ix[i] -= src[i]'
- * - Consider putting in the alpha calculation
- * - Debug/Test
- * - Remove use CSTDLIB math.h? stdio.h? stdlib.h?
- * - Remove dependency of common.h (get our own indexing macro, for instance)
- */
+// Brian Chrzanowski
+// 2021-05-24 14:19:42
+//
+// USAGE
+//
+// To use this library, do this once before you include the header in ONE C or
+// C++ file to include the implementation:
+//
+//     #define MOLT_IMPLEMENTATION
+//
+// I.E. it should look like this:
+//
+// #include ...
+// #include ...
+// #include ...
+// #define MOLT_IMPLEMENTATION
+// #include "molt.h"
+//
+// You can define MOLT_MALLOC, MOLT_REALLOC, and MOLT_FREE to avoid using
+// malloc, realloc, and free from the stdlib if you want.
+//
+// DOCUMENTATION
+//
+// Philosophy:
+//
+// The library's setup to hopefully allow you (the programmer) an increasingly granular set of
+// functions to meet your wave solver needs.
+//
+// "Basic Usage" includes just enough information to get your 3d volume of charges "updated" with
+// various functions applied to the volume.
+//
+// "Examples" include some example programs you can use to get started.
+//
+// Limitations:
+// - 3d only
+// - single threaded, unless you write a custom parallel function
+//
+// Constants:
+//
+//   Most constants are wrapped with an #ifndef. So, if you want to redefine
+// the speed of light, for example, you just need to write this BEFORE you
+// #include the library:
+//
+//   #define MOLT_C0 (3 * 1000 * 1000)
+//
+// Types:
+//
+//   The C types have been redefined to ensure a number of bits between various
+// platforms.
+//
+// Basic Usage:
+//
+// Basic usage assumes you have a simple simulation to run. Usually, you'll use this when / if you
+// have
+//
+// Examples
+
+// CONSTANTS
+
+#ifndef MOLT_PI
+#define MOLT_PI (3.14159265)
+#endif
+
+#ifndef MOLT_C0
+#define MOLT_C0 (299792458)
+#endif
+
+#ifndef MOLT_HENRYMETER
+#define MOLT_HENRYMETER (4 * MOLT_PI * 1e-7)
+#endif
+
+#ifndef MOLT_FARADMETER
+#define MOLT_FARADMETER 1 / (((long)MOLT_C0 * (long)MOLT_C0) * MOLT_HENRYMETER)
+#endif
+
+#ifndef MOLT_TIMESCALE
+#define MOLT_TIMESCALE (1.0)
+#endif
+
+#ifndef MOLT_SPACESCALE
+#define MOLT_SPACESCALE (1.0)
+#endif
+
+#ifndef MOLT_DEFAULT_TIMELEN
+#define MOLT_DEFAULT_TIMELEN (10)
+#endif
+
+#ifndef MOLT_DEFAULT_VOLUMELEN
+#define MOLT_DEFAULT_VOLUMELEN (100)
+#endif
+
+#ifndef MOLT_SPACEACC
+#define MOLT_SPACEACC (6)
+#endif
+
+#ifndef MOLT_TIMEACC
+#define MOLT_TIMEACC (3)
+#endif
+
+#if     MOLT_TIMEACC == 3
+#define MOLT_BETA 1.23429074525305
+#elif   MOLT_TIMEACC == 2
+#define MOLT_BETA 1.48392756860545
+#elif   MOLT_TIMEACC == 1
+#define MOLT_BETA 2
+#endif
 
 enum {
 	MOLT_PARAM_START,
@@ -91,8 +160,6 @@ struct molt_cfg_t {
 	f64 *worksweep;
 };
 
-typedef int (*moltcustom_func) (void *arg);
-
 struct molt_custom_t {
 	f64 *prev, *curr, *next; // volume states
 
@@ -114,14 +181,24 @@ struct molt_custom_t {
 };
 
 // molt_cfg dimension intializer functions
-void molt_cfg_dims_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc);
-void molt_cfg_dims_x(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc);
-void molt_cfg_dims_y(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc);
-void molt_cfg_dims_z(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc);
+
+/* molt_cfg_dims_t : initializes, very explicitly, cfg's time parameters */
+void molt_cfg_dims_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step);
+
+void molt_cfg_dims_x(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step);
+
+void molt_cfg_dims_y(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step);
+
+void molt_cfg_dims_z(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step);
+
 void molt_cfg_set_intscale(struct molt_cfg_t *cfg, f64 scale);
+
 void molt_cfg_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc);
+
 void molt_cfg_set_nu(struct molt_cfg_t *cfg);
+
 void molt_cfg_parampull_xyz(struct molt_cfg_t *cfg, s32 *dst, s32 param);
+
 s64 molt_cfg_parampull_gen(struct molt_cfg_t *cfg, s32 oidx, s32 cfgidx, cvec3_t order);
 
 void molt_cfg_set_workstore(struct molt_cfg_t *cfg);
@@ -182,13 +259,13 @@ double molt_exp_int(double nu, int sizem);
 /* molt_mat_mv_mult : perform vector matrix multiplication */
 void molt_mat_mv_mult(f64 *out, f64 *inmat, f64 *invec, s32 singledim);
 
-
 // these are functions that implement the custom interface
 /* moltcustom_step : the custom library molt stepper */
 void molt_step_custom(struct molt_custom_t *custom, u32 flags);
 
 /* molt_c_op_custom : the custom interface to molt's c operator */
 void molt_c_op_custom(struct molt_custom_t *custom);
+
 /* molt_d_op_custom : MOLT's D Convolution Operator*/
 void molt_d_op_custom(struct molt_custom_t *custom);
 
@@ -214,44 +291,43 @@ static cvec3_t molt_ord_zyx = {'z', 'y', 'x'};
 /* molt_genericidx : retrieves a generic index from input dimensionality */
 static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order);
 
-/* molt_cfg_dims_t : initializes, very explicitly, cfg's time parameters */
-void molt_cfg_dims_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc)
+// molt_cfg_dims_points: finish the setup of params
+void molt_cfg_dims_points(lvec5_t params, s64 start, s64 stop, s64 step)
 {
-	cfg->t_params[MOLT_PARAM_START]  = start;
-	cfg->t_params[MOLT_PARAM_STOP]   = stop;
-	cfg->t_params[MOLT_PARAM_STEP]   = step;
-	cfg->t_params[MOLT_PARAM_POINTS] = points;
-	cfg->t_params[MOLT_PARAM_PINC]   = pointsinc;
+	s64 points;
+
+	points = (stop - start) / step;
+
+	params[MOLT_PARAM_START] = start;
+	params[MOLT_PARAM_STOP] = stop;
+	params[MOLT_PARAM_STEP] = step;
+
+	params[MOLT_PARAM_POINTS] = points;
+	params[MOLT_PARAM_PINC] = points + 1;
+}
+
+/* molt_cfg_dims_t : initializes, very explicitly, cfg's time parameters */
+void molt_cfg_dims_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step)
+{
+	molt_cfg_dims_points(cfg->t_params, start, stop, step);
 }
 
 /* molt_cfg_dims_x : initializes, very explicitly, cfg's x parameters */
-void molt_cfg_dims_x(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc)
+void molt_cfg_dims_x(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step)
 {
-	cfg->x_params[MOLT_PARAM_START]  = start;
-	cfg->x_params[MOLT_PARAM_STOP]   = stop;
-	cfg->x_params[MOLT_PARAM_STEP]   = step;
-	cfg->x_params[MOLT_PARAM_POINTS] = points;
-	cfg->x_params[MOLT_PARAM_PINC]   = pointsinc;
+	molt_cfg_dims_points(cfg->x_params, start, stop, step);
 }
 
 /* molt_cfg_dims_y : initializes, very explicitly, cfg's y parameters */
-void molt_cfg_dims_y(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc)
+void molt_cfg_dims_y(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step)
 {
-	cfg->y_params[MOLT_PARAM_START]  = start;
-	cfg->y_params[MOLT_PARAM_STOP]   = stop;
-	cfg->y_params[MOLT_PARAM_STEP]   = step;
-	cfg->y_params[MOLT_PARAM_POINTS] = points;
-	cfg->y_params[MOLT_PARAM_PINC]   = pointsinc;
+	molt_cfg_dims_points(cfg->y_params, start, stop, step);
 }
 
 /* molt_cfg_dims_z : initializes, very explicitly, cfg's z parameters */
-void molt_cfg_dims_z(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step, s64 points, s64 pointsinc)
+void molt_cfg_dims_z(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step)
 {
-	cfg->z_params[MOLT_PARAM_START]  = start;
-	cfg->z_params[MOLT_PARAM_STOP]   = stop;
-	cfg->z_params[MOLT_PARAM_STEP]   = step;
-	cfg->z_params[MOLT_PARAM_POINTS] = points;
-	cfg->z_params[MOLT_PARAM_PINC]   = pointsinc;
+	molt_cfg_dims_points(cfg->z_params, start, stop, step);
 }
 
 /* molt_cfg_parampull_gen : generic param puller for an order, config idx and the order's idx */

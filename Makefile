@@ -10,7 +10,8 @@ SRC=src/lump.c src/main.c src/sys_linux.c src/molttest.c
 OBJ=$(SRC:.c=.o)
 DEP=$(OBJ:.o=.d) # one dependency file for each source
 
-all: molt molttest moltthreaded.so moltcuda.so experiments/test
+# all: molt molttest moltthreaded.so moltcuda.so experiments/test
+all: molt molttest moltthreaded.so experiments/test
 
 %.d: %.c
 	@$(CC) $(CFLAGS) $< -MM -MT $(@:.d=.o) >$@
@@ -30,8 +31,8 @@ molttest: src/molttest.c
 moltthreaded.so: src/custom/moltthreaded.c src/custom/thpool.c src/sys_linux.c
 	$(CC) -fPIC -shared $(CFLAGS) -o $@ $^ -lm -lpthread
 
-moltcuda.so: src/custom/moltcuda.cu
-	nvcc --compiler-options '-fPIC' --shared -g -G -o $@ src/custom/moltcuda.cu -lm
+# moltcuda.so: src/custom/moltcuda.cu
+# 	nvcc --compiler-options '-fPIC' --shared -g -G -o $@ src/custom/moltcuda.cu -lm
 
 experiments/test: experiments/test.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LINKER)

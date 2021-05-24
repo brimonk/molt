@@ -35,7 +35,6 @@
 #define MOLT_IMPLEMENTATION
 #include "molt.h"
 
-#include "config.h"
 #include "lump.h"
 #include "sys.h"
 
@@ -580,7 +579,6 @@ int setup(struct user_cfg_t *usercfg)
 int setup_config(struct user_cfg_t *ucfg)
 {
 	struct molt_cfg_t config;
-	s32 tpoints, xpoints, ypoints, zpoints;
 
 	memset(&config, 0, sizeof(config));
 
@@ -590,25 +588,20 @@ int setup_config(struct user_cfg_t *ucfg)
 		molt_cfg_set_spacescale(&config, ucfg->scale_space);
 		molt_cfg_set_timescale(&config, ucfg->scale_time);
 
-		tpoints = (ucfg->t_stop - ucfg->t_start) / ucfg->t_step;
-		xpoints = (ucfg->x_stop - ucfg->x_start) / ucfg->x_step;
-		ypoints = (ucfg->y_stop - ucfg->y_start) / ucfg->y_step;
-		zpoints = (ucfg->z_stop - ucfg->z_start) / ucfg->z_step;
-
-		molt_cfg_dims_t(&config, ucfg->t_start, ucfg->t_stop, ucfg->t_step, tpoints, tpoints + 1);
-		molt_cfg_dims_x(&config, ucfg->x_start, ucfg->x_stop, ucfg->x_step, xpoints, xpoints + 1);
-		molt_cfg_dims_y(&config, ucfg->y_start, ucfg->y_stop, ucfg->y_step, ypoints, ypoints + 1);
-		molt_cfg_dims_z(&config, ucfg->z_start, ucfg->z_stop, ucfg->z_step, zpoints, zpoints + 1);
+		molt_cfg_dims_t(&config, ucfg->t_start, ucfg->t_stop, ucfg->t_step);
+		molt_cfg_dims_x(&config, ucfg->x_start, ucfg->x_stop, ucfg->x_step);
+		molt_cfg_dims_y(&config, ucfg->y_start, ucfg->y_stop, ucfg->y_step);
+		molt_cfg_dims_z(&config, ucfg->z_start, ucfg->z_stop, ucfg->z_step);
 
 		molt_cfg_set_accparams(&config, ucfg->acc_space, ucfg->acc_time);
 	} else {
 		molt_cfg_set_spacescale(&config, MOLT_SPACESCALE);
 		molt_cfg_set_timescale(&config, MOLT_TIMESCALE);
 
-		molt_cfg_dims_t(&config, MOLT_T_START, MOLT_T_STOP, MOLT_T_STEP, MOLT_T_POINTS, MOLT_T_PINC);
-		molt_cfg_dims_x(&config, MOLT_X_START, MOLT_X_STOP, MOLT_X_STEP, MOLT_X_POINTS, MOLT_X_PINC);
-		molt_cfg_dims_y(&config, MOLT_Y_START, MOLT_Y_STOP, MOLT_Y_STEP, MOLT_Y_POINTS, MOLT_Y_PINC);
-		molt_cfg_dims_z(&config, MOLT_Z_START, MOLT_Z_STOP, MOLT_Z_STEP, MOLT_Z_POINTS, MOLT_Z_PINC);
+		molt_cfg_dims_t(&config, 0, MOLT_DEFAULT_TIMELEN, 1);
+		molt_cfg_dims_x(&config, 0, MOLT_DEFAULT_VOLUMELEN, 1);
+		molt_cfg_dims_y(&config, 0, MOLT_DEFAULT_VOLUMELEN, 1);
+		molt_cfg_dims_z(&config, 0, MOLT_DEFAULT_VOLUMELEN, 1);
 
 		molt_cfg_set_accparams(&config, MOLT_SPACEACC, MOLT_TIMEACC);
 	}
@@ -616,8 +609,8 @@ int setup_config(struct user_cfg_t *ucfg)
 	// compute alpha by hand because it relies on simulation specific params
 	// (beta is set by the previous function)
 	// TODO (brian) can we get alpha setting into the library?
-	config.alpha = config.beta /
-		(MOLT_TISSUESPEED * config.t_params[MOLT_PARAM_STEP] * config.time_scale);
+	// config.alpha = config.beta /
+		// (MOLT_TISSUESPEED * config.t_params[MOLT_PARAM_STEP] * config.time_scale);
 
 	molt_cfg_set_nu(&config);
 
