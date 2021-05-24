@@ -33,7 +33,7 @@
 
 #include "thpool.h"
 
-#define DEFAULT_THREADS (6)
+#define DEFAULT_THREADS (5)
 
 // now we can actually define the functions that are going to be called
 // from the molt module
