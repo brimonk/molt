@@ -348,7 +348,7 @@ int do_simulation()
 	vol[1] = curr;
 	vol[2] = prev;
 
-	molt_cfg_set_workstore(&config);
+	molt_init_workstore(&config);
 
 	// init for the initial velocity condition
 	ftmp = config.time_scale * config.t_params[MOLT_PARAM_STEP];
@@ -382,7 +382,7 @@ int do_simulation()
 
 	rc = lump_write(MOLTSTR_TIME, sizeof(*timings) * j, timings, NULL);
 
-	molt_cfg_free_workstore(&config);
+	molt_free_workstore(&config);
 
 	free(prev);
 	free(curr);
@@ -473,7 +473,7 @@ int do_custom_simulation(void *lib)
 
 	custom.cfg = &config;
 
-	molt_cfg_set_workstore(&config);
+	molt_init_workstore(&config);
 
 	// the final setup step is to load the custom functions from the lib
 	custom.func_open  = sys_libsym(lib, "molt_custom_open");
@@ -513,7 +513,7 @@ int do_custom_simulation(void *lib)
 	rc = custom.func_close(&custom);
 	if (rc < 0) { PRINTANDFAIL("couldn't close custom library"); }
 
-	molt_cfg_free_workstore(&config);
+	molt_free_workstore(&config);
 
 	free(custom.prev);
 	free(custom.curr);
@@ -585,25 +585,25 @@ int setup_config(struct user_cfg_t *ucfg)
 	// NOTE (brian)
 	// we assume that ALL of the parameters are set in the config file
 	if (ucfg->isset) {
-		molt_cfg_set_spacescale(&config, ucfg->scale_space);
-		molt_cfg_set_timescale(&config, ucfg->scale_time);
+		molt_set_spacescale(&config, ucfg->scale_space);
+		molt_set_timescale(&config, ucfg->scale_time);
 
-		molt_cfg_dims_t(&config, ucfg->t_start, ucfg->t_stop, ucfg->t_step);
-		molt_cfg_dims_x(&config, ucfg->x_start, ucfg->x_stop, ucfg->x_step);
-		molt_cfg_dims_y(&config, ucfg->y_start, ucfg->y_stop, ucfg->y_step);
-		molt_cfg_dims_z(&config, ucfg->z_start, ucfg->z_stop, ucfg->z_step);
+		molt_set_t(&config, ucfg->t_start, ucfg->t_stop, ucfg->t_step);
+		molt_set_x(&config, ucfg->x_start, ucfg->x_stop, ucfg->x_step);
+		molt_set_y(&config, ucfg->y_start, ucfg->y_stop, ucfg->y_step);
+		molt_set_z(&config, ucfg->z_start, ucfg->z_stop, ucfg->z_step);
 
-		molt_cfg_set_accparams(&config, ucfg->acc_space, ucfg->acc_time);
+		molt_set_accparams(&config, ucfg->acc_space, ucfg->acc_time);
 	} else {
-		molt_cfg_set_spacescale(&config, MOLT_SPACESCALE);
-		molt_cfg_set_timescale(&config, MOLT_TIMESCALE);
+		molt_set_spacescale(&config, MOLT_SPACESCALE);
+		molt_set_timescale(&config, MOLT_TIMESCALE);
 
-		molt_cfg_dims_t(&config, 0, MOLT_DEFAULT_TIMELEN, 1);
-		molt_cfg_dims_x(&config, 0, MOLT_DEFAULT_VOLUMELEN, 1);
-		molt_cfg_dims_y(&config, 0, MOLT_DEFAULT_VOLUMELEN, 1);
-		molt_cfg_dims_z(&config, 0, MOLT_DEFAULT_VOLUMELEN, 1);
+		molt_set_t(&config, 0, MOLT_DEFAULT_TIMELEN, 1);
+		molt_set_x(&config, 0, MOLT_DEFAULT_VOLUMELEN, 1);
+		molt_set_y(&config, 0, MOLT_DEFAULT_VOLUMELEN, 1);
+		molt_set_z(&config, 0, MOLT_DEFAULT_VOLUMELEN, 1);
 
-		molt_cfg_set_accparams(&config, MOLT_SPACEACC, MOLT_TIMEACC);
+		molt_set_accparams(&config, MOLT_SPACEACC, MOLT_TIMEACC);
 	}
 
 	// compute alpha by hand because it relies on simulation specific params
@@ -612,7 +612,7 @@ int setup_config(struct user_cfg_t *ucfg)
 	// config.alpha = config.beta /
 		// (MOLT_TISSUESPEED * config.t_params[MOLT_PARAM_STEP] * config.time_scale);
 
-	molt_cfg_set_nu(&config);
+	molt_set_nu(&config);
 
 	return lump_write(MOLTSTR_CONFIG, sizeof(config), &config, NULL);
 }

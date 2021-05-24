@@ -60,7 +60,7 @@
 //
 // Examples
 
-// CONSTANTS
+// CONSTANTS DEFINITION
 
 #ifndef MOLT_PI
 #define MOLT_PI (3.14159265)
@@ -108,6 +108,16 @@
 #define MOLT_BETA 1.48392756860545
 #elif   MOLT_TIMEACC == 1
 #define MOLT_BETA 2
+#endif
+
+// C STDLIB FUNCTION OVERLOAD
+
+#ifndef MOLT_CALLOC
+#define MOLT_CALLOC(x, y) (calloc((x), (y)))
+#endif
+
+#ifndef MOLT_FREE
+#define MOLT_FREE(x) (free((x)))
 #endif
 
 enum {
@@ -182,27 +192,35 @@ struct molt_custom_t {
 
 // molt_cfg dimension intializer functions
 
-/* molt_cfg_dims_t : initializes, very explicitly, cfg's time parameters */
-void molt_cfg_dims_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step);
+/* molt_set_t : initializes, very explicitly, cfg's time parameters */
+void molt_set_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step);
 
-void molt_cfg_dims_x(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step);
+/* molt_set_x : initializes, very explicitly, cfg's x parameters */
+void molt_set_x(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step);
 
-void molt_cfg_dims_y(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step);
+/* molt_set_y : initializes, very explicitly, cfg's y parameters */
+void molt_set_y(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step);
 
-void molt_cfg_dims_z(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step);
+/* molt_set_z : initializes, very explicitly, cfg's z parameters */
+void molt_set_z(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step);
 
-void molt_cfg_set_intscale(struct molt_cfg_t *cfg, f64 scale);
+/* molt_set_timescale : sets the integer scale value (trivial) */
+void molt_set_timescale(struct molt_cfg_t *cfg, f64 scale);
 
-void molt_cfg_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc);
+/* molt_set_spacescale : sets the integer scale value (trivial) */
+void molt_set_spacescale(struct molt_cfg_t *cfg, f64 scale);
 
-void molt_cfg_set_nu(struct molt_cfg_t *cfg);
+/* molt_set_accparams : set MOLT accuracy parameters */
+void molt_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc);
+
+/* molt_set_nu : computes nu and dnu values from existing cfg structure */
+void molt_set_nu(struct molt_cfg_t *cfg);
 
 void molt_cfg_parampull_xyz(struct molt_cfg_t *cfg, s32 *dst, s32 param);
 
-s64 molt_cfg_parampull_gen(struct molt_cfg_t *cfg, s32 oidx, s32 cfgidx, cvec3_t order);
+void molt_init_workstore(struct molt_cfg_t *cfg);
 
-void molt_cfg_set_workstore(struct molt_cfg_t *cfg);
-void molt_cfg_free_workstore(struct molt_cfg_t *cfg);
+void molt_free_workstore(struct molt_cfg_t *cfg);
 
 /* molt_step : a concise way to setup some parameters for whatever dim is being used */
 void molt_step(struct molt_cfg_t *cfg, pdvec3_t vol, pdvec6_t vw, pdvec6_t ww, u32 flags);
@@ -291,8 +309,8 @@ static cvec3_t molt_ord_zyx = {'z', 'y', 'x'};
 /* molt_genericidx : retrieves a generic index from input dimensionality */
 static u64 molt_genericidx(ivec3_t ival, ivec3_t idim, cvec3_t order);
 
-// molt_cfg_dims_points: finish the setup of params
-void molt_cfg_dims_points(lvec5_t params, s64 start, s64 stop, s64 step)
+// molt_set_points: finish the setup of params
+void molt_set_points(lvec5_t params, s64 start, s64 stop, s64 step)
 {
 	s64 points;
 
@@ -306,59 +324,44 @@ void molt_cfg_dims_points(lvec5_t params, s64 start, s64 stop, s64 step)
 	params[MOLT_PARAM_PINC] = points + 1;
 }
 
-/* molt_cfg_dims_t : initializes, very explicitly, cfg's time parameters */
-void molt_cfg_dims_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step)
+/* molt_set_t : initializes, very explicitly, cfg's time parameters */
+void molt_set_t(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step)
 {
-	molt_cfg_dims_points(cfg->t_params, start, stop, step);
+	molt_set_points(cfg->t_params, start, stop, step);
 }
 
-/* molt_cfg_dims_x : initializes, very explicitly, cfg's x parameters */
-void molt_cfg_dims_x(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step)
+/* molt_set_x : initializes, very explicitly, cfg's x parameters */
+void molt_set_x(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step)
 {
-	molt_cfg_dims_points(cfg->x_params, start, stop, step);
+	molt_set_points(cfg->x_params, start, stop, step);
 }
 
-/* molt_cfg_dims_y : initializes, very explicitly, cfg's y parameters */
-void molt_cfg_dims_y(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step)
+/* molt_set_y : initializes, very explicitly, cfg's y parameters */
+void molt_set_y(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step)
 {
-	molt_cfg_dims_points(cfg->y_params, start, stop, step);
+	molt_set_points(cfg->y_params, start, stop, step);
 }
 
-/* molt_cfg_dims_z : initializes, very explicitly, cfg's z parameters */
-void molt_cfg_dims_z(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step)
+/* molt_set_z : initializes, very explicitly, cfg's z parameters */
+void molt_set_z(struct molt_cfg_t *cfg, s64 start, s64 stop, s64 step)
 {
-	molt_cfg_dims_points(cfg->z_params, start, stop, step);
+	molt_set_points(cfg->z_params, start, stop, step);
 }
 
-/* molt_cfg_parampull_gen : generic param puller for an order, config idx and the order's idx */
-s64 molt_cfg_parampull_gen(struct molt_cfg_t *cfg, s32 oidx, s32 cfgidx, cvec3_t order)
-{
-	switch (order[oidx]) {
-	case 'x':
-		return cfg->x_params[cfgidx];
-	case 'y':
-		return cfg->y_params[cfgidx];
-	case 'z':
-		return cfg->z_params[cfgidx];
-	}
-
-	return -1;
-}
-
-/* molt_cfg_set_timescale : sets the integer scale value (trivial) */
-void molt_cfg_set_timescale(struct molt_cfg_t *cfg, f64 scale)
+/* molt_set_timescale : sets the integer scale value (trivial) */
+void molt_set_timescale(struct molt_cfg_t *cfg, f64 scale)
 {
 	cfg->time_scale = scale;
 }
 
-/* molt_cfg_set_spacescale : sets the integer scale value (trivial) */
-void molt_cfg_set_spacescale(struct molt_cfg_t *cfg, f64 scale)
+/* molt_set_spacescale : sets the integer scale value (trivial) */
+void molt_set_spacescale(struct molt_cfg_t *cfg, f64 scale)
 {
 	cfg->space_scale = scale;
 }
 
-/* molt_cfg_set_accparams : set MOLT accuracy parameters */
-void molt_cfg_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc)
+/* molt_set_accparams : set MOLT accuracy parameters */
+void molt_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc)
 {
 	cfg->spaceacc = (s64)spaceacc;
 	cfg->timeacc  = (s64)timeacc ;
@@ -385,8 +388,8 @@ void molt_cfg_set_accparams(struct molt_cfg_t *cfg, f64 spaceacc, f64 timeacc)
 	cfg->beta_si = pow(cfg->beta, 6) / 360;
 }
 
-/* molt_cfg_set_nu : computes nu and dnu values from existing cfg structure */
-void molt_cfg_set_nu(struct molt_cfg_t *cfg)
+/* molt_set_nu : computes nu and dnu values from existing cfg structure */
+void molt_set_nu(struct molt_cfg_t *cfg)
 {
 	assert(cfg->alpha);
 
@@ -398,8 +401,8 @@ void molt_cfg_set_nu(struct molt_cfg_t *cfg)
 	cfg->dnu[2] = exp(-cfg->nu[2]);
 }
 
-/* molt_cfg_set_workstore : auto sets up the working store with the CRT */
-void molt_cfg_set_workstore(struct molt_cfg_t *cfg)
+/* molt_init_workstore : auto sets up the working store with the CRT */
+void molt_init_workstore(struct molt_cfg_t *cfg)
 {
 	/*
 	 * NOTE
@@ -427,23 +430,23 @@ void molt_cfg_set_workstore(struct molt_cfg_t *cfg)
 	}
 
 	for (i = 0; i < 8; i++) {
-		cfg->workstore[i] = (f64 *)calloc(elems, sizeof(f64));
+		cfg->workstore[i] = (f64 *)MOLT_CALLOC(elems, sizeof(f64));
 	}
 
-	cfg->worksweep = (f64 *)calloc(len, sizeof(f64));
+	cfg->worksweep = (f64 *)MOLT_CALLOC(len, sizeof(f64));
 }
 
-/* molt_cfg_free_workstore : frees all of the working storage */
-void molt_cfg_free_workstore(struct molt_cfg_t *cfg)
+/* molt_free_workstore : frees all of the working storage */
+void molt_free_workstore(struct molt_cfg_t *cfg)
 {
 	s32 i;
 
 	for (i = 0; i < 8; i++) {
-		free(cfg->workstore[i]);
+		MOLT_FREE(cfg->workstore[i]);
 		cfg->workstore[i] = NULL;
 	}
 
-	free(cfg->worksweep);
+	MOLT_FREE(cfg->worksweep);
 	cfg->worksweep = NULL;
 }
 
@@ -704,7 +707,6 @@ void molt_c_op(struct molt_cfg_t *cfg, pdvec2_t vol, pdvec6_t vw, pdvec6_t ww)
 	z_sweep_params[3] = ww[5];
 
 	// TEMPORARY
-	// work_ix = calloc(totalelem, sizeof (double));
 	work_ix   = cfg->workstore[3];
 	work_iy   = cfg->workstore[4];
 	work_iz   = cfg->workstore[5];
@@ -816,7 +818,7 @@ void molt_sweep(f64 *dst, f64 *src, f64 *work, ivec3_t dim, cvec3_t ord, pdvec6_
 /* molt_gfquad_m : green's function quadriture on the input vector */
 void molt_gfquad_m(f64 *dst, f64 *src, f64 dnu, f64 *wl, f64 *wr, s64 len, s32 M)
 {
-	/* out and in's length is defined by hunklen */
+	/* out and in's length is defined by 'len' */
 	f64 IL, IR;
 	s32 iL, iR, iC, M2, N;
 	s32 i;
@@ -1160,15 +1162,11 @@ void molt_c_op_custom(struct molt_custom_t *custom)
 	z_sweep_params[2] = custom->wlz;
 	z_sweep_params[3] = custom->wrz;
 
-	// TEMPORARY
-	// work_ix = calloc(totalelem, sizeof (double));
 	work_ix   = custom->cfg->workstore[3];
 	work_iy   = custom->cfg->workstore[4];
 	work_iz   = custom->cfg->workstore[5];
 	work_tmp  = custom->cfg->workstore[6];
 	work_tmp_ = custom->cfg->workstore[7];
-
-	// TODO (brian) mesh_dim has to be dimensionality aware
 
 	// sweep in x, y, z
 	custom->func_sweep(work_ix,     src, work_tmp, mesh_dim, molt_ord_xzy, x_sweep_params, cfg->dnu, cfg->spaceacc);
